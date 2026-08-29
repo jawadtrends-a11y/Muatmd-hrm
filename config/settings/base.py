@@ -21,6 +21,16 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "drf_spectacular",
+
+    # تطبيقات معتمد
+    "apps.core",
+    "apps.accounts",
+    "apps.organization",
+    "apps.employees",
+    "apps.payroll",
+    "apps.attendance",
+    "apps.leaves",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -50,14 +60,23 @@ TEMPLATES = [{
     ]},
 }]
 
+# ملاحظة أمنية حاكمة:
+# التطبيق يتصل بدور hrm_runtime (NOBYPASSRLS) لا بمالك الجداول.
+# مالك الجداول hrm_app خارق ويتجاوز RLS — يُستخدم للهجرات فقط عبر
+# متغير البيئة DJANGO_DB_OWNER=1. راجع الوثيقة المعمارية (2).
+_USE_OWNER = env.bool("DJANGO_DB_OWNER", default=False)
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB"),
-        "USER": env("POSTGRES_USER"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
+        "USER": env("POSTGRES_USER") if _USE_OWNER else env("POSTGRES_RUNTIME_USER"),
+        "PASSWORD": env("POSTGRES_PASSWORD") if _USE_OWNER else env("POSTGRES_RUNTIME_PASSWORD"),
         "HOST": env("POSTGRES_HOST"),
         "PORT": env("POSTGRES_PORT"),
+        # يُستخدم في الاختبارات للاتصال بدور التشغيل المحدود
+        "TEST_RUNTIME_USER": env("POSTGRES_RUNTIME_USER"),
+        "TEST_RUNTIME_PASSWORD": env("POSTGRES_RUNTIME_PASSWORD"),
     }
 }
 
