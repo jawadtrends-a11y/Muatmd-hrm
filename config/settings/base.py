@@ -43,6 +43,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # يجب أن يلي AuthenticationMiddleware — يعتمد على request.user
+    "apps.core.tenancy.middleware.AccountContextMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
