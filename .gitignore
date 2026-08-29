@@ -12,3 +12,6 @@ venv/
 node_modules/
 .DS_Store
 *.mo
+celerybeat-schedule*
+celerybeat.pid
+*.pot
