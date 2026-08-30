@@ -217,8 +217,18 @@ def calculate_slip(*, run, employment, settings_obj):
     gosi_er_share = ZERO
     borne = False
 
+    # ق-38: الإجازة بلا أجر شهرًا كاملًا توقف الاشتراك — لا خصم
+    # تأمينات على أجر لم يُصرف
+    from calendar import monthrange
+    days_in_month = monthrange(run.period_year, run.period_month)[1]
+    full_month_unpaid = unpaid_leave >= days_in_month
+    if full_month_unpaid:
+        warnings.append(
+            f"إجازة بلا أجر الشهر كاملًا ({days_in_month} يومًا) — "
+            "أُوقف اشتراك التأمينات لهذه الفترة")
+
     scheme = employment.person.gosi_scheme_code
-    if employment.is_gosi_registered and scheme:
+    if employment.is_gosi_registered and scheme and not full_month_unpaid:
         declared = employment.gosi_declared_wage or gosi_subject
         g = calculate_gosi(subject_wage=declared, scheme_code=scheme,
                            as_of=run.accrual_date)
