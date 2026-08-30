@@ -140,7 +140,7 @@ def payroll_settings(request):
                       "company_bears_employee_gosi",
                       "merge_supplementary_into_regular",
                       "terminated_pay_in_regular_run",
-                      "negative_net_policy", "variance_threshold_percent"):
+                      "exclude_zero_net_from_wps", "variance_threshold_percent"):
             if field in request.data:
                 setattr(s, field, request.data[field])
         s.save()
@@ -160,7 +160,7 @@ def payroll_settings(request):
         "company_bears_employee_gosi": s.company_bears_employee_gosi,
         "merge_supplementary_into_regular": s.merge_supplementary_into_regular,
         "terminated_pay_in_regular_run": s.terminated_pay_in_regular_run,
-        "negative_net_policy": s.negative_net_policy,
+        "exclude_zero_net_from_wps": s.exclude_zero_net_from_wps,
         "variance_threshold_percent": str(s.variance_threshold_percent),
     })
 

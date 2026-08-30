@@ -105,6 +105,7 @@ def provision_default_components(company):
                 "is_eosb_subject": spec["is_eosb_subject"],
                 "is_overtime_base": spec["is_overtime_base"],
                 "is_wps_subject": spec["is_wps_subject"],
+                "is_absence_base": spec.get("is_absence_base", True),
                 "is_system": spec["is_system"],
                 "display_order": spec["order"],
             },
@@ -117,7 +118,7 @@ def provision_default_components(company):
 @transaction.atomic
 def set_component_flags(component, *, is_gosi_subject=None,
                         is_eosb_subject=None, is_overtime_base=None,
-                        is_wps_subject=None):
+                        is_wps_subject=None, is_absence_base=None):
     """
     يعدّل أعلام مكوّن ويُرجع التحذيرات (ق-23).
 
@@ -132,6 +133,7 @@ def set_component_flags(component, *, is_gosi_subject=None,
         "is_eosb_subject": is_eosb_subject,
         "is_overtime_base": is_overtime_base,
         "is_wps_subject": is_wps_subject,
+        "is_absence_base": is_absence_base,
     }
     for flag, new_value in changes.items():
         if new_value is None:
@@ -193,5 +195,21 @@ def overtime_base_wage(salary_lines):
     return sum(
         (amount for comp, amount in salary_lines
          if comp.is_overtime_base and comp.component_type == ComponentType.EARNING),
+        Decimal("0"),
+    )
+
+
+def absence_base_wage(salary_lines):
+    """
+    أساس خصم الغياب والإجازة بلا أجر (ق-36).
+
+    الافتراض: الإجمالي — كل الاستحقاقات المعلّمة is_absence_base.
+    الشركة تستثني بدلًا أو مجموعة أو كلها بإطفاء العلم.
+    """
+    from decimal import Decimal
+    return sum(
+        (amount for comp, amount in salary_lines
+         if comp.is_absence_base
+         and comp.component_type == ComponentType.EARNING),
         Decimal("0"),
     )

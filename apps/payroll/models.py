@@ -63,6 +63,10 @@ class PayComponent(CompanyScopedModel):
         _("يدخل أساس الإضافي"), default=False)
     is_wps_subject = models.BooleanField(
         _("يظهر في حماية الأجور"), default=True)
+    is_absence_base = models.BooleanField(
+        _("يدخل أساس خصم الغياب"), default=True,
+        help_text=_("ق-36: الافتراض أن الخصم على الإجمالي. الشركة "
+                    "تستثني بدلًا أو أكثر بإطفاء هذا العلم"))
 
     is_taxable = models.BooleanField(_("خاضع للضريبة"), default=False)
     display_order = models.IntegerField(_("الترتيب"), default=0)
@@ -163,11 +167,11 @@ class PayrollSettings(CompanyScopedModel):
         help_text=_("ما يدخل في أجر المكافأة يحدده علم is_eosb_subject "
                     "على كل مكوّن، حسب العقد"))
 
-    negative_net_policy = models.CharField(
-        _("سياسة الصافي السالب"), max_length=20,
-        choices=[("block", _("رفض المسير")),
-                 ("carry", _("ترحيل الفرق للشهر التالي"))],
-        default="block")
+    # ق-37: الصافي السالب مستحيل نظاميًا — لا سياسة تختارها الشركة.
+    # الخصم يُقصّ عند حد الاستحقاق، والصافي أدناه صفر.
+    exclude_zero_net_from_wps = models.BooleanField(
+        _("استبعاد الصافي الصفري من ملف حماية الأجور"), default=True,
+        help_text=_("الموظف بصافٍ صفري يُحذف من ملف البنك قبل الإرسال"))
     variance_threshold_percent = models.DecimalField(
         _("عتبة الفروقات %"), max_digits=5, decimal_places=2, default=10,
         help_text=_("تغيّر الصافي بأكثر من هذه النسبة يظهر في شاشة المراجعة"))
@@ -258,3 +262,209 @@ class GosiRate(models.Model):
     def employer_total_rate(self):
         return (self.employer_pension_rate + self.employer_saned_rate
                 + self.employer_hazards_rate)
+
+
+# ══════════════════ مسير الرواتب ══════════════════
+
+class PayrollRunStatus(models.TextChoices):
+    DRAFT       = "draft",       _("مسودة")
+    CALCULATING = "calculating", _("قيد الاحتساب")
+    CALCULATED  = "calculated",  _("محتسب — بانتظار المراجعة")
+    SUBMITTED   = "submitted",   _("مرفوع للاعتماد")
+    APPROVED    = "approved",    _("معتمد")
+    PAID        = "paid",        _("مصروف")
+    CANCELLED   = "cancelled",   _("ملغى")
+    FAILED      = "failed",      _("فشل الاحتساب")
+
+
+class PayrollRun(CompanyScopedModel):
+    """
+    مسير رواتب (ق-21): عام أو إضافي أو مستحقات.
+
+    الاحتساب لا يمس أي شيء خارج جداول المسير — إعادة الاحتساب
+    تعطي نفس الأرقام لأن كل المدخلات تُقرأ بتاريخ الاستحقاق.
+    """
+
+    run_no = models.CharField(_("رقم المسير"), max_length=30)
+    run_type = models.CharField(_("النوع"), max_length=20,
+                                choices=PayrollRunType.choices,
+                                default=PayrollRunType.REGULAR, db_index=True)
+    period_year = models.PositiveSmallIntegerField(_("السنة"))
+    period_month = models.PositiveSmallIntegerField(_("الشهر"))
+    accrual_date = models.DateField(
+        _("تاريخ الاستحقاق"),
+        help_text=_("تُقرأ به نسب التأمينات وهياكل الرواتب — لا تاريخ اليوم"))
+    payment_date = models.DateField(_("تاريخ الصرف"), null=True, blank=True)
+
+    status = models.CharField(_("الحالة"), max_length=20,
+                              choices=PayrollRunStatus.choices,
+                              default=PayrollRunStatus.DRAFT, db_index=True)
+
+    # ── الإجماليات ──
+    employee_count = models.PositiveIntegerField(_("عدد الموظفين"), default=0)
+    total_gross = models.DecimalField(_("إجمالي الاستحقاقات"), max_digits=14,
+                                      decimal_places=2, default=0)
+    total_deductions = models.DecimalField(_("إجمالي الاستقطاعات"),
+                                           max_digits=14, decimal_places=2,
+                                           default=0)
+    total_net = models.DecimalField(_("إجمالي الصافي"), max_digits=14,
+                                    decimal_places=2, default=0)
+    total_employer_cost = models.DecimalField(
+        _("تكلفة صاحب العمل"), max_digits=14, decimal_places=2, default=0)
+
+    calculated_at = models.DateTimeField(_("وقت الاحتساب"), null=True, blank=True)
+    submitted_at = models.DateTimeField(_("وقت الرفع"), null=True, blank=True)
+    approved_at = models.DateTimeField(_("وقت الاعتماد"), null=True, blank=True)
+    approved_by_person = models.ForeignKey(
+        "employees.Person", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="approved_payroll_runs", verbose_name=_("المعتمِد"))
+
+    variance_count = models.PositiveIntegerField(
+        _("عدد الفروقات"), default=0,
+        help_text=_("موظفون تغيّر صافيهم عن الشهر السابق فوق العتبة"))
+    error_log = models.JSONField(_("سجل الأخطاء"), default=list, blank=True)
+    note = models.TextField(_("ملاحظة"), blank=True)
+
+    class Meta:
+        verbose_name = _("مسير رواتب")
+        verbose_name_plural = _("مسيرات الرواتب")
+        ordering = ["-period_year", "-period_month", "run_type"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "run_no"],
+                                    name="uq_payroll_run_no"),
+            models.UniqueConstraint(
+                fields=["company", "run_type", "period_year", "period_month"],
+                condition=models.Q(status__in=["draft", "calculating",
+                                               "calculated", "submitted",
+                                               "approved", "paid"]),
+                name="uq_active_run_per_period"),
+        ]
+
+    def __str__(self):
+        return f"{self.run_no} — {self.period_year}/{self.period_month:02d}"
+
+    @property
+    def is_editable(self):
+        return self.status in (PayrollRunStatus.DRAFT,
+                               PayrollRunStatus.CALCULATED,
+                               PayrollRunStatus.FAILED)
+
+    @property
+    def is_locked(self):
+        """المعتمد والمصروف لا يُعاد احتسابهما — سجل مالي نهائي."""
+        return self.status in (PayrollRunStatus.APPROVED,
+                               PayrollRunStatus.PAID)
+
+
+class Payslip(CompanyScopedModel):
+    """
+    قسيمة راتب موظف في مسير.
+
+    calculation_trace يحفظ كل خطوة — الموظف يعيد الحساب بورقة وقلم،
+    وهذا ما يُنهي أغلب النزاعات.
+    """
+
+    run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE,
+                            related_name="payslips")
+    employment = models.ForeignKey(
+        "employees.Employment", on_delete=models.PROTECT,
+        related_name="payslips", verbose_name=_("الموظف"))
+
+    # ── الأجور المرجعية (تُحفظ لحظة الاحتساب) ──
+    basic_salary = models.DecimalField(_("الأساسي"), max_digits=12,
+                                       decimal_places=2, default=0)
+    gross_earnings = models.DecimalField(_("إجمالي الاستحقاقات"),
+                                         max_digits=12, decimal_places=2,
+                                         default=0)
+    total_deductions = models.DecimalField(_("إجمالي الاستقطاعات"),
+                                           max_digits=12, decimal_places=2,
+                                           default=0)
+    net_pay = models.DecimalField(_("صافي المستحق"), max_digits=12,
+                                  decimal_places=2, default=0)
+    employer_cost = models.DecimalField(_("تكلفة صاحب العمل"), max_digits=12,
+                                        decimal_places=2, default=0)
+
+    # ── التأمينات ──
+    gosi_subject_wage = models.DecimalField(_("الأجر الخاضع"), max_digits=12,
+                                            decimal_places=2, default=0)
+    gosi_employee_share = models.DecimalField(_("حصة الموظف"), max_digits=12,
+                                              decimal_places=2, default=0)
+    gosi_employer_share = models.DecimalField(_("حصة صاحب العمل"),
+                                              max_digits=12, decimal_places=2,
+                                              default=0)
+    gosi_borne_by_company = models.BooleanField(
+        _("الشركة تحملت حصة الموظف"), default=False)
+
+    # ── الحضور ──
+    worked_days = models.DecimalField(_("أيام العمل"), max_digits=6,
+                                      decimal_places=2, default=0)
+    unpaid_absence_days = models.DecimalField(_("أيام الغياب"), max_digits=6,
+                                              decimal_places=2, default=0)
+    unpaid_leave_days = models.DecimalField(
+        _("أيام الإجازة بلا أجر"), max_digits=6, decimal_places=2, default=0,
+        help_text=_("منفصلة عن الغياب — حق مأذون لا مخالفة (ق-32)"))
+    overtime_minutes = models.PositiveIntegerField(_("دقائق الإضافي"),
+                                                   default=0)
+
+    payment_method = models.CharField(_("طريقة الصرف"), max_length=20,
+                                      default="bank")
+    iban = models.CharField(_("الآيبان"), max_length=24, blank=True)
+    include_in_wps = models.BooleanField(_("في حماية الأجور"), default=False)
+
+    previous_net = models.DecimalField(_("صافي الشهر السابق"), max_digits=12,
+                                       decimal_places=2, null=True, blank=True)
+    variance_percent = models.DecimalField(_("نسبة الفرق"), max_digits=7,
+                                           decimal_places=2, null=True,
+                                           blank=True)
+    has_variance = models.BooleanField(_("فرق يحتاج مراجعة"), default=False)
+
+    calculation_trace = models.JSONField(_("خطوات الاحتساب"), default=dict,
+                                         blank=True)
+    warnings = models.JSONField(_("تنبيهات"), default=list, blank=True)
+
+    class Meta:
+        verbose_name = _("قسيمة راتب")
+        verbose_name_plural = _("قسائم الرواتب")
+        ordering = ["run", "employment__employee_no"]
+        constraints = [
+            models.UniqueConstraint(fields=["run", "employment"],
+                                    name="uq_payslip_per_run"),
+        ]
+        indexes = [
+            models.Index(fields=["company", "run"]),
+            models.Index(fields=["employment", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.employment.employee_no} — {self.run.run_no}"
+
+
+class PayslipLineType(models.TextChoices):
+    EARNING = "earning", _("استحقاق")
+    DEDUCTION = "deduction", _("استقطاع")
+    EMPLOYER_COST = "employer_cost", _("تكلفة صاحب عمل")
+    INFO = "info", _("بيان فقط")
+
+
+class PayslipLine(models.Model):
+    """بند في القسيمة — بشرح احتسابه."""
+
+    payslip = models.ForeignKey(Payslip, on_delete=models.CASCADE,
+                                related_name="lines")
+    component_code = models.CharField(_("الرمز"), max_length=40)
+    name_ar = models.CharField(_("البيان"), max_length=150)
+    line_type = models.CharField(_("النوع"), max_length=20,
+                                 choices=PayslipLineType.choices)
+    amount = models.DecimalField(_("المبلغ"), max_digits=12, decimal_places=2)
+    explanation = models.CharField(
+        _("شرح الاحتساب"), max_length=300, blank=True,
+        help_text=_("مثال: 3 أيام × 400 ريال"))
+    display_order = models.IntegerField(_("الترتيب"), default=0)
+
+    class Meta:
+        verbose_name = _("بند قسيمة")
+        verbose_name_plural = _("بنود القسائم")
+        ordering = ["payslip", "display_order", "component_code"]
+
+    def __str__(self):
+        return f"{self.name_ar}: {self.amount}"
