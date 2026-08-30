@@ -127,6 +127,13 @@ class PayrollSettings(CompanyScopedModel):
         _("راتب أيام المنتهية خدمته في المسير العام"), default=True,
         help_text=_("إن أُطفئ، يُدمج راتب الأيام في مسير المستحقات"))
 
+    # ── تحمّل حصة الموظف من التأمينات (ق-29) ──
+    company_bears_employee_gosi = models.BooleanField(
+        _("الشركة تتحمل حصة الموظف من التأمينات"), default=False,
+        help_text=_("الافتراض: الخصم من الموظف. عند التفعيل يستلم "
+                    "راتبه كاملًا وتظهر الحصة في القسيمة مقابل بند "
+                    "«تحملته الشركة». يمكن استثناء موظف بعينه."))
+
     # ── أجر نهاية الخدمة ──
     exclude_unpaid_leave_from_service = models.BooleanField(
         _("استبعاد الإجازات بلا أجر من مدة الخدمة"), default=False,

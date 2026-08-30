@@ -164,3 +164,69 @@ def test_settings_days_per_month_respected():
 def test_no_float_precision_loss():
     total = sum((r2(D("0.1")) for _ in range(10)), D("0"))
     assert total == D("1.00")
+
+
+# ══════════ تحمّل الشركة لحصة الموظف (ق-29) ══════════
+
+@pytest.mark.django_db
+def test_default_deducts_from_employee(rates):
+    """الافتراض: الخصم من الموظف — الوضع النظامي الطبيعي."""
+    from apps.payroll.services.calculations import allocate_gosi
+    g = calculate_gosi(subject_wage=D("10000"),
+                       scheme_code="traditional", as_of=AUG)
+    a = allocate_gosi(gosi_result=g)
+    assert a.employee_deduction == D("975.00")
+    assert a.company_absorbed == D("0")
+
+
+@pytest.mark.django_db
+def test_company_bears_employee_share(rates):
+    """عند التحمّل: الخصم الفعلي صفر والشركة تستوعب الحصة."""
+    from apps.payroll.services.calculations import allocate_gosi
+    g = calculate_gosi(subject_wage=D("10000"),
+                       scheme_code="traditional", as_of=AUG)
+    a = allocate_gosi(gosi_result=g, company_bears_employee_share=True)
+    assert a.employee_deduction == D("0")
+    assert a.company_absorbed == D("975.00")
+
+
+@pytest.mark.django_db
+def test_remitted_amount_identical_either_way(rates):
+    """المبلغ المورَّد للتأمينات لا يتغير — الفرق في من يتحمله."""
+    from apps.payroll.services.calculations import allocate_gosi
+    g = calculate_gosi(subject_wage=D("10000"),
+                       scheme_code="traditional", as_of=AUG)
+    a = allocate_gosi(gosi_result=g)
+    b = allocate_gosi(gosi_result=g, company_bears_employee_share=True)
+    assert a.total_remitted == b.total_remitted == D("2150.00")
+
+
+@pytest.mark.django_db
+def test_payslip_shows_borne_line_transparently(rates):
+    """
+    ق-29: الشفافية — الموظف يرى أن عليه حصة وأن الشركة تحملتها،
+    لا يظن نفسه معفى من التأمينات.
+    """
+    from apps.payroll.services.calculations import allocate_gosi
+    g = calculate_gosi(subject_wage=D("10000"),
+                       scheme_code="traditional", as_of=AUG)
+    a = allocate_gosi(gosi_result=g, company_bears_employee_share=True)
+    codes = [l["code"] for l in a.payslip_lines]
+    assert "GOSI_EMP" in codes, "بند الخصم مخفي"
+    assert "GOSI_BORNE" in codes, "بند التحمّل مفقود"
+    deduction = sum(l["amount"] for l in a.payslip_lines
+                    if l["type"] == "deduction")
+    offset = sum(l["amount"] for l in a.payslip_lines
+                 if l["code"] == "GOSI_BORNE")
+    assert deduction == offset, "الأثر الصافي ليس صفرًا"
+
+
+@pytest.mark.django_db
+def test_non_saudi_has_no_borne_line(rates):
+    """الوافد بلا حصة أصلًا — لا بند تحمّل."""
+    from apps.payroll.services.calculations import allocate_gosi
+    g = calculate_gosi(subject_wage=D("10000"),
+                       scheme_code="non_saudi", as_of=AUG)
+    a = allocate_gosi(gosi_result=g, company_bears_employee_share=True)
+    assert a.company_absorbed == D("0.00")
+    assert "GOSI_BORNE" not in [l["code"] for l in a.payslip_lines]

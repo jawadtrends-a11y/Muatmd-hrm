@@ -164,3 +164,73 @@ def calculate_absence_deduction(*, unpaid_days: Decimal,
                                 days_per_month: int = 30) -> Decimal:
     """خصم الغياب — من نفس دالة أجر اليوم لا قسمة أخرى."""
     return r2(daily_rate(monthly_wage, days_per_month) * Decimal(unpaid_days))
+
+
+# ══════════ تحمّل الشركة لحصة الموظف (ق-29) ══════════
+
+@dataclass(frozen=True)
+class GosiAllocation:
+    """
+    توزيع اشتراك التأمينات على بنود القسيمة.
+
+    عند تحمّل الشركة: يظهر بند الخصم ويقابله بند «تحملته الشركة»
+    فيصفّي الأثر صفرًا — شفافية كاملة لا إخفاء (ق-29).
+    """
+    employee_deduction: Decimal      # ما يُخصم فعليًا من الموظف
+    company_absorbed: Decimal        # ما تحملته الشركة عن الموظف
+    employer_share: Decimal          # حصة صاحب العمل النظامية
+    total_remitted: Decimal          # الإجمالي المورَّد للتأمينات
+    payslip_lines: list = field(default_factory=list)
+
+
+def allocate_gosi(*, gosi_result, company_bears_employee_share: bool = False
+                  ) -> GosiAllocation:
+    """
+    يوزّع نتيجة احتساب التأمينات على بنود القسيمة.
+
+    المبلغ المورَّد للتأمينات واحد في الحالتين — الفرق في من يتحمله.
+    """
+    emp = gosi_result.employee_share
+    er = gosi_result.employer_share
+
+    if not company_bears_employee_share:
+        lines = []
+        if emp > 0:
+            lines.append({
+                "code": "GOSI_EMP", "name_ar": "التأمينات الاجتماعية",
+                "type": "deduction", "amount": emp,
+            })
+        if er > 0:
+            lines.append({
+                "code": "GOSI_ER", "name_ar": "حصة صاحب العمل — التأمينات",
+                "type": "employer_cost", "amount": er,
+            })
+        return GosiAllocation(
+            employee_deduction=emp, company_absorbed=Decimal("0"),
+            employer_share=er, total_remitted=emp + er, payslip_lines=lines,
+        )
+
+    # الشركة تتحمل حصة الموظف
+    lines = []
+    if emp > 0:
+        lines.append({
+            "code": "GOSI_EMP", "name_ar": "التأمينات الاجتماعية",
+            "type": "deduction", "amount": emp,
+        })
+        lines.append({
+            "code": "GOSI_BORNE", "name_ar": "تحملته الشركة — التأمينات",
+            "type": "earning", "amount": emp,
+        })
+    if er > 0:
+        lines.append({
+            "code": "GOSI_ER", "name_ar": "حصة صاحب العمل — التأمينات",
+            "type": "employer_cost", "amount": er,
+        })
+
+    return GosiAllocation(
+        employee_deduction=Decimal("0"),      # الأثر الصافي صفر
+        company_absorbed=emp,
+        employer_share=er,
+        total_remitted=emp + er,
+        payslip_lines=lines,
+    )
