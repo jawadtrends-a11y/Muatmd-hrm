@@ -180,3 +180,35 @@ def test_notifications_isolated_between_accounts(acct, rls_enforced_late):
     rls_enforced_late()          # نبدّل الدور بعد التهيئة
     with account_scope(other.account_id):
         assert Notification.objects.count() == 0, "تسريب إشعارات بين الحسابات"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_every_event_has_templates_in_all_locales():
+    """كل حدث له قوالب بالثلاث لغات لكل قناة — وإلا إشعار بلا نص."""
+    from apps.notifications.services.templates import (
+        TEMPLATES, sync_default_templates,
+    )
+    sync_default_templates()
+    missing = []
+    for spec in EVENTS:
+        if spec.key not in TEMPLATES:
+            missing.append(f"{spec.key}: لا قالب إطلاقًا")
+            continue
+        for locale in LOCALES:
+            for channel in spec.channels:
+                if not NotificationTemplate.objects.filter(
+                    account__isnull=True, event_key=spec.key,
+                    channel=channel, locale=locale,
+                ).exists():
+                    missing.append(f"{spec.key}/{channel}/{locale}")
+    assert not missing, "قوالب ناقصة:\n" + "\n".join(missing[:15])
+
+
+@pytest.mark.django_db(transaction=True)
+def test_templates_have_no_empty_bodies():
+    """قالب بنص فارغ = إشعار بلا محتوى."""
+    from apps.notifications.services.templates import sync_default_templates
+    sync_default_templates()
+    empty = list(NotificationTemplate.objects.filter(
+        account__isnull=True, body="").values_list("event_key", flat=True))
+    assert not empty, f"قوالب بلا نص: {empty}"

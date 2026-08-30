@@ -67,21 +67,27 @@ def test_no_hardcoded_permission_strings_outside_catalog():
     يمنع الصلاحيات اليتيمة التي لا يمنحها أي دور.
     """
     from apps.core.access.catalog import PERMISSION_KEYS
+    from apps.notifications.catalog import EVENT_KEYS
 
-    pattern = re.compile(
-        r'["\'](' + "|".join(
-            sorted({k.split(".")[0] for k in PERMISSION_KEYS})
-        ) + r')\.[a-z_]+["\']'
-    )
+    # النظام يحمل كتالوجين بنفس النمط <وحدة>.<فعل>:
+    #   الصلاحيات (employees.view) وأحداث الإشعارات (leave.approved).
+    # المفتاح المشروع هو المسجّل في أيٍّ منهما؛ ما عداه يتيم.
+    known = PERMISSION_KEYS | EVENT_KEYS
+    modules = sorted({k.split(".")[0] for k in known})
+    pattern = re.compile(r'["\'](' + "|".join(modules) + r')\.[a-z_]+["\']')
+
     unknown = set()
     for path in _python_files("*.py"):
-        if "catalog.py" in path.name or path.parts[-2] == "tests":
+        if path.name == "catalog.py":
             continue
         for m in pattern.finditer(path.read_text(encoding="utf-8")):
             key = m.group(0).strip("\"'")
-            if key not in PERMISSION_KEYS:
+            if key not in known:
                 unknown.add(f"{path.name}: {key}")
-    assert not unknown, "مفاتيح صلاحيات غير مسجّلة:\n" + "\n".join(sorted(unknown))
+    assert not unknown, (
+        "مفاتيح غير مسجّلة في كتالوج الصلاحيات ولا كتالوج الأحداث:\n"
+        + "\n".join(sorted(unknown))
+    )
 
 
 def test_every_model_with_account_field_inherits_base():
