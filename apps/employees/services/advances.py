@@ -180,7 +180,14 @@ def due_installment(advance, year, month):
     planned = advance.installment_amount or ZERO
     if planned <= 0:
         return ZERO
-    return min(planned, advance.outstanding)
+
+    # القسط الأخير يُكمّل المتبقي: 1000 ÷ 3 = 333.33 وثلاثة أقساط
+    # تعطي 999.99، فيبقى قرش يمنع السداد ويحجب سلفة جديدة (ق-41).
+    paid_count = advance.installments.filter(is_deducted=True).count()
+    is_last = paid_count >= advance.installments_count - 1
+    if is_last or advance.outstanding <= planned:
+        return advance.outstanding
+    return planned
 
 
 @transaction.atomic
