@@ -10,6 +10,7 @@ from apps.payroll import api as payroll_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
 from apps.payroll import api_outputs as outputs_api
+from apps.employees import api_assets as assets_api
 
 
 def health(request):
@@ -58,6 +59,18 @@ urlpatterns = [
     path("api/payroll/runs/<int:run_id>/wps/download/", outputs_api.wps_download, name="wps-download"),
     path("api/payslips/<int:payslip_id>/", outputs_api.payslip_detail, name="payslip-detail"),
     path("api/me/payslips/", outputs_api.my_payslips, name="my-payslips"),
+    path("api/advances/", assets_api.advances, name="advances"),
+    path("api/advances/<int:advance_id>/approve/", assets_api.advance_approve, name="advance-approve"),
+    path("api/advances/<int:advance_id>/schedule/", assets_api.advance_schedule, name="advance-schedule"),
+    path("api/employees/<int:employment_id>/advance-eligibility/", assets_api.advance_eligibility, name="advance-eligibility"),
+    path("api/assets/", assets_api.assets, name="assets"),
+    path("api/assets/<int:asset_id>/return/", assets_api.asset_return, name="asset-return"),
+    path("api/documents/", assets_api.documents, name="documents"),
+    path("api/documents/expiring/", assets_api.expiring_documents_view, name="expiring-documents"),
+    path("api/employees/<int:employment_id>/clearance/", assets_api.employee_settlement_preview, name="clearance"),
+    path("api/employees/<int:employment_id>/settlement/preview/", assets_api.settlement_preview, name="settlement-preview"),
+    path("api/employees/<int:employment_id>/settlement/create/", assets_api.settlement_create, name="settlement-create"),
+    path("api/settlement/reasons/", assets_api.termination_reasons_list, name="settlement-reasons"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
