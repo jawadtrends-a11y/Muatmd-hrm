@@ -31,36 +31,43 @@ class EOSBBasisNotSet(EOSBError):
 
 
 # ══════════ حالات انتهاء العلاقة العمالية ══════════
-# كل حالة نظامية مذكورة صراحةً — لا حالة مجهولة (طلب المالك).
+# المرجع الحكومي: قائمة «سبب إنهاء علاقة العمل» في حاسبة مكافأة
+# نهاية الخدمة الرسمية بوزارة الموارد البشرية والتنمية الاجتماعية
+# hrsd.gov.sa/ministry-services/services/end-service-benefit-calculator
+#
+# القائمة معتمدة حرفيًا (ق-26). لا حالة خارجها ولا حالة مجهولة.
 
 FULL_ENTITLEMENT = {
-    # المادة 74 — حالات الانتهاء المشروع
-    "mutual_agreement":     "اتفاق الطرفين كتابةً (م/74)",
-    "contract_expiry":      "انتهاء مدة العقد المحدد (م/74)",
-    "employer_termination": "إنهاء من صاحب العمل (م/74 و75)",
-    "retirement":           "بلوغ سن التقاعد النظامي (م/74)",
-    "force_majeure":        "قوة قاهرة تجعل التنفيذ مستحيلًا (م/74)",
-    "establishment_closure":"إغلاق المنشأة نهائيًا (م/74)",
-    "activity_termination": "إنهاء النشاط الذي يعمل به العامل (م/74)",
-    "death":                "وفاة العامل (م/74) — تُصرف للورثة",
-    "bankruptcy":           "إفلاس صاحب العمل (نظام الإفلاس)",
-    # المادة 81 — ترك العامل العمل لإخلال صاحب العمل
-    "employer_breach":      "ترك العمل لإخلال صاحب العمل (م/81)",
-    # المادة 87 — استثناءات المرأة
-    "female_marriage":      "استقالة المرأة خلال 6 أشهر من الزواج (م/87)",
-    "female_childbirth":    "استقالة المرأة خلال 3 أشهر من الوضع (م/87)",
+    "contract_expiry":       "انتهاء مدة العقد",
+    "unlawful_termination":  "إنهاء صاحب العمل للعقد لسبب غير مشروع",
+    "force_majeure":         "انتهاء العقد بسبب القوة القاهرة",
+    "female_childbirth":     "إنهاء العاملة للعقد خلال إجازة الوضع "
+                             "البالغة ثلاثة أشهر",
+    "female_marriage":       "إنهاء العاملة للعقد خلال ستة أشهر من "
+                             "تاريخ عقد الزواج",
+    "article_81":            "إنهاء العقد وفقًا للمادة (81)",
+    "mutual_agreement":      "الاتفاق على الإنهاء",
+    "worker_disability":     "عجز العامل",
+    "employer_death":        "وفاة صاحب العمل",
+    "worker_death":          "وفاة العامل",
+    "ownership_transfer":    "نقل ملكية المنشأة الفردية إلى مالك جديد",
+    "retirement":            "بلوغ سن التقاعد",
+    "notice_article_75":     "إشعار إنهاء الخدمة وفقًا للمادة (75)",
 }
 
 NO_ENTITLEMENT = {
-    "article_80":  "الفصل بموجب المادة 80 — بلا مكافأة ولا إشعار",
-    "probation":   "الإنهاء خلال فترة التجربة (م/53)",
+    "article_80":  "إنهاء العقد وفقًا للمادة (80)",
+    "probation":   "الإنهاء خلال فترة التجربة",
 }
 
 PRORATED_ENTITLEMENT = {
-    "resignation": "الاستقالة (م/85) — النسبة حسب مدة الخدمة",
+    "resignation": "استقالة",
 }
 
 ALL_REASONS = {**FULL_ENTITLEMENT, **NO_ENTITLEMENT, **PRORATED_ENTITLEMENT}
+
+# الحالة الوحيدة التي تستوجب تعويضًا إضافيًا (م/77) فوق المكافأة
+UNLAWFUL_TERMINATION_CODE = "unlawful_termination"
 
 
 @dataclass(frozen=True)
@@ -227,4 +234,113 @@ def warn_on_component_exclusion(component_name: str, flag_name: str) -> str:
         f"تنبيه: استثنيتم «{component_name}» من {target}. "
         "القضاء العمالي يعتبر البدل الثابت المنتظم جزءًا من الأجر "
         "المحتسب ولو سُمّي بدلًا مؤقتًا. راجعوا العقود قبل الاعتماد."
+    )
+
+
+# ══════════ تعويض الإنهاء غير المشروع (المادة 77) ══════════
+
+@dataclass(frozen=True)
+class UnlawfulTerminationCompensation:
+    """
+    تعويض المادة 77 — بند مستقل عن المكافأة (ق-26).
+
+    يظهر في مسير المستحقات سطرًا منفصلًا، لأن طبيعته تعويض عن ضرر
+    لا مكافأة عن مدة خدمة.
+    """
+    contract_type: str
+    months_equivalent: Decimal
+    amount: Decimal
+    minimum_applied: bool
+    explanation: list = field(default_factory=list)
+
+
+def calculate_unlawful_termination_compensation(
+    *, monthly_wage: Decimal, service_days: int,
+    contract_type: str = "indefinite",
+    remaining_contract_months: Decimal | None = None,
+    agreed_amount: Decimal | None = None,
+) -> UnlawfulTerminationCompensation:
+    """
+    تعويض الإنهاء لسبب غير مشروع (م/77).
+
+    نص المادة يبدأ بـ«ما لم يكن في العقد نص على تعويض» — فالاتفاق
+    يسبق الحد النظامي. لذلك (ق-27):
+
+      • agreed_amount: المبلغ الذي تُدخله الشركة يدويًا من العقد أو
+        من حكم قضائي. يُعتمد كما هو.
+      • عند غيابه: يُحتسب الحد النظامي كمرجع —
+        غير محدد المدة: أجر 15 يومًا عن كل سنة، بحد أدنى أجر شهرين.
+        محدد المدة: أجر المدة المتبقية.
+
+    التحذير عند نزول المُدخل عن الحد النظامي، بلا منع (ق-20).
+
+    ⚠️ يُصرف بالإضافة إلى مكافأة نهاية الخدمة لا بدلًا عنها.
+    """
+    # ── المبلغ المتفق عليه يسبق الحد النظامي (م/77) ──
+    if agreed_amount is not None:
+        agreed = Decimal(agreed_amount)
+        statutory_min = monthly_wage * Decimal("2")
+        expl = [
+            "تعويض الإنهاء غير المشروع (م/77) — مبلغ متفق عليه",
+            f"المبلغ المُدخل: {r2(agreed)} ريال",
+            f"الحد النظامي الأدنى (أجر شهرين): {r2(statutory_min)} ريال",
+        ]
+        if agreed < statutory_min:
+            expl.append(
+                "⚠️ تنبيه: المبلغ المُدخل أقل من الحد النظامي الأدنى. "
+                "راجعوا نص العقد قبل الاعتماد."
+            )
+        return UnlawfulTerminationCompensation(
+            contract_type=contract_type,
+            months_equivalent=r2(agreed / monthly_wage) if monthly_wage else Decimal("0"),
+            amount=r2(agreed),
+            minimum_applied=False,
+            explanation=expl,
+        )
+
+    if contract_type == "fixed_term":
+        if remaining_contract_months is None:
+            raise EOSBError(
+                "العقد محدد المدة يتطلب عدد الأشهر المتبقية لاحتساب "
+                "تعويض المادة 77"
+            )
+        months = Decimal(remaining_contract_months)
+        amount = monthly_wage * months
+        return UnlawfulTerminationCompensation(
+            contract_type=contract_type,
+            months_equivalent=r2(months),
+            amount=r2(amount),
+            minimum_applied=False,
+            explanation=[
+                "تعويض الإنهاء غير المشروع (م/77) — عقد محدد المدة",
+                f"المدة المتبقية من العقد: {r2(months)} شهرًا",
+                f"التعويض: {r2(months)} × {r2(monthly_wage)} = {r2(amount)} ريال",
+            ],
+        )
+
+    # غير محدد المدة: 15 يومًا عن كل سنة، بحد أدنى شهران
+    years = Decimal(service_days) / DAYS_PER_YEAR
+    half_month_rate = monthly_wage / Decimal("2")
+    computed = half_month_rate * years
+    minimum = monthly_wage * Decimal("2")
+    minimum_applied = computed < minimum
+    amount = max(computed, minimum)
+
+    explanation = [
+        "تعويض الإنهاء غير المشروع (م/77) — عقد غير محدد المدة",
+        f"مدة الخدمة: {service_days} يومًا ({r2(years)} سنة)",
+        f"أجر 15 يومًا عن كل سنة: {r2(half_month_rate)} × {r2(years)} "
+        f"= {r2(computed)} ريال",
+        f"الحد الأدنى (أجر شهرين): {r2(minimum)} ريال",
+    ]
+    if minimum_applied:
+        explanation.append("طُبِّق الحد الأدنى لأنه أعلى من المحتسب")
+    explanation.append(f"التعويض المستحق: {r2(amount)} ريال")
+
+    return UnlawfulTerminationCompensation(
+        contract_type="indefinite",
+        months_equivalent=r2(amount / monthly_wage),
+        amount=r2(amount),
+        minimum_applied=minimum_applied,
+        explanation=explanation,
     )
