@@ -8,6 +8,7 @@ from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.employees import api as employees_api
+from apps.attendance import api as attendance_api
 
 
 def health(request):
@@ -40,6 +41,13 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/", employees_api.employee_detail, name="employee-detail"),
     path("api/employees/<int:employment_id>/salary/", employees_api.salary_structures, name="salary-structures"),
     path("api/employees/<int:employment_id>/registration/", employees_api.registration_flags, name="registration-flags"),
+    path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
+    path("api/attendance/punch/", attendance_api.punch, name="punch"),
+    path("api/attendance/<int:employment_id>/punches/", attendance_api.punches, name="punches"),
+    path("api/attendance/<int:employment_id>/days/", attendance_api.attendance_days, name="attendance-days"),
+    path("api/attendance/<int:employment_id>/summary/", attendance_api.monthly_summary, name="attendance-summary"),
+    path("api/attendance/days/<int:day_id>/overtime/", attendance_api.approve_day_overtime, name="approve-overtime"),
+    path("api/attendance/days/<int:day_id>/adjust/", attendance_api.adjust_day, name="adjust-day"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
