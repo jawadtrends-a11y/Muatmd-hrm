@@ -51,6 +51,11 @@ def provision_account(
         )
         account_id, company_id = cur.fetchone()
 
+    # نسخ الأدوار الافتراضية — كل حساب يملك نسخته ويعدّلها بحرية
+    from apps.accounts.services.roles import provision_roles_for_account
+    with account_scope(account_id):
+        provision_roles_for_account(account_id)
+
     return ProvisionedAccount(account_id=account_id, company_id=company_id)
 
 

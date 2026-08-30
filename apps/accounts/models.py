@@ -137,3 +137,9 @@ class Company(TimeStampedModel):
 
     def __str__(self):
         return self.legal_name_ar
+
+
+# نماذج الصلاحيات — ملف منفصل لوضوح التقسيم
+from apps.accounts.models_access import (  # noqa: E402,F401
+    Role, RolePermission, AccountMembership, RoleAssignment, RoleCode,
+)

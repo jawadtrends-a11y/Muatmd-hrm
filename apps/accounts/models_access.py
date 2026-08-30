@@ -1,0 +1,154 @@
+"""
+الأدوار وعضوية المستخدمين.
+
+الصلاحيات ثابتة في الكتالوج، والأدوار بيانات مرنة يضبطها العميل.
+راجع الوثيقة المعمارية (2) القسم 6.
+"""
+from django.conf import settings
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+from apps.core.access.catalog import Scope
+
+
+class RoleCode(models.TextChoices):
+    OWNER           = "owner",           _("مالك الحساب")
+    HR_MANAGER      = "hr_manager",      _("مدير الموارد البشرية")
+    HR_STAFF        = "hr_staff",        _("موظف موارد بشرية")
+    DEPT_MANAGER    = "dept_manager",    _("مدير إدارة")
+    SUPERVISOR      = "supervisor",      _("مشرف")
+    EMPLOYEE        = "employee",        _("موظف")
+
+
+class Role(models.Model):
+    """
+    دور داخل حساب. الأدوار النظامية (account=NULL) قوالب مشتركة،
+    ويمكن للعميل إنشاء أدوار خاصة به.
+    """
+    account = models.ForeignKey(
+        "accounts.Account", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="roles",
+        verbose_name=_("الحساب"),
+        help_text=_("فارغ = دور نظامي مشترك"),
+    )
+    code = models.CharField(_("الرمز"), max_length=40)
+    name_ar = models.CharField(_("الاسم"), max_length=120)
+    name_en = models.CharField(_("الاسم بالإنجليزية"), max_length=120, blank=True)
+    name_ur = models.CharField(_("الاسم بالأوردو"), max_length=120, blank=True)
+    default_scope = models.CharField(
+        _("النطاق الافتراضي"), max_length=20,
+        choices=[(s.value, s.value) for s in Scope], default=Scope.OWN.value,
+    )
+    is_system = models.BooleanField(
+        _("دور نظامي"), default=False,
+        help_text=_("لا يُحذف ولا تُعدّل صلاحياته الأساسية"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("دور")
+        verbose_name_plural = _("الأدوار")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "code"], name="uq_role_code_per_account",
+            ),
+            models.UniqueConstraint(
+                fields=["code"], condition=models.Q(account__isnull=True),
+                name="uq_system_role_code",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name_ar
+
+    @property
+    def permission_keys(self):
+        return set(self.permissions.values_list("permission_key", flat=True))
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="permissions")
+    permission_key = models.CharField(max_length=80)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "permission_key"], name="uq_role_permission",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.role.code}: {self.permission_key}"
+
+
+class AccountMembership(models.Model):
+    """
+    عضوية مستخدم في حساب — ما يقرأه AccountContextMiddleware.
+
+    مستخدم واحد = حساب واحد. الوصول لعدة شركات يتم عبر
+    company_ids داخل نفس الحساب، لا بعضويات متعددة.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="account_membership", verbose_name=_("المستخدم"),
+    )
+    account = models.ForeignKey(
+        "accounts.Account", on_delete=models.CASCADE,
+        related_name="memberships", verbose_name=_("الحساب"),
+    )
+    active_company = models.ForeignKey(
+        "accounts.Company", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+        verbose_name=_("الشركة النشطة"),
+    )
+    is_account_owner = models.BooleanField(
+        _("مالك الحساب"), default=False,
+        help_text=_("يتجاوز فحص الصلاحيات داخل حسابه"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("عضوية")
+        verbose_name_plural = _("العضويات")
+
+    def __str__(self):
+        return f"{self.user} @ {self.account.slug}"
+
+    @property
+    def company_ids(self):
+        """الشركات المصرّح بها — تُحقن في app.company_ids."""
+        assignments = list(self.role_assignments.all())
+        if any(a.scope == Scope.ACCOUNT.value for a in assignments) or self.is_account_owner:
+            return list(self.account.companies.values_list("id", flat=True))
+        ids = {a.company_id for a in assignments if a.company_id}
+        if self.active_company_id:
+            ids.add(self.active_company_id)
+        return sorted(ids)
+
+
+class RoleAssignment(models.Model):
+    """إسناد دور لعضوية، بنطاق قد يضيّق النطاق الافتراضي للدور."""
+    membership = models.ForeignKey(
+        AccountMembership, on_delete=models.CASCADE, related_name="role_assignments",
+    )
+    role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")
+    company = models.ForeignKey(
+        "accounts.Company", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="+",
+        help_text=_("فارغ = يسري على كل شركات الحساب"),
+    )
+    scope = models.CharField(
+        _("النطاق"), max_length=20,
+        choices=[(s.value, s.value) for s in Scope],
+    )
+    scope_ref_id = models.BigIntegerField(
+        null=True, blank=True,
+        help_text=_("معرّف الفرع أو القسم عند تضييق النطاق"),
+    )
+
+    class Meta:
+        verbose_name = _("إسناد دور")
+        verbose_name_plural = _("إسنادات الأدوار")
+
+    def __str__(self):
+        return f"{self.membership} → {self.role.code} ({self.scope})"
