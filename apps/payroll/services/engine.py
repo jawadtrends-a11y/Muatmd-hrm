@@ -174,7 +174,9 @@ def calculate_slip(*, run, employment, settings_obj):
         if comp.component_type != ComponentType.EARNING:
             continue
         earnings.append({
-            "code": comp.code, "name_ar": comp.name_ar, "amount": amount,
+            "code": comp.code, "name_ar": comp.name_ar,
+            "name_en": comp.name_en, "name_ur": comp.name_ur,
+            "amount": amount,
             "explanation": "مبلغ ثابت شهري", "order": comp.display_order,
         })
         gross += amount
@@ -286,6 +288,7 @@ def calculate_slip(*, run, employment, settings_obj):
         if comp.component_type == ComponentType.DEDUCTION and amount > 0:
             deductions.append({
                 "code": comp.code, "name_ar": comp.name_ar,
+                "name_en": comp.name_en, "name_ur": comp.name_ur,
                 "amount": amount, "explanation": "استقطاع ثابت",
                 "order": comp.display_order})
 
@@ -346,7 +349,10 @@ def calculate_slip(*, run, employment, settings_obj):
         for e in group:
             bulk.append(PayslipLine(
                 payslip=slip, component_code=e["code"],
-                name_ar=e["name_ar"], line_type=ltype,
+                name_ar=e["name_ar"],
+                name_en=e.get("name_en", ""),
+                name_ur=e.get("name_ur", ""),
+                line_type=ltype,
                 amount=r2(e["amount"]), explanation=e["explanation"],
                 display_order=e.get("order", 50)))
     PayslipLine.objects.bulk_create(bulk)

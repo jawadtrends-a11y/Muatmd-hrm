@@ -169,6 +169,20 @@ class PayrollSettings(CompanyScopedModel):
 
     # ق-37: الصافي السالب مستحيل نظاميًا — لا سياسة تختارها الشركة.
     # الخصم يُقصّ عند حد الاستحقاق، والصافي أدناه صفر.
+    # ── إعدادات قسيمة الراتب (ق-39) ──
+    # القسيمة للراتب وحده: لا حصة صاحب العمل، ولا رصيد إجازات،
+    # ولا مقارنة بالشهر السابق. كل بند إضافي يفتح بابًا لسؤال جديد.
+    # الشركة تُفعّلها إن أرادت، والافتراض الإخفاء.
+    payslip_show_employer_gosi = models.BooleanField(
+        _("عرض حصة صاحب العمل في القسيمة"), default=False,
+        help_text=_("تخصّ الشركة لا الموظف"))
+    payslip_show_leave_balance = models.BooleanField(
+        _("عرض رصيد الإجازات في القسيمة"), default=False,
+        help_text=_("القسيمة للراتب — الرصيد في شاشة الإجازات"))
+    payslip_show_previous_month = models.BooleanField(
+        _("عرض مقارنة بالشهر السابق"), default=False,
+        help_text=_("قد يثير أسئلة أكثر مما يجيب"))
+
     exclude_zero_net_from_wps = models.BooleanField(
         _("استبعاد الصافي الصفري من ملف حماية الأجور"), default=True,
         help_text=_("الموظف بصافٍ صفري يُحذف من ملف البنك قبل الإرسال"))
@@ -453,6 +467,10 @@ class PayslipLine(models.Model):
                                 related_name="lines")
     component_code = models.CharField(_("الرمز"), max_length=40)
     name_ar = models.CharField(_("البيان"), max_length=150)
+    name_en = models.CharField(_("البيان بالإنجليزية"), max_length=150,
+                               blank=True)
+    name_ur = models.CharField(_("البيان بالأوردو"), max_length=150,
+                               blank=True)
     line_type = models.CharField(_("النوع"), max_length=20,
                                  choices=PayslipLineType.choices)
     amount = models.DecimalField(_("المبلغ"), max_digits=12, decimal_places=2)
