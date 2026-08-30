@@ -64,6 +64,12 @@ def provision_account(
         provision_default_components(comp)
         PayrollSettings.objects.get_or_create(
             company=comp, defaults={"account_id": account_id})
+        # أنواع الإجازات وسلاسل الاعتماد — تعدّلها الشركة بحرية (ق-32)
+        from apps.leaves.services.seeds import (
+            provision_approval_chains, provision_leave_types,
+        )
+        provision_leave_types(comp)
+        provision_approval_chains(comp)
 
     return ProvisionedAccount(account_id=account_id, company_id=company_id)
 
