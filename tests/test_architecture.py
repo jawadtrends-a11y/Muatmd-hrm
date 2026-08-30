@@ -210,3 +210,44 @@ def test_all_routed_views_are_importable():
         if not isinstance(p, URLPattern):
             continue          # URLResolver (مثل admin/) لا يحمل callback
         assert callable(p.callback), f"مسار بلا دالة: {p.pattern}"
+
+
+def test_no_orphan_permissions():
+    """
+    كل صلاحية في الكتالوج يمنحها دور افتراضي واحد على الأقل.
+
+    الصلاحية بلا دور معطّلة عمليًا: الكود يفحصها فترفض دائمًا،
+    فتبدو الميزة موجودة وهي لا تعمل. حدث فعلًا مع
+    persons.view_cross_company (ق-30) ولم ينتبه أحد لسبرنتين.
+    """
+    from apps.accounts.services.roles import DEFAULT_ROLES
+    from apps.core.access.catalog import PERMISSION_KEYS
+
+    # المالك يملك "*" — لو حسبناه لصار كل شيء ممنوحًا ولما كشف
+    # الحارس شيئًا أبدًا. الفحص على الأدوار التي تمنح صلاحيات صراحةً.
+    granted = set()
+    for code, spec in DEFAULT_ROLES.items():
+        perms = spec["permissions"]
+        if perms == "*":
+            continue
+        granted |= set(perms)
+
+    # صلاحيات ملكية بحتة — للمدير العام وحده بقرار موثّق (ق-31)
+    OWNER_ONLY = {"account.manage", "company.create"}
+
+    orphans = PERMISSION_KEYS - granted - OWNER_ONLY
+    assert not orphans, (
+        "صلاحيات مسجّلة بلا دور يمنحها — معطّلة عمليًا:\n"
+        + "\n".join(sorted(orphans))
+    )
+
+
+def test_no_orphan_notification_events():
+    """كل حدث إشعار له قالب — وإلا ظهر إشعار بلا نص."""
+    from apps.notifications.catalog import EVENT_KEYS
+    from apps.notifications.services.templates import TEMPLATES
+
+    orphans = EVENT_KEYS - set(TEMPLATES)
+    assert not orphans, (
+        "أحداث بلا قوالب:\n" + "\n".join(sorted(orphans))
+    )

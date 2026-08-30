@@ -14,7 +14,10 @@ from apps.core.access.catalog import (
 
 DEFAULT_ROLES = {
     RoleCode.OWNER: {
-        "name_ar": "مالك الحساب",
+        # ق-31: «المالك» موقع في النظام لا مسمى وظيفي. الشخص قد يكون
+        # المدير العام أو رئيس مجلس الإدارة أو المالك فعليًا — والشركة
+        # تعيد تسمية الدور كما تشاء. يرى كل شيء بما فيه الرواتب والقسائم.
+        "name_ar": "المدير العام",
         "scope": Scope.ACCOUNT,
         "permissions": "*",
     },
@@ -22,7 +25,8 @@ DEFAULT_ROLES = {
         "name_ar": "مدير الموارد البشرية",
         "scope": Scope.COMPANY,
         "permissions": [
-            "account.view", "company.view", "org.view", "org.manage",
+            "account.view", "company.view", "company.edit",
+            "org.view", "org.manage",
             "employees.view", "employees.create", "employees.edit",
             "employees.terminate", "employees.documents",
             "persons.view_cross_company",
@@ -44,7 +48,7 @@ DEFAULT_ROLES = {
         # ينشئ المسير ويرفعه للاعتماد ويصدّره — ولا يعتمده.
         # مَن يعتمد وبكم درجة تحدده سلسلة الاعتماد لا هذا الدور.
         "permissions": [
-            "company.view", "org.view",
+            "company.view", "company.edit", "org.view",
             "employees.view", "employees.create", "employees.edit",
             "employees.documents",
             "persons.view_cross_company",
