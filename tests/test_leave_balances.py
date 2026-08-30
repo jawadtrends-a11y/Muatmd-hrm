@@ -234,3 +234,66 @@ def test_balance_summary_lists_all_types(env):
         accrue(env["emp"], env["annual"], as_of=date(2026, 6, 30))
         summary = balance_summary(env["emp"], 2026)
         assert any(x["code"] == "ANNUAL" for x in summary)
+
+
+# ══════════ التسويات اليدوية ══════════
+
+@pytest.mark.django_db(transaction=True)
+def test_adjustment_survives_accrual(env):
+    """
+    التسوية اليدوية قرار بشري لا تمحوه إعادة الاحتساب —
+    نفس مبدأ التعديل اليدوي في الحضور.
+    """
+    from apps.leaves.services.balances import adjust_balance
+    with account_scope(env["account_id"]):
+        accrue(env["emp"], env["annual"], as_of=date(2026, 6, 30))
+        adjust_balance(employment=env["emp"], leave_type=env["annual"],
+                       days=D("5"), reason="منحة تقديرية",
+                       adjusted_by_person=env["emp"].person, year=2026)
+        b = accrue(env["emp"], env["annual"], as_of=date(2026, 7, 31))
+        assert b.adjusted == D("5"), "التسوية مُحيت"
+        assert b.available == b.accrued + b.adjusted
+
+
+@pytest.mark.django_db(transaction=True)
+def test_adjustment_requires_reason(env):
+    from apps.leaves.services.balances import adjust_balance
+    with account_scope(env["account_id"]):
+        with pytest.raises(LeaveError):
+            adjust_balance(employment=env["emp"], leave_type=env["annual"],
+                           days=D("3"), reason="   ",
+                           adjusted_by_person=env["emp"].person, year=2026)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_adjustment_cannot_make_balance_negative(env):
+    from apps.leaves.services.balances import adjust_balance
+    with account_scope(env["account_id"]):
+        accrue(env["emp"], env["annual"], as_of=date(2026, 6, 30))
+        with pytest.raises(LeaveError):
+            adjust_balance(employment=env["emp"], leave_type=env["annual"],
+                           days=D("-999"), reason="خصم",
+                           adjusted_by_person=env["emp"].person, year=2026)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_negative_adjustment_allowed_within_balance(env):
+    """الخصم مسموح ما دام الرصيد يحتمله — تصحيح خطأ إدخال مثلًا."""
+    from apps.leaves.services.balances import adjust_balance
+    with account_scope(env["account_id"]):
+        accrue(env["emp"], env["annual"], as_of=date(2026, 6, 30))
+        res = adjust_balance(
+            employment=env["emp"], leave_type=env["annual"], days=D("-3"),
+            reason="تصحيح خطأ إدخال",
+            adjusted_by_person=env["emp"].person, year=2026)
+        assert res["amount"] == "-3.00"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_zero_adjustment_rejected(env):
+    from apps.leaves.services.balances import adjust_balance
+    with account_scope(env["account_id"]):
+        with pytest.raises(LeaveError):
+            adjust_balance(employment=env["emp"], leave_type=env["annual"],
+                           days=D("0"), reason="لا شيء",
+                           adjusted_by_person=env["emp"].person, year=2026)

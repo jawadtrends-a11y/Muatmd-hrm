@@ -274,3 +274,51 @@ def check_eligibility(employment, leave_type, as_of=None):
             errors.append(f"{leave_type.name_ar} تُمنح مرة واحدة طوال الخدمة")
 
     return errors
+
+
+# ══════════ التسويات اليدوية ══════════
+
+@transaction.atomic
+def adjust_balance(*, employment, leave_type, days, reason,
+                   adjusted_by_person, year=None):
+    """
+    تسوية يدوية على الرصيد — إضافة أو خصم.
+
+    تُسجَّل في حقل adjusted المنفصل عن accrued، فلا تمحوها إعادة
+    احتساب الاستحقاق. نفس مبدأ التعديل اليدوي في الحضور: قرار بشري
+    لا تمحوه المعالجة الآلية.
+
+    الاستخدامات: رصيد افتتاحي عند الترحيل من نظام آخر، منحة
+    استثنائية، تصحيح خطأ إدخال.
+    """
+    if not reason or not reason.strip():
+        raise LeaveError("سبب التسوية مطلوب — يُسجَّل في سجل التدقيق")
+
+    amount = Decimal(str(days))
+    if amount == 0:
+        raise LeaveError("قيمة التسوية لا يمكن أن تكون صفرًا")
+
+    yr = year or date.today().year
+    bal = ensure_balance(employment, leave_type, yr)
+
+    new_available = bal.available + amount
+    if new_available < 0:
+        raise LeaveError(
+            f"التسوية تجعل الرصيد سالبًا ({r2(new_available)}). "
+            f"المتاح حاليًا {r2(bal.available)} يومًا")
+
+    bal.adjusted += amount
+    bal.save()
+
+    from apps.core.audit import record_adjustment
+    record_adjustment(
+        employment=employment, leave_type=leave_type, amount=amount,
+        reason=reason.strip(), person=adjusted_by_person, year=yr)
+
+    return {
+        "leave_type": leave_type.name_ar,
+        "amount": str(r2(amount)),
+        "total_adjusted": str(r2(bal.adjusted)),
+        "available_now": str(r2(bal.available)),
+        "reason": reason.strip(),
+    }
