@@ -143,3 +143,11 @@ class Company(TimeStampedModel):
 from apps.accounts.models_access import (  # noqa: E402,F401
     Role, RolePermission, AccountMembership, RoleAssignment, RoleCode,
 )
+
+
+# نماذج الاشتراكات والفوترة
+from apps.accounts.models_billing import (  # noqa: E402,F401
+    Feature, Plan, PlanPriceTier, PlanFeature,
+    CompanySubscription, CompanyHeadcountDaily,
+    SubscriptionStatus, BillingCycle,
+)
