@@ -268,3 +268,36 @@ def test_every_line_explains_itself(env):
         r = _settle(env, leave_balance_days=D("10"))
         for line in r.lines:
             assert line.explanation, f"بند بلا شرح: {line.name_ar}"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_warns_near_higher_bracket(env):
+    """
+    عشرة أيام قد تضاعف الاستحقاق عند حدود م/85 — التنبيه يحمي
+    الشركة من نزاع والموظف من ظلم توقيت.
+    """
+    with account_scope(env["account_id"]):
+        # الخدمة من 2019-01-01 — قبل خمس سنوات بأيام
+        near = compute_settlement(
+            employment=env["emp"], termination_date=date(2023, 12, 20),
+            reason_code="resignation", settings_obj=env["settings"])
+        assert any("بُعد" in w for w in near.warnings)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_no_warning_when_far_from_bracket(env):
+    with account_scope(env["account_id"]):
+        far = compute_settlement(
+            employment=env["emp"], termination_date=date(2026, 8, 1),
+            reason_code="resignation", settings_obj=env["settings"])
+        assert not any("بُعد" in w for w in far.warnings)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_no_bracket_warning_for_full_entitlement(env):
+    """التنبيه للاستقالة وحدها — الحالات الكاملة لا تتأثر بالشرائح."""
+    with account_scope(env["account_id"]):
+        r = compute_settlement(
+            employment=env["emp"], termination_date=date(2023, 12, 20),
+            reason_code="employer_death", settings_obj=env["settings"])
+        assert not any("بُعد" in w for w in r.warnings)

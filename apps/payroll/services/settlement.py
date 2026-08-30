@@ -133,6 +133,19 @@ def compute_settlement(*, employment, termination_date, reason_code,
         "explanation": eosb.explanation,
     }
 
+    # تنبيه قرب شريحة أعلى — الاستقالة تقفز من الثلث للثلثين عند
+    # خمس سنوات، ومن الثلثين للكامل عند عشر. الفارق يومان قد يضاعف
+    # الاستحقاق، فالتنبيه يحمي الشركة من نزاع والموظف من ظلم توقيت.
+    if reason_code == "resignation":
+        years = eosb.service_years
+        for boundary in (Decimal("2"), Decimal("5"), Decimal("10")):
+            gap_days = int((boundary - years) * Decimal("360"))
+            if 0 < gap_days <= 30:
+                result.warnings.append(
+                    f"الموظف على بُعد {gap_days} يومًا من إتمام "
+                    f"{int(boundary)} سنوات خدمة — شريحة استحقاق أعلى")
+                break
+
     if eosb.net_award > 0:
         result.lines.append(SettlementLine(
             code="EOSB", name_ar="مكافأة نهاية الخدمة", kind="earning",
