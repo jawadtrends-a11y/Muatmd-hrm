@@ -56,3 +56,39 @@ def runtime_cursor(db):
         yield conn.cursor()
     finally:
         conn.close()
+
+
+@pytest.fixture
+def rls_enforced(db):
+    """
+    يجعل اختبارات الـAPI تعمل بصلاحيات دور التشغيل داخل نفس الاتصال.
+
+    المشكلة: اتصال الاختبار يعمل بـhrm_app (خارق) لأنه ينشئ القاعدة،
+    فيتجاوز RLS ويجعل اختبارات العزل تمر بأمان زائف.
+
+    الحل: SET ROLE يبدّل الدور الفعّال للجلسة، فتُطبَّق السياسات كما
+    في الإنتاج. يُعاد للأصل في النهاية حتى لا يتأثر التنظيف.
+    """
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute("SET ROLE hrm_runtime")
+    try:
+        yield
+    finally:
+        with connection.cursor() as cur:
+            cur.execute("RESET ROLE")
+
+
+@pytest.fixture(autouse=True)
+def _grant_runtime_on_new_tables(db):
+    """
+    الجداول تُنشأ بالهجرات في كل جلسة، فقد تفوت منح الصلاحيات.
+    هذا يضمن أن hrm_runtime يصل لكل الجداول قبل أي اختبار.
+    """
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES "
+                    "IN SCHEMA public TO hrm_runtime")
+        cur.execute("GRANT USAGE, SELECT ON ALL SEQUENCES "
+                    "IN SCHEMA public TO hrm_runtime")
+    yield
