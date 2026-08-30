@@ -38,7 +38,7 @@ SCOPED_TABLES = [
     "organization_department", "organization_branch",
     "payroll_payrollsettings", "payroll_paycomponent",
     "accounts_companyheadcountdaily", "accounts_companysubscription",
-    "accounts_roleassignment", "accounts_accountmembership",
+    "accounts_accountmembership",
     "accounts_role", "accounts_company",
 ]
 
@@ -86,6 +86,10 @@ class Command(BaseCommand):
                         "WHERE account_id=%s)", [account_id])
             cur.execute("DELETE FROM accounts_rolepermission WHERE role_id IN "
                         "(SELECT id FROM accounts_role WHERE account_id=%s)",
+                        [account_id])
+            cur.execute("DELETE FROM accounts_roleassignment "
+                        "WHERE membership_id IN (SELECT id FROM "
+                        "accounts_accountmembership WHERE account_id=%s)",
                         [account_id])
             for table in SCOPED_TABLES:
                 cur.execute(f"DELETE FROM {table} WHERE account_id=%s",
