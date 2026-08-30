@@ -396,3 +396,10 @@ class SalaryLine(models.Model):
 
     def __str__(self):
         return f"{self.component.code}: {self.amount}"
+
+
+# السلف والعهد والوثائق (ق-41)
+from apps.employees.models_assets import (  # noqa: E402,F401
+    Advance, AdvanceInstallment, AdvanceStatus, Asset, AssetCategory,
+    AssetStatus, DocumentType, EmployeeDocument, RepaymentMethod,
+)

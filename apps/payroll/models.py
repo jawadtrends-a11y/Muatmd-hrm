@@ -169,6 +169,23 @@ class PayrollSettings(CompanyScopedModel):
 
     # ق-37: الصافي السالب مستحيل نظاميًا — لا سياسة تختارها الشركة.
     # الخصم يُقصّ عند حد الاستحقاق، والصافي أدناه صفر.
+    # ── إعدادات السلف (ق-41) ──
+    advances_enabled = models.BooleanField(
+        _("تمكين نظام السلف"), default=True,
+        help_text=_("عند الإطفاء تختفي السلف من الطلبات والقسيمة والتقارير"))
+    advance_max_amount = models.DecimalField(
+        _("الحد الأقصى للسلفة"), max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        help_text=_("فارغ = بلا حد. يُقارن بالمبلغ المطلوب"))
+    advance_max_months_of_salary = models.DecimalField(
+        _("الحد الأقصى بعدد الرواتب"), max_digits=4, decimal_places=1,
+        null=True, blank=True,
+        help_text=_("مثال: 3 تعني راتب ثلاثة أشهر"))
+    advance_block_if_outstanding = models.BooleanField(
+        _("منع سلفة ثانية قبل سداد الأولى"), default=True)
+    advance_max_installments = models.PositiveSmallIntegerField(
+        _("أقصى عدد أقساط"), default=12)
+
     # ── إعدادات قسيمة الراتب (ق-39) ──
     # القسيمة للراتب وحده: لا حصة صاحب العمل، ولا رصيد إجازات،
     # ولا مقارنة بالشهر السابق. كل بند إضافي يفتح بابًا لسؤال جديد.

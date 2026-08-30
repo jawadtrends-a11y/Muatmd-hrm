@@ -283,7 +283,35 @@ def calculate_slip(*, run, employment, settings_obj):
                             "— إجازة مأذونة لا غياب"),
             "order": 120})
 
-    # ── 7. استقطاعات الهيكل ──
+    # ── 7. أقساط السلف (ق-41) ──
+    advance_deductions = []
+    if settings_obj.advances_enabled:
+        from apps.employees.services.advances import (
+            due_installment, outstanding_advances,
+        )
+        for adv in outstanding_advances(employment):
+            due = due_installment(adv, run.period_year, run.period_month)
+            if due > 0:
+                deductions.append({
+                    "code": f"ADVANCE_{adv.id}",
+                    "name_ar": f"قسط سلفة {adv.advance_no}",
+                    "name_en": f"Advance {adv.advance_no}",
+                    "name_ur": f"ایڈوانس {adv.advance_no}",
+                    "amount": due,
+                    "explanation": (
+                        f"المبلغ {r2(adv.amount)} — المسدَّد "
+                        f"{r2(adv.repaid_amount)} — المتبقي بعد هذا القسط "
+                        f"{r2(adv.outstanding - due)}"),
+                    "order": 130})
+                advance_deductions.append((adv, due))
+        if advance_deductions:
+            trace["advances"] = [
+                {"advance_no": a.advance_no, "installment": str(r2(d)),
+                 "outstanding_after": str(r2(a.outstanding - d))}
+                for a, d in advance_deductions
+            ]
+
+    # ── 8. استقطاعات الهيكل ──
     for comp, amount in lines_src:
         if comp.component_type == ComponentType.DEDUCTION and amount > 0:
             deductions.append({
@@ -356,6 +384,14 @@ def calculate_slip(*, run, employment, settings_obj):
                 amount=r2(e["amount"]), explanation=e["explanation"],
                 display_order=e.get("order", 50)))
     PayslipLine.objects.bulk_create(bulk)
+
+    # تسجيل أقساط السلف بعد الخصم الفعلي — السجل يطابق القسائم
+    if advance_deductions:
+        from apps.employees.services.advances import record_deduction
+        for adv, due in advance_deductions:
+            record_deduction(advance=adv, year=run.period_year,
+                             month=run.period_month, amount=due,
+                             payslip=slip)
 
     return SlipResult(payslip=slip, warnings=warnings)
 
