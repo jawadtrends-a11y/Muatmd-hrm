@@ -16,7 +16,7 @@ APPS_DIR = next((p for p in _CANDIDATES if p.is_dir()), None)
 assert APPS_DIR is not None, (
     "لم يُعثر على مجلد apps — الحرّاس تفحص فراغًا وهذا أمان زائف"
 )
-RAW_QUERY_RE = re.compile(r"\b[A-Z]\w+\.objects\.(filter|all|get|exclude)\b")
+RAW_QUERY_RE = re.compile(r"\b([A-Z]\w+)\.objects\.(filter|all|get|exclude)\b")
 
 
 def _python_files(*subpaths):
@@ -31,14 +31,30 @@ def test_no_raw_queryset_in_api_views():
     ممنوع Model.objects.filter() خامًا في طبقة الـAPI.
     كل قراءة تمر بـGate.filter_queryset — الأمان في الطبقة الخلفية.
     """
+    # جداول المنصة لا تحمل account_id ولا نطاق — الفلترة عليها بلا معنى
+    PLATFORM_MODELS = {
+        "Plan", "PlanFeature", "PlanPriceTier", "Feature",
+        "NotificationEvent", "NotificationTemplate",
+    }
+
     offenders = []
-    for path in _python_files("api/*.py", "views.py", "views/*.py"):
+    for path in _python_files("api/*.py", "api.py", "views.py", "views/*.py"):
         src = path.read_text(encoding="utf-8")
-        for i, line in enumerate(src.splitlines(), 1):
+        lines = src.splitlines()
+        for i, line in enumerate(lines, 1):
             if line.strip().startswith("#"):
                 continue
-            if RAW_QUERY_RE.search(line) and "Gate." not in line:
-                offenders.append(f"{path.name}:{i}  {line.strip()[:70]}")
+            m = RAW_QUERY_RE.search(line)
+            if not m:
+                continue
+            model = m.group(1)
+            if model in PLATFORM_MODELS:
+                continue
+            # الاستعلام قد يُمرَّر لـGate على سطر مجاور (كتلة متعددة الأسطر)
+            window = "\n".join(lines[max(0, i - 4):i + 2])
+            if "Gate." in window:
+                continue
+            offenders.append(f"{path.name}:{i}  {line.strip()[:70]}")
     assert not offenders, (
         "استعلامات خام في طبقة الـAPI — استخدم Gate.filter_queryset:\n"
         + "\n".join(offenders)
@@ -143,3 +159,54 @@ def test_guards_actually_scan_files():
     names = {f.name for f in files}
     for expected in ("models.py", "gate.py", "catalog.py", "tasks.py"):
         assert expected in names, f"ملف متوقع مفقود من الفحص: {expected}"
+
+
+def test_every_api_module_is_routed():
+    """
+    كل ملف API له مسار مسجّل في config/urls.py.
+
+    وقعنا في هذا مرتين: billing.py كُتب بلا مسار فلم يعمل قط،
+    ومسار سُجّل بلا ملف فتعطّل النظام. هذا الحارس يمنع الحالتين.
+    راجع الوثيقة المعمارية (2) القسم 7.2 — «لا مسارات ناقصة».
+    """
+    import re
+
+    urls_path = Path(APPS_DIR).parent / "config" / "urls.py"
+    if not urls_path.exists():
+        urls_path = Path("/app/config/urls.py")
+    urls_src = urls_path.read_text(encoding="utf-8")
+
+    api_modules = []
+    for path in APPS_DIR.rglob("api.py"):
+        if "__pycache__" not in path.parts:
+            api_modules.append(path)
+    for path in APPS_DIR.rglob("api/*.py"):
+        if path.name != "__init__.py" and "__pycache__" not in path.parts:
+            api_modules.append(path)
+
+    unrouted = []
+    for path in api_modules:
+        views = re.findall(r"^def (\w+)\(request", path.read_text(encoding="utf-8"),
+                           re.MULTILINE)
+        public = [v for v in views if not v.startswith("_")]
+        if not public:
+            continue
+        if not any(v in urls_src for v in public):
+            unrouted.append(f"{path.relative_to(APPS_DIR)}: {public[:3]}")
+
+    assert not unrouted, (
+        "ملفات API بلا مسارات مسجّلة — كُتبت ولن تعمل:\n" + "\n".join(unrouted)
+    )
+
+
+def test_all_routed_views_are_importable():
+    """كل مسار مسجّل يشير لدالة موجودة فعلًا."""
+    from django.urls import get_resolver
+
+    patterns = get_resolver().url_patterns
+    assert len(patterns) >= 15, f"عدد المسارات {len(patterns)} أقل من المتوقع"
+    from django.urls.resolvers import URLPattern
+    for p in patterns:
+        if not isinstance(p, URLPattern):
+            continue          # URLResolver (مثل admin/) لا يحمل callback
+        assert callable(p.callback), f"مسار بلا دالة: {p.pattern}"
