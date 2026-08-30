@@ -1,24 +1,27 @@
 """
 ربط سياق الحساب بطلبات HTTP.
 
-يحلّ الحساب من المستخدم المسجّل، ويثبّته على الاتصال قبل أي استعلام.
-ATOMIC_REQUESTS=True يضمن وجود معاملة، فـSET LOCAL يعمل ويسقط تلقائيًا.
+مصيدتان محلولتان هنا:
+
+1) جدول العضوية محمي بـRLS والـmiddleware يحتاج قراءته ليضبط السياق
+   — حلقة مغلقة. تُكسر بدالتي SECURITY DEFINER + SET row_security=off
+   (accounts/migrations/0007).
+
+2) ATOMIC_REQUESTS يفتح المعاملة حول الـview فقط، فـSET LOCAL المضبوط
+   في الـmiddleware يسقط قبل وصول الطلب. الحل: نفتح المعاملة هنا
+   ونبقيها مفتوحة طوال الطلب، فتصير معاملة الـview متداخلة معها.
 
 راجع الوثيقة المعمارية (2) القسم 2.1.
 """
-from django.http import JsonResponse
+from django.db import connection, transaction
 
 from apps.core.tenancy.context import AccountContext, apply_context
 
-EXEMPT_PREFIXES = ("/health", "/static/", "/media/", "/admin/", "/api/schema", "/api/docs")
+EXEMPT_PREFIXES = ("/health", "/static/", "/media/", "/admin/",
+                   "/api/schema", "/api/docs")
 
 
 class AccountContextMiddleware:
-    """
-    مصدر السياق الحالي: المستخدم المسجّل.
-    لاحقًا (السبرنت 3) يضاف: النطاق الفرعي، ومبدّل الشركة، ورمز JWT.
-    """
-
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -28,12 +31,14 @@ class AccountContextMiddleware:
 
         ctx = self._resolve(request)
         if ctx is None:
-            # لا سياق = لا بيانات. الطلب يمضي لكن الاستعلامات ترجع فارغة.
+            # بلا سياق: الطلب يمضي والاستعلامات ترجع فارغة (fail closed)
             return self.get_response(request)
 
         request.account_ctx = ctx
-        apply_context(ctx)
-        return self.get_response(request)
+        # المعاملة تُفتح هنا لا في الـview، وإلا سقط SET LOCAL قبل وصوله
+        with transaction.atomic():
+            apply_context(ctx)
+            return self.get_response(request)
 
     @staticmethod
     def _resolve(request):
@@ -41,13 +46,24 @@ class AccountContextMiddleware:
         if not user or not user.is_authenticated:
             return None
 
-        membership = getattr(user, "account_membership", None)
-        if membership is None:
-            return None
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT membership_id, account_id, active_company_id,"
+                "       is_account_owner, account_status"
+                " FROM app_lookup_membership(%s)",
+                [user.id],
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            membership_id, account_id, active_company_id, _owner, _status = row
+
+            cur.execute("SELECT app_lookup_company_ids(%s)", [membership_id])
+            company_ids = cur.fetchone()[0] or []
 
         return AccountContext(
-            account_id=membership.account_id,
-            company_ids=list(membership.company_ids or []),
-            active_company_id=membership.active_company_id,
+            account_id=account_id,
+            company_ids=list(company_ids),
+            active_company_id=active_company_id,
             user_id=user.id,
         )
