@@ -52,9 +52,18 @@ def provision_account(
         account_id, company_id = cur.fetchone()
 
     # نسخ الأدوار الافتراضية — كل حساب يملك نسخته ويعدّلها بحرية
+    from apps.accounts.models import Company
     from apps.accounts.services.roles import provision_roles_for_account
+    from apps.payroll.models import PayrollSettings
+    from apps.payroll.services.components import provision_default_components
+
     with account_scope(account_id):
         provision_roles_for_account(account_id)
+        comp = Company.objects.get(id=company_id)
+        # مكوّنات الأجر وإعدادات الرواتب — الشركة تعدّلها بحرية (ق-9)
+        provision_default_components(comp)
+        PayrollSettings.objects.get_or_create(
+            company=comp, defaults={"account_id": account_id})
 
     return ProvisionedAccount(account_id=account_id, company_id=company_id)
 
