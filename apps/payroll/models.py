@@ -95,8 +95,46 @@ class OvertimeBasis(models.TextChoices):
     FULL_TIMES_1_5 = "full_x1_5", _("أجر ساعة الأجر الكامل × 1.5")
 
 
+class PayrollRunType(models.TextChoices):
+    """
+    ثلاثة أنواع مسيرات (ق-21). مسير المستحقات يخرج عن الدورة
+    الشهرية — يُنشأ فور اعتماد حساب نهاية الخدمة لموظف واحد.
+    """
+    REGULAR       = "regular",       _("المسير العام")
+    SUPPLEMENTARY = "supplementary", _("مسير الإضافي والإضافات")
+    SETTLEMENT    = "settlement",    _("مسير المستحقات ونهاية الخدمة")
+
+
+class EOSBWageBasis(models.TextChoices):
+    """
+    ما يدخل في أجر مكافأة نهاية الخدمة — حسب العقد (قرار المالك).
+    NOT_SET يمنع تشغيل أول مسير مستحقات حتى تختار الشركة صراحةً:
+    الصمت هنا قرار مالي لم يتخذه أحد.
+    """
+    NOT_SET       = "not_set",       _("لم يُحدَّد بعد")
+    BASIC_ONLY    = "basic_only",    _("الأساسي وحده")
+    FLAGGED       = "flagged",       _("حسب أعلام المكوّنات (is_eosb_subject)")
+
+
 class PayrollSettings(CompanyScopedModel):
     """إعدادات الرواتب لكل شركة — تُقرأ منها كل الحسابات."""
+
+    # ── أنواع المسيرات (ق-21) ──
+    merge_supplementary_into_regular = models.BooleanField(
+        _("دمج مسير الإضافي مع العام"), default=True,
+        help_text=_("الافتراض: مسير واحد. الفصل خيار الشركة"))
+    terminated_pay_in_regular_run = models.BooleanField(
+        _("راتب أيام المنتهية خدمته في المسير العام"), default=True,
+        help_text=_("إن أُطفئ، يُدمج راتب الأيام في مسير المستحقات"))
+
+    # ── أجر نهاية الخدمة ──
+    exclude_unpaid_leave_from_service = models.BooleanField(
+        _("استبعاد الإجازات بلا أجر من مدة الخدمة"), default=False,
+        help_text=_("خيار الشركة — لا افتراض مفروض (ق-24)"))
+    eosb_wage_basis = models.CharField(
+        _("أساس أجر المكافأة"), max_length=20,
+        choices=EOSBWageBasis.choices, default=EOSBWageBasis.NOT_SET,
+        help_text=_("يجب تحديده قبل أول مسير مستحقات"))
 
     payroll_days_per_month = models.PositiveSmallIntegerField(
         _("أيام الشهر للاحتساب"), default=30,
