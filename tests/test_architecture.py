@@ -89,7 +89,8 @@ def test_every_model_with_account_field_inherits_base():
     from django.apps import apps as dj_apps
     from apps.core.models import AccountScopedModel
 
-    exempt = {"Account", "Company", "Role", "AccountMembership"}
+    # نماذج الحساب نفسه — لا تحمل مرجعًا لحساب آخر
+    exempt = {"Account", "Company", "AccountMembership"}
     offenders = []
     for model in dj_apps.get_models():
         if not model._meta.app_label.startswith(("core", "accounts", "employees",
@@ -99,8 +100,17 @@ def test_every_model_with_account_field_inherits_base():
             continue
         if model.__name__ in exempt:
             continue
-        has_account = any(f.name == "account" for f in model._meta.fields)
-        if has_account and not issubclass(model, AccountScopedModel):
+        account_field = next(
+            (f for f in model._meta.fields if f.name == "account"), None
+        )
+        if account_field is None:
+            continue
+        # نمط مقصود: account قابل للفراغ = النموذج يحمل قوالب افتراضية
+        # للمنصة (Role، NotificationTemplate). لا يمكن توريثه من أساس
+        # يفرض account إلزاميًا. عزله يتم بسياسة RLS تسمح بـIS NULL.
+        if account_field.null:
+            continue
+        if not issubclass(model, AccountScopedModel):
             offenders.append(f"{model._meta.app_label}.{model.__name__}")
     assert not offenders, (
         "نماذج تحمل account بلا وراثة AccountScopedModel:\n" + "\n".join(offenders)

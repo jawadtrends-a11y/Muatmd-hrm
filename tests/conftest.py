@@ -92,3 +92,24 @@ def _grant_runtime_on_new_tables(db):
         cur.execute("GRANT USAGE, SELECT ON ALL SEQUENCES "
                     "IN SCHEMA public TO hrm_runtime")
     yield
+
+
+@pytest.fixture
+def rls_enforced_late(db):
+    """
+    مثل rls_enforced لكن التبديل يدوي — يُستدعى بعد تهيئة البيانات.
+
+    السبب: إنشاء الحسابات يحتاج صلاحية المالك، لكن فحص العزل يجب
+    أن يتم بدور التشغيل. فنُنشئ أولًا ثم نبدّل.
+    """
+    from django.db import connection
+
+    def _switch():
+        with connection.cursor() as cur:
+            cur.execute("SET ROLE hrm_runtime")
+
+    try:
+        yield _switch
+    finally:
+        with connection.cursor() as cur:
+            cur.execute("RESET ROLE")
