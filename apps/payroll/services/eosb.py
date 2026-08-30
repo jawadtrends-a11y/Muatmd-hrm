@@ -155,11 +155,21 @@ def calculate_eosb(*, join_date: date, end_date: date,
     years = Decimal(service_days) / DAYS_PER_YEAR
 
     # ── المكافأة الأساسية (م/84) ──
-    first_block = min(years, Decimal("5"))
-    second_block = max(Decimal("0"), years - Decimal("5"))
-    first_amount = eosb_wage * first_block * Decimal("0.5")
-    second_amount = eosb_wage * second_block
+    # ق-25: لا تقريب في المنتصف — الكسر يُحتفظ به كاملًا والتقريب
+    # في النتيجة النهائية فقط. مطابق للحاسبة الرسمية لوزارة الموارد
+    # البشرية (hrsd.gov.sa): 4س6ش15ي على 3000 = 6812.50 ريال.
+    half_day_rate = eosb_wage / Decimal("2") / DAYS_PER_YEAR
+    full_day_rate = eosb_wage / DAYS_PER_YEAR
+
+    first_days = min(service_days, 5 * 360)
+    second_days = max(0, service_days - (5 * 360))
+
+    first_amount = half_day_rate * Decimal(first_days)
+    second_amount = full_day_rate * Decimal(second_days)
     gross = first_amount + second_amount
+
+    first_block = Decimal(first_days) / DAYS_PER_YEAR
+    second_block = Decimal(second_days) / DAYS_PER_YEAR
 
     # ── نسبة الاستحقاق ──
     if reason_code in NO_ENTITLEMENT:
@@ -174,9 +184,11 @@ def calculate_eosb(*, join_date: date, end_date: date,
         f"مدة الخدمة: {service_days} يومًا "
         f"({r2(years)} سنة على أساس 360 يومًا للسنة)",
         f"الأجر المعتمد للمكافأة: {r2(eosb_wage)} ريال",
-        f"أول 5 سنوات: {r2(first_block)} سنة × نصف شهر = "
+        f"أجر اليوم للخمس الأولى (نصف شهر): {r2(half_day_rate)} ريال",
+        f"أول 5 سنوات: {first_days} يومًا × {r2(half_day_rate)} = "
         f"{r2(first_amount)} ريال",
-        f"ما بعد 5 سنوات: {r2(second_block)} سنة × شهر كامل = "
+        f"أجر اليوم لما بعدها (شهر كامل): {r2(full_day_rate)} ريال",
+        f"ما بعد 5 سنوات: {second_days} يومًا × {r2(full_day_rate)} = "
         f"{r2(second_amount)} ريال",
         f"إجمالي المكافأة قبل النسبة: {r2(gross)} ريال",
         f"نسبة الاستحقاق: {r2(ratio * 100)}%",

@@ -187,3 +187,38 @@ def test_component_exclusion_warning(  ):
     """ق-23: تحذير لا منع."""
     msg = warn_on_component_exclusion("بدل السكن", "is_eosb_subject")
     assert "بدل السكن" in msg and "مكافأة نهاية الخدمة" in msg
+
+
+# ══════════ مطابقة الحاسبة الرسمية (ق-25) ══════════
+
+def test_matches_official_hrsd_calculator_mutual_agreement():
+    """
+    المرجع: حاسبة وزارة الموارد البشرية الرسمية.
+    4 سنوات و6 أشهر و15 يومًا على أجر 3000 = 6812.50 ريال.
+    """
+    r = calculate_eosb(join_date=date(2020, 1, 1), end_date=date(2024, 7, 16),
+                       eosb_wage=D("3000"), reason_code="mutual_agreement")
+    assert r.service_days == 1635
+    assert r.net_award == D("6812.50")
+
+
+def test_matches_official_hrsd_calculator_resignation():
+    """نفس المعطيات باستقالة = 2270.83 ريال (الثلث)."""
+    r = calculate_eosb(join_date=date(2020, 1, 1), end_date=date(2024, 7, 16),
+                       eosb_wage=D("3000"), reason_code="resignation")
+    assert r.net_award == D("2270.83")
+
+
+@pytest.mark.parametrize("start,end,expected", [
+    (date(2021, 1, 1), date(2026, 1, 1), D("30000.00")),   # 5 سنوات
+    (date(2019, 1, 1), date(2026, 1, 1), D("54000.00")),   # 7 سنوات
+    (date(2016, 1, 1), date(2026, 1, 1), D("90000.00")),   # 10 سنوات
+])
+def test_round_years_give_round_amounts(start, end, expected):
+    """
+    ق-25: المدد المستديرة تخرج مستديرة.
+    التقريب المرحلي كان يعطي 53,985 لسبع سنوات — خطأ يأكل من الحق.
+    """
+    r = calculate_eosb(join_date=start, end_date=end, eosb_wage=W,
+                       reason_code="employer_termination")
+    assert r.net_award == expected
