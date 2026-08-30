@@ -9,6 +9,7 @@ from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
+from apps.payroll import api_outputs as outputs_api
 
 
 def health(request):
@@ -48,6 +49,15 @@ urlpatterns = [
     path("api/attendance/<int:employment_id>/summary/", attendance_api.monthly_summary, name="attendance-summary"),
     path("api/attendance/days/<int:day_id>/overtime/", attendance_api.approve_day_overtime, name="approve-overtime"),
     path("api/attendance/days/<int:day_id>/adjust/", attendance_api.adjust_day, name="adjust-day"),
+    path("api/payroll/runs/<int:run_id>/overview/", outputs_api.run_overview, name="run-overview"),
+    path("api/payroll/runs/<int:run_id>/tab/<str:tab>/", outputs_api.run_tab, name="run-tab"),
+    path("api/payroll/bank-templates/", outputs_api.bank_templates, name="bank-templates"),
+    path("api/payroll/runs/<int:run_id>/bank/<int:template_id>/preview/", outputs_api.bank_file_preview, name="bank-preview"),
+    path("api/payroll/runs/<int:run_id>/bank/<int:template_id>/download/", outputs_api.bank_file_download, name="bank-download"),
+    path("api/payroll/runs/<int:run_id>/wps/preview/", outputs_api.wps_preview, name="wps-preview"),
+    path("api/payroll/runs/<int:run_id>/wps/download/", outputs_api.wps_download, name="wps-download"),
+    path("api/payslips/<int:payslip_id>/", outputs_api.payslip_detail, name="payslip-detail"),
+    path("api/me/payslips/", outputs_api.my_payslips, name="my-payslips"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
