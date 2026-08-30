@@ -6,6 +6,7 @@ from apps.core.api.workspace import workspace
 from apps.core.api import access as access_api
 from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
+from apps.payroll import api as payroll_api
 
 
 def health(request):
@@ -29,6 +30,11 @@ urlpatterns = [
     path("api/billing/plans/", billing_api.plan_catalog, name="plan-catalog"),
     path("api/billing/subscription/", billing_api.my_subscription, name="my-subscription"),
     path("api/billing/estimate/", billing_api.billing_estimate, name="billing-estimate"),
+    path("api/payroll/components/", payroll_api.components, name="pay-components"),
+    path("api/payroll/components/<int:component_id>/flags/", payroll_api.component_flags, name="pay-component-flags"),
+    path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
+    path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
+    path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
