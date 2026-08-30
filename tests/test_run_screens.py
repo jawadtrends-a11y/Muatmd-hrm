@@ -284,3 +284,23 @@ def test_all_tabs_registered(env):
     """التبويبات الستة متاحة للواجهة."""
     assert set(rs.TABS) == {"summary", "payslips", "excluded",
                             "adjustments", "gosi", "comparison"}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_excluded_has_no_duplicates(env):
+    """
+    الموظف بلا هيكل راتب يظهر مرة واحدة — كان يُكرَّر لأنه يُلتقط
+    من قائمة الارتباطات ومن سجل أخطاء المسير معًا.
+    """
+    with account_scope(env["account_id"]):
+        p4, _ = create_person(
+            account=env["acc"], first_name_ar="عمر",
+            family_name_ar="الزهراني", gender="male",
+            nationality_code="SA", id_type="national_id",
+            id_number="1077766655", mobile="0507776665", force=True)
+        create_employment(person=p4, company=env["comp"],
+                          employee_no="501", join_date=date(2024, 1, 1))
+        run = _run(env, 3)
+        rows = rs.excluded_tab(run)
+        numbers = [r["employee_no"] for r in rows]
+        assert len(numbers) == len(set(numbers)), f"تكرار: {numbers}"

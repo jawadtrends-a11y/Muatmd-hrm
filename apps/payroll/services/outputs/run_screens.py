@@ -155,8 +155,11 @@ def excluded_tab(run):
             "reason": reason,
         })
 
-    # من فشل احتسابه
+    # من فشل احتسابه — بلا تكرار من القائمة أعلاه
+    listed = {r["employee_no"] for r in rows}
     for err in (run.error_log or []):
+        if err.get("employee_no") in listed:
+            continue
         rows.append({
             "employee_no": err.get("employee_no", ""),
             "name": err.get("name", ""),

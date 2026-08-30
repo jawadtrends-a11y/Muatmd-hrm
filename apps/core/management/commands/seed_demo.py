@@ -1,23 +1,22 @@
 """
 بذر بيانات تجريبية كاملة — لتجربة النظام من طرف لطرف.
 
-الاستخدام:
-    python manage.py seed_demo            # ينشئ أو يكمل
-    python manage.py seed_demo --reset    # يحذف ويعيد من الصفر
+    python manage.py seed_demo            # ينشئ
+    python manage.py seed_demo --reset    # يحذف ويعيد
 
 يغطي حالات حقيقية متعمدة:
-  • سعودي مسجّل في التأمينات بإضافي وغياب
-  • وافد غير مسجّل (لا يُخصم منه شيء)
+  • سعودي مسجّل بإضافي وتأخير
+  • وافد غير مسجّل (لا يُخصم منه شيء — ق-15)
   • موظف موقوف (يظهر في المستبعدين)
-  • موظف بلا هيكل راتب (يفشل احتسابه)
+  • موظف بلا هيكل راتب (يفشل احتسابه بلا إيقاف المسير)
   • شخص واحد في شركتين (ق-4)
-  • إجازة بلا أجر شهرًا كاملًا (ق-38)
+  • مسيران: فبراير معتمد ومارس محتسب (للمقارنة)
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal as D
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 SLUG = "demo"
@@ -26,6 +25,22 @@ SLUG = "demo"
 IBAN_NCB = "SA8510000012345678901234"
 IBAN_RJHI = "SA6080000247608010330101"
 IBAN_RIBL = "SA4080000024760801033010"
+
+SCOPED_TABLES = [
+    "payroll_payslip", "payroll_payrollrun", "payroll_banktemplate",
+    "leaves_requestapproval", "leaves_request", "leaves_approvalchain",
+    "leaves_leavebalance", "leaves_leaveentitlement", "leaves_leavetype",
+    "attendance_attendancemonthlysummary", "attendance_attendanceday",
+    "attendance_attendancepunch", "attendance_shiftassignment",
+    "attendance_shift", "employees_salarystructure",
+    "employees_employment", "employees_person", "organization_holiday",
+    "organization_jobtitle", "organization_costcenter",
+    "organization_department", "organization_branch",
+    "payroll_payrollsettings", "payroll_paycomponent",
+    "accounts_companyheadcountdaily", "accounts_companysubscription",
+    "accounts_roleassignment", "accounts_accountmembership",
+    "accounts_role", "accounts_company",
+]
 
 
 class Command(BaseCommand):
@@ -38,63 +53,45 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from apps.accounts.models import Account
 
-        if options["reset"]:
-            existing = Account.objects.filter(slug=SLUG).first()
-            if existing:
-                self.stdout.write("حذف الحساب التجريبي القائم…")
-                self._purge(existing)
-
-        if Account.objects.filter(slug=SLUG).exists():
+        existing = Account.objects.filter(slug=SLUG).first()
+        if existing and not options["reset"]:
             self.stdout.write(self.style.WARNING(
-                f"الحساب '{SLUG}' موجود. استخدم --reset لإعادة البناء."))
+                f"الحساب '{SLUG}' موجود (id={existing.id}). "
+                "استخدم --reset لإعادة البناء."))
             return
+        if existing:
+            self.stdout.write("حذف الحساب التجريبي القائم…")
+            self._purge(existing.id)
 
         self._build()
 
-    # ══════════ الحذف ══════════
-
-    def _purge(self, account):
-        from django.db import connection
+    def _purge(self, account_id):
+        """حذف بترتيب التبعيات — الأبناء أولًا."""
         with connection.cursor() as cur:
             cur.execute("SET session_replication_role = replica")
-            for table in (
-                "payroll_payslipline", "payroll_payslip", "payroll_payrollrun",
-                "payroll_bankcolumn", "payroll_banktemplate",
-                "leaves_requestapproval", "leaves_request",
-                "leaves_approvalstep", "leaves_approvalchain",
-                "leaves_leavebalance", "leaves_leaveentitlement",
-                "leaves_leavetier", "leaves_leavetype",
-                "attendance_attendancemonthlysummary",
-                "attendance_attendanceday", "attendance_attendancepunch",
-                "attendance_shiftassignment", "attendance_shift",
-                "employees_salaryline", "employees_salarystructure",
-                "employees_employment", "employees_person",
-                "organization_holiday", "organization_jobtitle",
-                "organization_costcenter", "organization_department",
-                "organization_branch",
-                "payroll_payrollsettings", "payroll_paycomponent",
-                "accounts_companyheadcountdaily",
-                "accounts_companysubscription",
-                "accounts_roleassignment", "accounts_accountmembership",
-                "accounts_rolepermission", "accounts_role",
-                "accounts_company", "accounts_account",
-            ):
-                cur.execute(
-                    f"DELETE FROM {table} WHERE account_id = %s"
-                    if table not in ("payroll_payslipline",
-                                     "payroll_bankcolumn",
-                                     "leaves_approvalstep",
-                                     "leaves_leavetier",
-                                     "employees_salaryline",
-                                     "accounts_rolepermission")
-                    else f"DELETE FROM {table}",
-                    [account.id] if table not in (
-                        "payroll_payslipline", "payroll_bankcolumn",
-                        "leaves_approvalstep", "leaves_leavetier",
-                        "employees_salaryline", "accounts_rolepermission")
-                    else [])
-            cur.execute("DELETE FROM accounts_account WHERE id = %s",
-                        [account.id])
+            cur.execute("DELETE FROM payroll_payslipline WHERE payslip_id IN "
+                        "(SELECT id FROM payroll_payslip WHERE account_id=%s)",
+                        [account_id])
+            cur.execute("DELETE FROM payroll_bankcolumn WHERE template_id IN "
+                        "(SELECT id FROM payroll_banktemplate "
+                        "WHERE account_id=%s)", [account_id])
+            cur.execute("DELETE FROM leaves_approvalstep WHERE chain_id IN "
+                        "(SELECT id FROM leaves_approvalchain "
+                        "WHERE account_id=%s)", [account_id])
+            cur.execute("DELETE FROM leaves_leavetier WHERE leave_type_id IN "
+                        "(SELECT id FROM leaves_leavetype WHERE account_id=%s)",
+                        [account_id])
+            cur.execute("DELETE FROM employees_salaryline WHERE structure_id IN "
+                        "(SELECT id FROM employees_salarystructure "
+                        "WHERE account_id=%s)", [account_id])
+            cur.execute("DELETE FROM accounts_rolepermission WHERE role_id IN "
+                        "(SELECT id FROM accounts_role WHERE account_id=%s)",
+                        [account_id])
+            for table in SCOPED_TABLES:
+                cur.execute(f"DELETE FROM {table} WHERE account_id=%s",
+                            [account_id])
+            cur.execute("DELETE FROM accounts_account WHERE id=%s",
+                        [account_id])
             cur.execute("SET session_replication_role = DEFAULT")
 
     # ══════════ البناء ══════════
@@ -117,7 +114,7 @@ class Command(BaseCommand):
             acc = Account.objects.get(id=prov.account_id)
             c1 = Company.objects.get(id=prov.company_id)
             c2 = self._second_company(acc)
-            self.stdout.write(f"شركتان: {c1.legal_name_ar} · {c2.legal_name_ar}")
+            self.stdout.write(f"شركتان ✓")
 
             org = self._org(c1)
             people = self._people(acc, c1, c2, org)
@@ -127,17 +124,14 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"\nاكتمل. الحساب: {SLUG} (id={prov.account_id})"))
-        self.stdout.write("للدخول: python manage.py shell ثم")
-        self.stdout.write("  from apps.core.tenancy.context import account_scope")
-        self.stdout.write(f"  with account_scope({prov.account_id}): ...")
 
     def _second_company(self, acc):
         from apps.accounts.models import Company
-        from apps.payroll.models import PayrollSettings
-        from apps.payroll.services.components import provision_default_components
         from apps.leaves.services.seeds import (
             provision_approval_chains, provision_leave_types,
         )
+        from apps.payroll.models import PayrollSettings
+        from apps.payroll.services.components import provision_default_components
         from apps.payroll.services.outputs.templates_seed import (
             provision_bank_templates,
         )
@@ -153,10 +147,10 @@ class Command(BaseCommand):
         return c2
 
     def _org(self, comp):
+        from apps.organization.models import JobTitle
         from apps.organization.services.structure import (
             create_branch, create_department, create_holiday,
         )
-        from apps.organization.models import JobTitle
 
         branch = create_branch(company=comp, code="RUH",
                                name_ar="فرع الرياض", city="الرياض",
@@ -175,16 +169,17 @@ class Command(BaseCommand):
             name_en="Civil Engineer", mol_occupation_code="2142")
 
         create_holiday(company=comp, name_ar="عيد الفطر",
-                       start_date=date(2026, 3, 19), end_date=date(2026, 3, 22))
+                       start_date=date(2026, 3, 19),
+                       end_date=date(2026, 3, 22))
         return {"branch": branch, "admin": admin, "eng": eng, "title": title}
 
     def _people(self, acc, c1, c2, org):
-        from apps.payroll.models import PayComponent
+        from apps.attendance.models import Shift, ShiftAssignment
         from apps.employees.models import EmploymentStatus
         from apps.employees.services.hiring import (
             create_employment, create_person,
         )
-        from apps.attendance.models import Shift, ShiftAssignment
+        from apps.payroll.models import PayComponent
 
         comps = {c.code: c for c in PayComponent.objects.filter(company=c1)}
         comps2 = {c.code: c for c in PayComponent.objects.filter(company=c2)}
@@ -196,7 +191,7 @@ class Command(BaseCommand):
 
         out = {}
 
-        # 1) مدير — سعودي مسجّل
+        # 1) المدير — سعودي مسجّل
         p, _ = create_person(
             account=acc, first_name_ar="خالد", father_name_ar="سعد",
             family_name_ar="الحربي", full_name_en="KHALID SAAD ALHARBI",
@@ -221,7 +216,7 @@ class Command(BaseCommand):
                                        effective_from=date(2019, 1, 1))
         out["manager"] = mgr
 
-        # 2) موظف سعودي — بإضافي وغياب
+        # 2) موظف سعودي — إضافي وتأخير
         p, _ = create_person(
             account=acc, first_name_ar="سعد", family_name_ar="القحطاني",
             full_name_en="SAAD ALQAHTANI", gender="male",
@@ -246,7 +241,7 @@ class Command(BaseCommand):
                                        effective_from=date(2021, 6, 1))
         out["saudi"] = saudi
 
-        # 3) وافد — غير مسجّل، لا يُخصم منه شيء
+        # 3) وافد — غير مسجّل (ق-15)
         p, _ = create_person(
             account=acc, first_name_ar="راشد", family_name_ar="خان",
             full_name_en="RASHID KHAN", gender="male",
@@ -289,7 +284,7 @@ class Command(BaseCommand):
         create_employment(person=p, company=c1, employee_no="501",
                           join_date=date(2025, 1, 1), direct_manager=mgr)
 
-        # 6) نفس المدير في الشركة الثانية (ق-4)
+        # 6) المدير في الشركة الثانية (ق-4)
         create_employment(
             person=out["manager"].person, company=c2, employee_no="C2-01",
             join_date=date(2024, 1, 1), employment_type="secondary",
@@ -300,11 +295,11 @@ class Command(BaseCommand):
         return out
 
     def _attendance(self, acc, comp, people):
+        from apps.attendance.models import AttendanceDay
         from apps.attendance.services.processing import (
             approve_overtime, build_monthly_summary, process_employment_days,
             record_punch,
         )
-        from apps.attendance.models import AttendanceDay
 
         tz = timezone.get_current_timezone()
 
@@ -319,17 +314,18 @@ class Command(BaseCommand):
                          punched_at=stamp(day, 16), source="device",
                          external_ref=f"m{day}o")
 
-        # السعودي: تأخير وإضافي
-        for day, (hi, ho) in {2: (8, 16), 3: (8, 19), 4: (8, 40),
-                               5: (8, 16), 9: (8, 16)}.items():
+        # السعودي: يوم بإضافي (3 مارس حتى 19) ويوم بتأخير (4 مارس 8:40)
+        schedule = {2: (8, 0, 16), 3: (8, 0, 19), 4: (8, 40, 16),
+                    5: (8, 0, 16), 9: (8, 0, 16), 10: (8, 0, 16)}
+        for day, (hi, mi, ho) in schedule.items():
             record_punch(employment=people["saudi"],
-                         punched_at=stamp(day, hi, 40 if day == 4 else 0),
-                         source="device", external_ref=f"s{day}i")
+                         punched_at=stamp(day, hi, mi), source="device",
+                         external_ref=f"s{day}i")
             record_punch(employment=people["saudi"], punched_at=stamp(day, ho),
                          source="device", external_ref=f"s{day}o")
 
-        # الوافد: حضور جزئي
-        for day in (2, 3, 4):
+        # الوافد: بصمة واحدة يوميًا — حضور جزئي
+        for day in (2, 3, 4, 5):
             record_punch(employment=people["expat"], punched_at=stamp(day, 8),
                          source="device", external_ref=f"e{day}i")
 
@@ -351,20 +347,19 @@ class Command(BaseCommand):
         self.stdout.write("بصمات وسجلات حضور ومُلخصات مارس ✓")
 
     def _leaves(self, people):
-        from apps.leaves.models import ApprovalDecision
+        from apps.leaves.models import ApprovalDecision, LeaveType
         from apps.leaves.services.approvals import decide
         from apps.leaves.services.balances import accrue
         from apps.leaves.services.leave_requests import (
             apply_approved_leave, create_leave_request,
         )
-        from apps.leaves.models import LeaveType
 
         annual = LeaveType.objects.get(
             company=people["saudi"].company, code="ANNUAL")
         for key in ("manager", "saudi", "expat"):
             accrue(people[key], annual, as_of=date(2026, 12, 31))
 
-        # إجازة سنوية معتمدة
+        # إجازة معتمدة ومطبَّقة
         res = create_leave_request(
             employment=people["saudi"], leave_type_code="ANNUAL",
             start_date=date(2026, 4, 5), requested_days=5,
@@ -383,16 +378,16 @@ class Command(BaseCommand):
         self.stdout.write("إجازة معتمدة وأخرى معلّقة ✓")
 
     def _runs(self, comp):
+        from apps.employees.models import Employment
         from apps.payroll.models import PayrollRunType
         from apps.payroll.services.engine import (
             approve_run, calculate_run, create_run, submit_run,
         )
-        from apps.employees.models import Employment
 
         approver = Employment.objects.filter(
             company=comp, employee_no="101").first()
 
-        # فبراير — معتمد (للمقارنة)
+        # فبراير — معتمد (أساس المقارنة وتصدير البنك)
         feb = create_run(company=comp, run_type=PayrollRunType.REGULAR,
                          year=2026, month=2)
         calculate_run(feb)
