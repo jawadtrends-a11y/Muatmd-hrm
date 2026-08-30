@@ -27,6 +27,7 @@ IBAN_RJHI = "SA6080000247608010330101"
 IBAN_RIBL = "SA4080000024760801033010"
 
 SCOPED_TABLES = [
+    "core_auditentry",
     "payroll_payslip", "payroll_payrollrun", "payroll_banktemplate",
     "leaves_requestapproval", "leaves_request", "leaves_approvalchain",
     "leaves_leavebalance", "leaves_leaveentitlement", "leaves_leavetype",

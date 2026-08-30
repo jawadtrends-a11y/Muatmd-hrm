@@ -133,7 +133,8 @@ def create_employment(*, person, company, employee_no, join_date,
 
 @transaction.atomic
 def set_salary_structure(*, employment, lines, effective_from,
-                         reason=SalaryChangeReason.ADJUSTMENT, note=""):
+                         reason=SalaryChangeReason.ADJUSTMENT, note="",
+                         approved_by=None):
     """
     ينشئ هيكل راتب جديد. لا تعديل في المكان أبدًا.
 
@@ -164,6 +165,21 @@ def set_salary_structure(*, employment, lines, effective_from,
         SalaryLine(structure=structure, component=comp, amount=Decimal(amount))
         for comp, amount in lines
     ])
+
+    # سجل العمليات (ق-44) — تعديل الراتب أخطر تغيير في النظام
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=structure, action="create", actor=approved_by,
+        label=f"{employment.employee_no} — {structure.effective_from}",
+        summary=(f"هيكل راتب جديد بإجمالي {structure.gross_monthly} "
+                 f"ساري من {structure.effective_from}"),
+        changes={
+            "lines": {
+                "from": (str(previous.gross_monthly) if previous else None),
+                "to": str(structure.gross_monthly),
+            },
+            "reason": {"from": None, "to": reason},
+        })
     return structure
 
 

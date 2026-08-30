@@ -248,6 +248,18 @@ def decide(*, request_obj, approver_employment, decision, comment="",
     record.acted_via = via
     record.save()
 
+    # سجل العمليات (ق-44)
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=request_obj, action=decision,
+        actor=approver_employment.person,
+        label=request_obj.request_no,
+        summary=(f"{'اعتماد' if decision == 'approved' else 'رفض'} "
+                 f"{request_obj.get_request_type_display()} "
+                 f"بالدرجة {request_obj.current_step}"
+                 + (f" — {comment}" if comment else "")),
+        channel=via)
+
     from apps.notifications.bus import emit
     ctx = {"request_no": request_obj.request_no,
            "request_type": request_obj.get_request_type_display(),

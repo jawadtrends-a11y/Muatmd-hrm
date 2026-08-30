@@ -55,3 +55,7 @@ class CompanyScopedModel(AccountScopedModel):
 
     class Meta:
         abstract = True
+
+
+# سجل عمليات المنشأة (ق-44)
+from apps.core.models_audit import AuditAction, AuditEntry  # noqa: E402,F401

@@ -554,6 +554,13 @@ def approve_run(run, approved_by_person):
         company=run.company, period_year=run.period_year,
         period_month=run.period_month).update(is_final=True)
 
+    from apps.core.services.audit import log_action
+    log_action(instance=run, action="approve",
+               actor=approved_by_person, label=run.run_no,
+               summary=(f"اعتماد مسير {run.period_year}-"
+                        f"{run.period_month:02d} بصافي {run.total_net} "
+                        f"لـ{run.employee_count} موظفًا"))
+
     from apps.notifications.bus import emit
     emit("payroll.approved", account_id=run.account_id,
          company_id=run.company_id,
