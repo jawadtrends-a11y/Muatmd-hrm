@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-APPS_DIR = Path("/app/apps")
+# المسار داخل الحاوية /app، وفي CI جذر المستودع. نجرّب الاثنين.
+_CANDIDATES = [Path("/app/apps"), Path(__file__).resolve().parent.parent / "apps"]
+APPS_DIR = next((p for p in _CANDIDATES if p.is_dir()), None)
+assert APPS_DIR is not None, (
+    "لم يُعثر على مجلد apps — الحرّاس تفحص فراغًا وهذا أمان زائف"
+)
 RAW_QUERY_RE = re.compile(r"\b[A-Z]\w+\.objects\.(filter|all|get|exclude)\b")
 
 
@@ -121,3 +126,20 @@ def test_every_model_with_account_field_inherits_base():
     assert not offenders, (
         "نماذج تحمل account بلا وراثة AccountScopedModel:\n" + "\n".join(offenders)
     )
+
+
+def test_guards_actually_scan_files():
+    """
+    حارس الحرّاس: يتأكد أن الفحص يرى ملفات فعلية.
+
+    بدونه، لو تغيّر المسار في بيئة أخرى لمرّت كل الحرّاس بلا فحص
+    شيء — أمان زائف. هذا الاختبار يمنع ذلك.
+    """
+    files = list(_python_files("*.py"))
+    assert len(files) >= 20, (
+        f"الحرّاس ترى {len(files)} ملفًا فقط في {APPS_DIR} — "
+        "الفحص لا يعمل على ملفات حقيقية"
+    )
+    names = {f.name for f in files}
+    for expected in ("models.py", "gate.py", "catalog.py", "tasks.py"):
+        assert expected in names, f"ملف متوقع مفقود من الفحص: {expected}"
