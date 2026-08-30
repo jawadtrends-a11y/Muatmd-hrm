@@ -12,6 +12,8 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.models import CompanyScopedModel
+
 
 class ValueType(models.TextChoices):
     BOOL = "bool", _("نعم/لا")
@@ -130,13 +132,14 @@ class BillingCycle(models.TextChoices):
     YEARLY  = "yearly",  _("سنوي")
 
 
-class CompanySubscription(models.Model):
-    """اشتراك شركة — لكل شركة باقتها وعدد موظفيها."""
+class CompanySubscription(CompanyScopedModel):
+    """
+    اشتراك شركة — لكل شركة باقتها وعدد موظفيها.
 
-    account = models.ForeignKey("accounts.Account", on_delete=models.CASCADE,
-                                related_name="subscriptions")
-    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE,
-                                related_name="subscriptions")
+    يرث account و company والطوابع الزمنية من CompanyScopedModel،
+    فيبقى العزل متسقًا مع بقية النظام (حارس المعمارية يفرض هذا).
+    """
+
     plan    = models.ForeignKey(Plan, on_delete=models.PROTECT,
                                 related_name="subscriptions")
     billing_cycle = models.CharField(_("دورة الفوترة"), max_length=10,
@@ -156,8 +159,6 @@ class CompanySubscription(models.Model):
         null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = _("اشتراك")
@@ -187,13 +188,9 @@ class CompanySubscription(models.Model):
                                SubscriptionStatus.PAST_DUE}
 
 
-class CompanyHeadcountDaily(models.Model):
+class CompanyHeadcountDaily(CompanyScopedModel):
     """لقطة يومية — أساس الفوترة بالذروة."""
 
-    account = models.ForeignKey("accounts.Account", on_delete=models.CASCADE,
-                                related_name="+")
-    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE,
-                                related_name="headcount_snapshots")
     snapshot_date = models.DateField(_("التاريخ"), db_index=True)
     active_employments   = models.PositiveIntegerField(_("الارتباطات النشطة"), default=0)
     billable_employments = models.PositiveIntegerField(_("المُفوترة"), default=0)

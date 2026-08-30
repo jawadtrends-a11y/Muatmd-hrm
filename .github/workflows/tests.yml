@@ -1,0 +1,80 @@
+name: الحرّاس
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: muatmd_hrm
+          POSTGRES_USER: hrm_app
+          POSTGRES_PASSWORD: ci_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: تثبيت المتطلبات
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: تهيئة دور التشغيل
+        env:
+          PGPASSWORD: ci_password
+        run: |
+          psql -h localhost -U hrm_app -d muatmd_hrm -c "
+            CREATE ROLE hrm_runtime LOGIN PASSWORD 'ci_runtime'
+              NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT;
+            GRANT CONNECT ON DATABASE muatmd_hrm TO hrm_runtime;
+            GRANT USAGE ON SCHEMA public TO hrm_runtime;
+          "
+
+      - name: ملف البيئة
+        run: |
+          cat > .env <<EOF
+          DEBUG=True
+          SECRET_KEY=ci-secret-key-not-for-production
+          ALLOWED_HOSTS=*
+          POSTGRES_DB=muatmd_hrm
+          POSTGRES_USER=hrm_app
+          POSTGRES_PASSWORD=ci_password
+          POSTGRES_HOST=localhost
+          POSTGRES_PORT=5432
+          POSTGRES_RUNTIME_USER=hrm_runtime
+          POSTGRES_RUNTIME_PASSWORD=ci_runtime
+          REDIS_URL=redis://localhost:6379/0
+          LANGUAGE_CODE=ar
+          TIME_ZONE=Asia/Riyadh
+          EOF
+
+      - name: تشغيل الحرّاس
+        env:
+          DJANGO_DB_OWNER: "1"
+        run: pytest tests/ -v --no-header
