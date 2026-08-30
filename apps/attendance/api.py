@@ -142,7 +142,9 @@ def punches(request, employment_id):
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
 
-    qs = AttendancePunch.objects.filter(employment=emp)
+    qs = Gate.filter_queryset(request.user, "attendance.view",
+                              AttendancePunch.objects.all()
+                              ).filter(employment=emp)
     if request.GET.get("from"):
         qs = qs.filter(punched_at__date__gte=request.GET["from"])
     if request.GET.get("to"):
@@ -183,7 +185,9 @@ def attendance_days(request, employment_id):
             "note": "الأيام المعدَّلة يدويًا تُتخطى إلا بـforce",
         })
 
-    qs = AttendanceDay.objects.filter(employment=emp)
+    qs = Gate.filter_queryset(request.user, perm,
+                              AttendanceDay.objects.all()
+                              ).filter(employment=emp)
     if request.GET.get("from"):
         qs = qs.filter(work_date__gte=request.GET["from"])
     if request.GET.get("to"):
@@ -287,8 +291,10 @@ def monthly_summary(request, employment_id):
     if request.method == "POST":
         s = build_monthly_summary(employment=emp, year=year, month=month)
     else:
-        s = AttendanceMonthlySummary.objects.filter(
-            employment=emp, period_year=year, period_month=month).first()
+        s = Gate.filter_queryset(
+            request.user, perm, AttendanceMonthlySummary.objects.all()
+        ).filter(employment=emp, period_year=year,
+                 period_month=month).first()
         if s is None:
             return Response({"detail": "لا ملخص لهذه الفترة"}, status=404)
 
