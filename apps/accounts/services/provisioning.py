@@ -70,6 +70,11 @@ def provision_account(
         )
         provision_leave_types(comp)
         provision_approval_chains(comp)
+        # قوالب البنوك الجاهزة — تعدّلها الشركة وتضيف قوالبها
+        from apps.payroll.services.outputs.templates_seed import (
+            provision_bank_templates,
+        )
+        provision_bank_templates(comp)
 
     return ProvisionedAccount(account_id=account_id, company_id=company_id)
 

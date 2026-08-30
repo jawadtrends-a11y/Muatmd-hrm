@@ -468,3 +468,117 @@ class PayslipLine(models.Model):
 
     def __str__(self):
         return f"{self.name_ar}: {self.amount}"
+
+
+# ══════════════════ قوالب ملفات البنوك ══════════════════
+
+class BankFileFormat(models.TextChoices):
+    CSV = "csv", _("CSV")
+    TXT_DELIMITED = "txt", _("نصي بفاصل")
+    EXCEL = "xlsx", _("إكسل")
+
+
+class BankTemplate(CompanyScopedModel):
+    """
+    قالب ملف بنك.
+
+    القوالب الجاهزة تُنسخ للشركة (is_builtin=True) وتعدّلها بحرية،
+    والشركة تنشئ قوالب خاصة لبنوك لا قالب لها.
+
+    ⚠️ لا نبني قالبًا من تخمين: البنك يسلّم مواصفاته للمنشأة عند
+    توقيع اتفاقية الرواتب. القالب الخاطئ يعني رفض الملف وتأخر رواتب.
+    """
+
+    code = models.CharField(_("الرمز"), max_length=30)
+    name_ar = models.CharField(_("اسم القالب"), max_length=120)
+    bank_name_ar = models.CharField(_("البنك"), max_length=120)
+    swift_prefix = models.CharField(
+        _("رمز سويفت"), max_length=4, blank=True,
+        help_text=_("NCBK للأهلي، RJHI للراجحي"))
+
+    file_format = models.CharField(_("الصيغة"), max_length=10,
+                                   choices=BankFileFormat.choices,
+                                   default=BankFileFormat.CSV)
+    delimiter = models.CharField(_("الفاصل"), max_length=3, default=",")
+    include_header = models.BooleanField(_("يتضمن سطر ترويسة"), default=True)
+    line_ending = models.CharField(
+        _("نهاية السطر"), max_length=10, default="crlf",
+        choices=[("crlf", _("ويندوز CRLF")), ("lf", _("يونكس LF"))])
+    encoding = models.CharField(_("الترميز"), max_length=20, default="utf-8")
+    filename_pattern = models.CharField(
+        _("نمط اسم الملف"), max_length=120, default="{bank}_For_{date}.csv",
+        help_text=_("متغيرات: {bank} {date} {period} {company}"))
+
+    is_builtin = models.BooleanField(
+        _("قالب جاهز"), default=False,
+        help_text=_("مبني على مواصفات موثّقة من البنك"))
+    is_active = models.BooleanField(_("نشط"), default=True)
+    note = models.TextField(_("ملاحظة"), blank=True)
+
+    class Meta:
+        verbose_name = _("قالب بنك")
+        verbose_name_plural = _("قوالب البنوك")
+        ordering = ["bank_name_ar"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "code"],
+                                    name="uq_bank_template_code"),
+        ]
+
+    def __str__(self):
+        return f"{self.bank_name_ar} — {self.name_ar}"
+
+
+class BankColumnSource(models.TextChoices):
+    EMPLOYEE_BANK_SWIFT = "employee_bank_swift", _("رمز بنك الموظف")
+    IBAN = "iban", _("الآيبان")
+    ACCOUNT_NUMBER = "account_number", _("رقم الحساب")
+    NET_PAY = "net_pay", _("صافي المستحق")
+    GROSS = "gross", _("إجمالي الاستحقاقات")
+    BASIC = "basic", _("الراتب الأساسي")
+    HOUSING = "housing", _("بدل السكن")
+    OTHER_EARNINGS = "other_earnings", _("باقي الاستحقاقات")
+    DEDUCTIONS = "deductions", _("إجمالي الاستقطاعات")
+    EMPLOYEE_NO = "employee_no", _("الرقم الوظيفي")
+    NAME_AR = "name_ar", _("الاسم بالعربية")
+    NAME_EN = "name_en", _("الاسم بالإنجليزية")
+    ID_NUMBER = "id_number", _("رقم الهوية")
+    DEPARTMENT = "department", _("القسم")
+    BRANCH = "branch", _("الفرع")
+    JOB_TITLE = "job_title", _("المسمى الوظيفي")
+    CONSTANT = "constant", _("قيمة ثابتة")
+    SEQUENCE = "sequence", _("رقم تسلسلي")
+
+
+class BankColumn(models.Model):
+    """عمود في قالب البنك."""
+
+    template = models.ForeignKey(BankTemplate, on_delete=models.CASCADE,
+                                 related_name="columns")
+    position = models.PositiveSmallIntegerField(_("الترتيب"))
+    header = models.CharField(_("عنوان العمود"), max_length=80)
+    source = models.CharField(_("المصدر"), max_length=40,
+                              choices=BankColumnSource.choices)
+    constant_value = models.CharField(
+        _("القيمة الثابتة"), max_length=120, blank=True,
+        help_text=_("عند المصدر: قيمة ثابتة"))
+    number_format = models.CharField(
+        _("تنسيق الرقم"), max_length=20, blank=True,
+        help_text=_("مثال: 0.00 لخانتين عشريتين"))
+    text_transform = models.CharField(
+        _("تحويل النص"), max_length=20, blank=True,
+        choices=[("upper", _("حروف كبيرة")), ("lower", _("حروف صغيرة")),
+                 ("strip", _("إزالة المسافات"))])
+    max_length = models.PositiveSmallIntegerField(
+        _("أقصى طول"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("عمود قالب")
+        verbose_name_plural = _("أعمدة القوالب")
+        ordering = ["template", "position"]
+        constraints = [
+            models.UniqueConstraint(fields=["template", "position"],
+                                    name="uq_bank_column_position"),
+        ]
+
+    def __str__(self):
+        return f"{self.position}. {self.header}"
