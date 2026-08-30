@@ -62,7 +62,10 @@ def components(request):
     code = (request.data.get("code") or "").strip().upper()
     if not code:
         return Response({"detail": "الرمز مطلوب"}, status=400)
-    if PayComponent.objects.filter(company_id=company_id, code=code).exists():
+    # فحص التكرار عبر البوابة — لا يكشف وجود مكوّن خارج نطاق المستخدم
+    existing = Gate.filter_queryset(
+        request.user, "payroll.structures", PayComponent.objects.all())
+    if existing.filter(company_id=company_id, code=code).exists():
         return Response({"detail": f"الرمز مستخدم: {code}"}, status=409)
 
     c = PayComponent.objects.create(
