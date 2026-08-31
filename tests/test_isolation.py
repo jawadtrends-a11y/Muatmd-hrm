@@ -33,6 +33,9 @@ def test_every_business_table_has_rls():
         "accounts_platformsession",
         "accounts_platformauditlog",
         "accounts_impersonationsession",
+        # رموز الدخول (ق-53): تربط auth.User برمز، والعزل يحدث
+        # عند بناء السياق بعد التحقق لا في الجدول نفسه
+        "accounts_authtoken",
     }
     with connection.cursor() as cur:
         cur.execute("""

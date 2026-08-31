@@ -47,7 +47,7 @@ def env(db):
 
 def _login(username):
     c = Client()
-    r = c.post("/platform/auth/login",
+    r = c.post("/platform/auth/login/",
                data=json.dumps({"username": username, "password": PASSWORD}),
                content_type="application/json")
     assert r.status_code == 200, r.content
@@ -64,7 +64,7 @@ def _post(c, url, data=None, **headers):
 @pytest.mark.django_db(transaction=True)
 def test_login_and_session(env):
     c = _login("p_owner")
-    r = c.get("/platform/auth/me")
+    r = c.get("/platform/auth/me/")
     assert r.status_code == 200
     assert r.json()["role"] == PlatformRole.OWNER
 
@@ -72,7 +72,7 @@ def test_login_and_session(env):
 @pytest.mark.django_db(transaction=True)
 def test_wrong_password_rejected(env):
     c = Client()
-    r = _post(c, "/platform/auth/login",
+    r = _post(c, "/platform/auth/login/",
               {"username": "p_owner", "password": "wrong"})
     assert r.status_code == 401
 
@@ -82,12 +82,12 @@ def test_lockout_after_failed_attempts(env):
     """خمس محاولات فاشلة تقفل الحساب."""
     c = Client()
     for _ in range(auth.MAX_FAILED):
-        _post(c, "/platform/auth/login",
+        _post(c, "/platform/auth/login/",
               {"username": "p_owner", "password": "wrong"})
     env["owner"].refresh_from_db()
     assert env["owner"].is_locked
 
-    r = _post(c, "/platform/auth/login",
+    r = _post(c, "/platform/auth/login/",
               {"username": "p_owner", "password": PASSWORD})
     assert r.status_code == 401
     assert "مقفل" in r.json()["detail"]
@@ -100,12 +100,12 @@ def test_totp_required_when_enabled(env):
     auth.enable_totp(env["owner"], auth._hotp(key, int(time.time()) // 30))
 
     c = Client()
-    r = _post(c, "/platform/auth/login",
+    r = _post(c, "/platform/auth/login/",
               {"username": "p_owner", "password": PASSWORD})
     assert r.status_code == 401
     assert r.json()["code"] == "totp_required"
 
-    r = _post(c, "/platform/auth/login", {
+    r = _post(c, "/platform/auth/login/", {
         "username": "p_owner", "password": PASSWORD,
         "totp_code": auth._hotp(key, int(time.time()) // 30)})
     assert r.status_code == 200
@@ -116,7 +116,7 @@ def test_wrong_totp_rejected(env):
     key = base64.b32decode(env["owner"].totp_secret, casefold=True)
     auth.enable_totp(env["owner"], auth._hotp(key, int(time.time()) // 30))
     c = Client()
-    r = _post(c, "/platform/auth/login", {
+    r = _post(c, "/platform/auth/login/", {
         "username": "p_owner", "password": PASSWORD, "totp_code": "000000"})
     assert r.status_code == 401
 
@@ -136,9 +136,9 @@ def test_ip_allowlist(env):
 @pytest.mark.django_db(transaction=True)
 def test_logout_invalidates_session(env):
     c = _login("p_owner")
-    assert c.get("/platform/auth/me").status_code == 200
-    c.post("/platform/auth/logout")
-    assert c.get("/platform/auth/me").status_code == 401
+    assert c.get("/platform/auth/me/").status_code == 200
+    c.post("/platform/auth/logout/")
+    assert c.get("/platform/auth/me/").status_code == 401
 
 
 # ══════════ العزل بين البنيتين (ق-51) ══════════
@@ -156,7 +156,7 @@ def test_client_session_cannot_reach_platform(env):
     c.force_login(u)
 
     for path in ("/platform/accounts/", "/platform/dashboard/",
-                 "/platform/settings/", "/platform/auth/me"):
+                 "/platform/settings/", "/platform/auth/me/"):
         assert c.get(path).status_code == 401, f"تسرّب: {path}"
 
 
@@ -198,7 +198,7 @@ def test_support_activates_but_not_settings(env):
     c = _login("p_support")
     assert c.get("/platform/accounts/").status_code == 200
     assert c.get("/platform/settings/").status_code == 403
-    r = _post(c, f"/platform/accounts/{env['account'].id}/extend",
+    r = _post(c, f"/platform/accounts/{env['account'].id}/extend/",
               {"until": str(date.today() + timedelta(days=10)),
                "confirm": True})
     assert r.status_code in (200, 404)      # ليس 403
@@ -222,7 +222,7 @@ def test_write_requires_confirmation(env):
     يمنع التعديل بالخطأ عند نسيان السياق.
     """
     c = _login("p_owner")
-    r = _post(c, f"/platform/accounts/{env['account'].id}/extend",
+    r = _post(c, f"/platform/accounts/{env['account'].id}/extend/",
               {"until": str(date.today() + timedelta(days=10))})
     assert r.status_code == 428
     assert r.json()["code"] == "confirmation_required"
@@ -237,7 +237,7 @@ def test_write_proceeds_with_confirmation(env):
 
     c = _login("p_owner")
     until = date.today() + timedelta(days=30)
-    r = _post(c, f"/platform/accounts/{env['account'].id}/extend",
+    r = _post(c, f"/platform/accounts/{env['account'].id}/extend/",
               {"until": str(until), "confirm": True})
     assert r.status_code == 200
     assert r.json()["grace_until"] == str(until)
@@ -248,7 +248,7 @@ def test_write_proceeds_with_confirmation(env):
 @pytest.mark.django_db(transaction=True)
 def test_impersonation_starts_with_banner(env):
     c = _login("p_support")
-    r = _post(c, f"/platform/accounts/{env['account'].id}/impersonate",
+    r = _post(c, f"/platform/accounts/{env['account'].id}/impersonate/",
               {"reason": "بلاغ عن خطأ", "as_role": "hr_manager"})
     assert r.status_code == 200
     b = r.json()
@@ -261,7 +261,7 @@ def test_impersonation_starts_with_banner(env):
 def test_viewer_cannot_impersonate(env):
     """المطّلع يقرأ الملخص ولا يدخل حسابات العملاء."""
     c = _login("p_viewer")
-    r = _post(c, f"/platform/accounts/{env['account'].id}/impersonate", {})
+    r = _post(c, f"/platform/accounts/{env['account'].id}/impersonate/", {})
     assert r.status_code == 403
 
 
@@ -366,7 +366,7 @@ def test_login_logged(env):
 @pytest.mark.django_db(transaction=True)
 def test_failed_login_logged(env):
     c = Client()
-    _post(c, "/platform/auth/login",
+    _post(c, "/platform/auth/login/",
           {"username": "p_owner", "password": "wrong"})
     assert PlatformAuditLog.objects.filter(
         action="login", success=False).exists()

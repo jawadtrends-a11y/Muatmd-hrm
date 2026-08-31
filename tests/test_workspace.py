@@ -35,7 +35,9 @@ def acct(db):
 
 @pytest.mark.django_db(transaction=True)
 def test_workspace_requires_auth(acct):
-    assert Client().get("/api/me/workspace/").status_code == 403
+    # 401 لا 403: TokenAuthentication ترجع تحديًا، فالرد
+    # «لم تُصادق» لا «صادقت ولا تملك» — أصحّ دلاليًا
+    assert Client().get("/api/me/workspace/").status_code == 401
 
 
 @pytest.mark.django_db(transaction=True)

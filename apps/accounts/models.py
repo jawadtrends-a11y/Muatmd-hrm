@@ -172,3 +172,9 @@ from apps.accounts.models_admin import (  # noqa: E402,F401
     ImpersonationSession, PlatformAuditLog, PlatformRole, PlatformSession,
     PlatformUser, ROLE_CAPABILITIES,
 )
+
+
+# رموز مصادقة العملاء (ق-53)
+from apps.accounts.models_tokens import (  # noqa: E402,F401
+    AuthToken, DeviceKind, generate_token, hash_token,
+)
