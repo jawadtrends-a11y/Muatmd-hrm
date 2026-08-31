@@ -41,9 +41,23 @@ class AccountContextMiddleware:
             return self.get_response(request)
 
     @staticmethod
-    def _resolve(request):
+    def _user_of(request):
+        # المستخدم من الجلسة أو من رمز الدخول (ق-53).
+        # مصادقة DRF تعمل داخل الـview لا في الوسائط، فالوسيط
+        # لا يرى مستخدم الرمز إن لم يحلّه بنفسه.
         user = getattr(request, "user", None)
-        if not user or not user.is_authenticated:
+        if user and user.is_authenticated:
+            return user
+        header = request.META.get("HTTP_AUTHORIZATION", "")
+        if not header.startswith("Bearer "):
+            return None
+        from apps.accounts.services.auth_tokens import resolve
+        return resolve(header[7:].strip())
+
+    @classmethod
+    def _resolve(cls, request):
+        user = cls._user_of(request)
+        if user is None:
             return None
 
         with connection.cursor() as cur:
