@@ -274,9 +274,16 @@ class SavedCard(AccountScopedModel):
 
 # ══════════════════ الاشتراك ══════════════════
 
+class SubscriptionPaymentMethod(models.TextChoices):
+    GATEWAY = "gateway", _("بوابة إلكترونية (ميسر)")
+    BANK_TRANSFER = "bank_transfer", _("تحويل بنكي")
+    MANUAL = "manual", _("تفعيل إداري")
+
+
 class SubscriptionState(models.TextChoices):
     TRIAL = "trial", _("تجربة مجانية")
     ACTIVE = "active", _("نشط")
+    GRACE = "grace", _("مهلة بعد الانتهاء")
     READ_ONLY = "read_only", _("للقراءة فقط")
     PAST_DUE = "past_due", _("متأخر السداد")
     CANCELLED = "cancelled", _("ملغى")
@@ -331,6 +338,24 @@ class AccountSubscription(AccountScopedModel):
     recurring_discount = models.ForeignKey(
         Discount, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="subscriptions", verbose_name=_("خصم مستمر"))
+
+    # ── طريقة الدفع والتفعيل اليدوي (ق-48) ──
+    payment_method = models.CharField(
+        _("طريقة الدفع"), max_length=20,
+        choices=SubscriptionPaymentMethod.choices,
+        default=SubscriptionPaymentMethod.GATEWAY,
+        help_text=_("الشركات الكبيرة تفضّل التحويل البنكي"))
+    grace_until = models.DateField(
+        _("تمديد يدوي حتى"), null=True, blank=True,
+        help_text=_("يضبطه السوبر أدمن بلا حد — لحالات التحويل البنكي"))
+    activated_by_person = models.ForeignKey(
+        "employees.Person", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="activated_subscriptions",
+        verbose_name=_("فُعّل بواسطة"),
+        help_text=_("عند التفعيل الإداري بلا دفع إلكتروني"))
+    activation_note = models.TextField(
+        _("ملاحظة التفعيل"), blank=True,
+        help_text=_("مرجع التحويل البنكي أو سبب التفعيل الإداري"))
 
     cancelled_at = models.DateTimeField(_("تاريخ الإلغاء"), null=True,
                                         blank=True)
