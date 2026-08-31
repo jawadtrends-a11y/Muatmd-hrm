@@ -25,3 +25,9 @@ web/node_modules/
 web/.next/
 web-admin/node_modules/
 web-admin/.next/
+
+# واجهات Next.js
+web/node_modules/
+web/.next/
+web-admin/node_modules/
+web-admin/.next/
