@@ -59,6 +59,16 @@ EVENTS = [
        ("in_app", "email"), mandatory=True),
     _e("payslip.available", "payroll", "إتاحة قسيمة الراتب",
        ("in_app", "whatsapp")),
+    # ══ الاشتراك والفوترة (ق-48) ══
+    _e("subscription.renewal_due", "billing",
+       "تنبيه قرب انتهاء الاشتراك",
+       ("in_app", "email"), mandatory=True),
+    _e("subscription.renewal_failed", "billing",
+       "فشل التجديد التلقائي",
+       ("in_app", "email"), mandatory=True),
+    _e("subscription.expired", "billing",
+       "انتهاء الاشتراك",
+       ("in_app", "email"), mandatory=True),
 
     # ══ التوطين والامتثال ══
     _e("nitaqat.band_changed", "compliance", "تغيّر نطاق المنشأة",

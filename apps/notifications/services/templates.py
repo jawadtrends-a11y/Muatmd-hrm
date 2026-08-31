@@ -167,6 +167,31 @@ TEMPLATES = {
         "تنخواہ منظور",
         "{{period}} کی تنخواہ {{approver_name}} نے منظور کی۔ کل: {{total_net}} ریال۔",
     ),
+    # ══ الاشتراك والفوترة (ق-48) ══
+    "subscription.renewal_due": (
+        "تجديد الاشتراك قريبًا",
+        "ينتهي اشتراكك في {{end_date}} — بعد {{days_left}} أيام. جدّد لتفادي انقطاع الخدمة.",
+        "Subscription renewal due",
+        "Your subscription ends on {{end_date}} in {{days_left}} days. Renew to avoid interruption.",
+        "سبسکرپشن کی تجدید",
+        "آپ کی سبسکرپشن {{end_date}} کو ختم ہو رہی ہے۔ {{days_left}} دن باقی ہیں۔",
+    ),
+    "subscription.renewal_failed": (
+        "تعذّر التجديد التلقائي",
+        "لم ينجح تجديد الاشتراك بعد {{attempts}} محاولات. الفاتورة {{invoice_no}} بمبلغ {{amount}} ريال بانتظار السداد.",
+        "Auto-renewal failed",
+        "Renewal failed after {{attempts}} attempts. Invoice {{invoice_no}} for SAR {{amount}} is pending.",
+        "خودکار تجدید ناکام",
+        "{{attempts}} کوششوں کے بعد تجدید ناکام۔ انوائس {{invoice_no}} زیر التوا ہے۔",
+    ),
+    "subscription.expired": (
+        "انتهى الاشتراك",
+        "انتهى اشتراكك. الحساب للقراءة فقط وبياناتك محفوظة — جدّد لاستعادة الوصول الكامل.",
+        "Subscription expired",
+        "Your subscription expired. The account is read-only and your data is safe — renew to restore full access.",
+        "سبسکرپشن ختم",
+        "آپ کی سبسکرپشن ختم ہو گئی۔ اکاؤنٹ صرف پڑھنے کے لیے ہے، ڈیٹا محفوظ ہے۔",
+    ),
     "payslip.available": (
         "قسيمة راتب {{period}}",
         "قسيمة راتبك لشهر {{period}} متاحة الآن. الصافي: {{net_pay}} ريال.",
