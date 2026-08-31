@@ -140,6 +140,13 @@ LANGUAGE_COOKIE_NAME = "muatmd_lang"
 LOCALE_PATHS = [BASE_DIR / "locale"]
 
 
+# ── بوابة ميسر (ق-47) ──
+MOYASAR_MODE = env("MOYASAR_MODE", default="test")
+MOYASAR_PUBLISHABLE_KEY = env("MOYASAR_PUBLISHABLE_KEY", default="")
+MOYASAR_SECRET_KEY = env("MOYASAR_SECRET_KEY", default="")
+MOYASAR_CALLBACK_URL = env("MOYASAR_CALLBACK_URL",
+                           default="https://hr.muatmd.sa/billing/callback")
+
 # ── سجل النظام التقني (ق-45) ──
 # سطر JSON لكل حدث في logs/app.jsonl و logs/errors.jsonl
 from apps.core.logging_config import logging_settings  # noqa: E402
