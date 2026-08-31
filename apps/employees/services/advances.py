@@ -148,6 +148,12 @@ def approve_advance(*, advance, approved_by_person):
     advance.approved_at = timezone.now()
     advance.approved_by_person = approved_by_person
     advance.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=advance, action="approve",
+               actor=approved_by_person, label=advance.advance_no,
+               summary=(f"اعتماد سلفة {advance.amount} على "
+                        f"{advance.installments_count} قسط"))
     return advance
 
 

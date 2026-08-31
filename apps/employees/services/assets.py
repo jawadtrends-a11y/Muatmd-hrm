@@ -45,7 +45,7 @@ def assign_asset(*, employment, name_ar, value=0, category="other",
     if value < 0:
         raise AssetError("قيمة العهدة لا تكون سالبة")
 
-    return Asset.objects.create(
+    asset = Asset.objects.create(
         account=employment.account, company=employment.company,
         asset_no=_next_asset_no(employment.company),
         name_ar=name_ar, category=category, serial_number=serial_number,
@@ -54,6 +54,12 @@ def assign_asset(*, employment, name_ar, value=0, category="other",
         expected_return_date=expected_return_date,
         handover_document=handover_document,
         condition_note=condition_note, status=AssetStatus.ASSIGNED)
+
+    from apps.core.services.audit import log_create
+    log_create(instance=asset, label=asset.asset_no,
+               summary=(f"تسليم {name_ar} بقيمة {value} لـ"
+                        f"{employment.employee_no}"))
+    return asset
 
 
 @transaction.atomic
@@ -70,11 +76,18 @@ def return_asset(*, asset, returned_date=None, condition_note="",
         raise AssetError(
             f"العهدة {asset.get_status_display()} — لا تُسترجع")
 
+    previous = asset.get_status_display()
     asset.status = status
     asset.returned_date = returned_date or date.today()
     if condition_note:
         asset.condition_note = condition_note
     asset.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=asset, action="update", label=asset.asset_no,
+               summary=f"{asset.get_status_display()} — {asset.name_ar}",
+               changes={"status": {"from": previous,
+                                   "to": asset.get_status_display()}})
     return asset
 
 

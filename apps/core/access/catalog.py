@@ -57,6 +57,7 @@ PERMISSIONS = [
     _p("employees.edit",      "employees", "تعديل بيانات موظف"),
     _p("employees.terminate", "employees", "إنهاء خدمة موظف"),
     _p("employees.documents", "employees", "إدارة وثائق الموظفين"),
+    _p("audit.view", "employees", "عرض سجل العمليات"),
     _p("persons.view_cross_company", "employees",
        "رؤية ارتباطات الشخص في شركات أخرى (بلا بيانات مالية)"),
 

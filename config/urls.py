@@ -12,6 +12,7 @@ from apps.attendance import api as attendance_api
 from apps.payroll import api_outputs as outputs_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
+from apps.core import api_audit as audit_api
 
 
 def health(request):
@@ -74,6 +75,8 @@ urlpatterns = [
     path("api/settlement/reasons/", assets_api.termination_reasons_list, name="settlement-reasons"),
     path("api/reports/", reports_api.reports_catalog, name="reports-catalog"),
     path("api/reports/<str:key>/", reports_api.run_report, name="run-report"),
+    path("api/audit/", audit_api.audit_feed, name="audit-feed"),
+    path("api/audit/<str:object_type>/<int:object_id>/", audit_api.object_history, name="audit-history"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
