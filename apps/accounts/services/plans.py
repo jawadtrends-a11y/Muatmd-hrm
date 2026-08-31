@@ -123,7 +123,11 @@ def sync_default_plans():
         PlanPriceTier.objects.bulk_create([
             PlanPriceTier(plan=plan, from_employees=lo, to_employees=hi,
                           price_per_employee_monthly=price,
-                          price_per_employee_yearly=price * Decimal("10"))
+                          # السعر السنوي = الشهري × 12 بلا خصم مدفون.
+                          # الخصم السنوي قرار تجاري يضبطه السوبر
+                          # أدمن من لوحة الخصومات (ق-47) — فيبقى
+                          # مرئيًا ومتغيّرًا لا رقمًا في الكود
+                          price_per_employee_yearly=price * Decimal("12"))
             for lo, hi, price in spec["tiers"]
         ])
 
