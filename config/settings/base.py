@@ -45,6 +45,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     # يجب أن يلي AuthenticationMiddleware — يعتمد على request.user
     "apps.core.tenancy.middleware.AccountContextMiddleware",
+    # يلي وسيط العزل — يلتقط الحساب والشركة في سجل الطلب (ق-45)
+    "apps.core.logging_config.RequestLogMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -136,3 +138,10 @@ SPECTACULAR_SETTINGS = {
 # بالإنجليزية لمستخدم عربي لمجرد إعداد متصفحه.
 LANGUAGE_COOKIE_NAME = "muatmd_lang"
 LOCALE_PATHS = [BASE_DIR / "locale"]
+
+
+# ── سجل النظام التقني (ق-45) ──
+# سطر JSON لكل حدث في logs/app.jsonl و logs/errors.jsonl
+from apps.core.logging_config import logging_settings  # noqa: E402
+
+LOGGING = logging_settings(BASE_DIR, level=env("LOG_LEVEL", default="INFO"))

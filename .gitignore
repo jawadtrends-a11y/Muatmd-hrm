@@ -15,3 +15,7 @@ node_modules/
 celerybeat-schedule*
 celerybeat.pid
 *.pot
+
+# سجلات النظام (ق-45)
+logs/
+*.jsonl
