@@ -151,3 +151,11 @@ from apps.accounts.models_billing import (  # noqa: E402,F401
     CompanySubscription, CompanyHeadcountDaily,
     SubscriptionStatus, BillingCycle,
 )
+
+
+# الفوترة والاشتراكات (ق-47)
+from apps.accounts.models_billing_v2 import (  # noqa: E402,F401
+    AccountSubscription, BillingCycle, Discount, DiscountKind,
+    DiscountScope, Invoice, InvoiceLine, InvoiceStatus, Payment,
+    PaymentStatus, SavedCard, SubscriptionState,
+)
