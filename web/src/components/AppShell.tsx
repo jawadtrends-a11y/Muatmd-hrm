@@ -31,8 +31,7 @@ const T: Dict = {
   payroll: { ar: "الرواتب", en: "Payroll" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
-  myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
-  myRequests: { ar: "طلباتي", en: "My Requests" },
+  myServices: { ar: "خدماتي", en: "My Services" },
   settings: { ar: "الإعدادات", en: "Settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   logout: { ar: "تسجيل الخروج", en: "Sign out" },
@@ -81,10 +80,9 @@ const NAV: NavItem[] = [
   { href: "/reports", key: "reports", icon: IcChart,
     perms: ["payroll.view", "employees.view", "attendance.view"] },
   { href: "/org", key: "org", icon: IcOrg, perms: ["org.view"] },
-  { href: "/me/payslips", key: "myPayslips", icon: IcDoc,
-    perms: ["payslips.view_own"] },
-  { href: "/me/requests", key: "myRequests", icon: IcDoc,
-    perms: ["requests.create"] },
+  // بند واحد يجمع القسائم والرصيد والطلبات — أبسط للموظف
+  { href: "/me", key: "myServices", icon: IcDoc,
+    perms: ["payslips.view_own", "requests.create"] },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
