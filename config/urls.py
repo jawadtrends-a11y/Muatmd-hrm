@@ -128,7 +128,11 @@ urlpatterns = [
     path("api/payroll/runs/<int:run_id>/calculate/", payroll_api.run_calculate, name="run-calculate"),
     path("api/payroll/runs/<int:run_id>/submit/", payroll_api.run_submit, name="run-submit"),
     path("api/payroll/runs/<int:run_id>/approve/", payroll_api.run_approve, name="run-approve"),
+    # الحضور الجماعي
+    path("api/attendance/daily/", attendance_api.daily_board, name="attendance-daily"),
+    path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
+
 

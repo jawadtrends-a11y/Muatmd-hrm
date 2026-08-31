@@ -307,3 +307,122 @@ def monthly_summary(request, employment_id):
         "approved_overtime_minutes": s.approved_overtime_minutes,
         "is_final": s.is_final,
     })
+
+
+# ══════════════════ العرض الجماعي ══════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def daily_board(request):
+    """
+    حضور يوم واحد لكل الموظفين — ما يفتحه مدير الموارد كل صباح.
+
+    من حضر، ومن تأخر، ومن غاب، ومن في إجازة.
+    """
+    from apps.attendance.models import AttendanceDay
+    from apps.employees.models import Employment, EmploymentStatus
+
+    Gate.require(request.user, "attendance.view")
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    try:
+        day = (date.fromisoformat(request.GET["date"])
+               if request.GET.get("date") else date.today())
+    except ValueError:
+        return Response({"detail": "تاريخ غير صالح"}, status=400)
+
+    days = {
+        d.employment_id: d
+        for d in Gate.filter_queryset(
+            request.user, "attendance.view", AttendanceDay.objects.all()
+        ).filter(company_id=company_id, work_date=day)
+    }
+
+    employments = Gate.filter_queryset(
+        request.user, "attendance.view", Employment.objects.all()
+    ).filter(company_id=company_id,
+             status=EmploymentStatus.ACTIVE).select_related(
+        "person", "department")
+
+    rows = []
+    counts = {}
+    for emp in employments.order_by("employee_no"):
+        d = days.get(emp.id)
+        status = d.status if d else "no_record"
+        counts[status] = counts.get(status, 0) + 1
+        rows.append({
+            "employment_id": emp.id,
+            "employee_no": emp.employee_no,
+            "name_ar": emp.person.display_name,
+            "department": emp.department.name_ar if emp.department else "",
+            "status": status,
+            "status_label": d.get_status_display() if d else "لا سجل",
+            "first_in": (timezone.localtime(d.first_in).strftime("%H:%M")
+                         if d and d.first_in else ""),
+            "last_out": (timezone.localtime(d.last_out).strftime("%H:%M")
+                         if d and d.last_out else ""),
+            "late_minutes": d.late_minutes if d else 0,
+            "worked_minutes": d.worked_minutes if d else 0,
+            "overtime_minutes": d.overtime_minutes if d else 0,
+            "approved_overtime": d.approved_overtime_minutes if d else 0,
+            "day_id": d.id if d else None,
+        })
+
+    return Response({
+        "date": str(day),
+        "total": len(rows),
+        "counts": counts,
+        "rows": rows,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def monthly_board(request):
+    """
+    ملخص الحضور الشهري لكل الموظفين — الأساس الذي يقرؤه المسير.
+    """
+    from apps.attendance.models import AttendanceMonthlySummary
+
+    Gate.require(request.user, "attendance.view")
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    try:
+        year = int(request.GET.get("year") or date.today().year)
+        month = int(request.GET.get("month") or date.today().month)
+    except ValueError:
+        return Response({"detail": "سنة أو شهر غير صالح"}, status=400)
+
+    qs = Gate.filter_queryset(
+        request.user, "attendance.view",
+        AttendanceMonthlySummary.objects.all()
+    ).filter(company_id=company_id, period_year=year,
+             period_month=month).select_related(
+        "employment__person", "employment__department")
+
+    rows = [
+        {
+            "employment_id": s.employment_id,
+            "employee_no": s.employment.employee_no,
+            "name_ar": s.employment.person.display_name,
+            "department": (s.employment.department.name_ar
+                           if s.employment.department else ""),
+            "worked_days": str(s.worked_days),
+            "absent_days": str(s.unpaid_absent_days),
+            "leave_days": str(s.paid_leave_days),
+            "late_minutes": s.late_minutes,
+            "overtime_minutes": s.approved_overtime_minutes,
+            "overtime_hours": f"{s.approved_overtime_minutes / 60:.2f}",
+        }
+        for s in qs.order_by("employment__employee_no")
+    ]
+
+    return Response({
+        "year": year, "month": month,
+        "total": len(rows),
+        "rows": rows,
+    })
