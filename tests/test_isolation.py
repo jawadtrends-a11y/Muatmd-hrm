@@ -36,6 +36,9 @@ def test_every_business_table_has_rls():
         # رموز الدخول (ق-53): تربط auth.User برمز، والعزل يحدث
         # عند بناء السياق بعد التحقق لا في الجدول نفسه
         "accounts_authtoken",
+        # رموز البنوك (ق-57): جدول منصة — رمز الراجحي 80 لكل
+        # الحسابات، فالعزل بالحساب بلا معنى
+        "payroll_bank",
     }
     with connection.cursor() as cur:
         cur.execute("""

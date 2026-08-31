@@ -86,7 +86,14 @@ def employees(request):
         return Response({"detail": "الشركة غير متاحة"}, status=404)
 
     d = request.data
+
+    # ⚠️ معاملة واحدة تلفّ إنشاء الشخص والارتباط معًا (with atomic).
+    # بلاها: create_person تنجح وتُحفظ بمعاملتها الخاصة، ثم
+    # create_employment تفشل — فيبقى شخص يتيم يمنع إعادة المحاولة
+    # بنفس الهوية أو الجوال. حدث فعلًا عند أول تجربة إدخال.
+    from django.db import transaction as _tx
     try:
+      with _tx.atomic():
         person_id = d.get("person_id")
         if person_id:
             # شخص موجود — ارتباط إضافي بشركة أخرى (ق-4)

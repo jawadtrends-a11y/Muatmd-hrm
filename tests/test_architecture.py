@@ -42,6 +42,8 @@ def test_no_raw_queryset_in_api_views():
     SETTINGS_MODELS = {
         "LeaveType", "PayComponent", "PayrollSettings", "Shift",
         "BankTemplate", "Holiday", "JobTitle", "ApprovalChain",
+        # رموز البنوك (ق-57): حقيقة نظامية مشتركة بين كل الحسابات
+        "Bank",
     }
     offenders = []
     for path in _python_files("api/*.py", "api.py", "views.py", "views/*.py"):

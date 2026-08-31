@@ -171,9 +171,26 @@ export default function NewEmployeePage() {
   const total = lines.reduce(
     (s, l) => s + (Number(l.amount) || 0), 0);
 
-  // تحقق فوري من الآيبان — 24 خانة تبدأ بـSA
+  // تحقق فوري من الصيغة — 24 خانة تبدأ بـSA
   const ibanBad = iban.trim().length > 0 &&
     !/^SA\d{22}$/.test(iban.trim());
+
+  // اسم البنك للعرض (ق-57): معروف → اسمه، وإلا «بنوك أخرى».
+  // عرض لا حكم — مسؤولية صحة الآيبان على الشركة.
+  const [bankLabel, setBankLabel] = useState("");
+
+  useEffect(() => {
+    const v = iban.trim().toUpperCase();
+    if (v.length < 6 || !v.startsWith("SA")) {
+      setBankLabel("");
+      return;
+    }
+    let alive = true;
+    apiGet<{ label: string }>(`/payroll/bank-lookup/?iban=${v}`)
+      .then((r) => { if (alive) setBankLabel(r.label || ""); })
+      .catch(() => { if (alive) setBankLabel(""); });
+    return () => { alive = false; };
+  }, [iban]);
 
   const missing =
     !firstName.trim() || !familyName.trim() || !idNumber.trim() ||
@@ -359,6 +376,14 @@ export default function NewEmployeePage() {
             {ibanBad && (
               <div className="error-text">
                 {L("ibanBad")} ({iban.trim().length}/24)
+              </div>
+            )}
+            {!ibanBad && bankLabel && (
+              <div style={{
+                marginTop: 4, fontSize: ".88rem", fontWeight: 500,
+                color: "var(--teal)",
+              }}>
+                {bankLabel}
               </div>
             )}
           </F>

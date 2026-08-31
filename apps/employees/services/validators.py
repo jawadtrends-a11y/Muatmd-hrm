@@ -28,7 +28,8 @@ def validate_saudi_iban(iban: str) -> tuple[bool, str]:
     numeric = "".join(
         str(ord(ch) - 55) if ch.isalpha() else ch for ch in rearranged)
     if int(numeric) % 97 != 1:
-        return False, "رقم الآيبان غير صالح (فشل التحقق من رقم المراقبة)"
+        return False, ("رقم الآيبان غير صحيح — تأكد من نسخه كاملًا "
+                       "من التطبيق البنكي أو كشف الحساب")
     return True, ""
 
 

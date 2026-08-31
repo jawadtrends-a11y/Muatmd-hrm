@@ -455,3 +455,31 @@ def run_approve(request, run_id):
         "run_no": run.run_no, "status": run.status,
         "approved_at": run.approved_at,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def bank_lookup(request):
+    """
+    اسم البنك من الآيبان (ق-57).
+
+    عرض لا حكم: معروف → اسمه، غير معروف → «بنوك أخرى».
+    ولا تحذير — مسؤولية صحة الآيبان على الشركة.
+    """
+    from apps.payroll.models_banks import Bank, label_for, lookup
+
+    iban = request.GET.get("iban", "")
+    if not iban:
+        return Response([
+            {"code": b.iban_code, "name_ar": b.name_ar,
+             "short_ar": b.short_ar, "kind": b.kind}
+            for b in Bank.objects.filter(is_active=True)
+        ])
+
+    bank = lookup(iban)
+    return Response({
+        "label": label_for(iban),
+        "code": bank.iban_code if bank else "",
+        "known": bank is not None,
+        "supports_wps": bank.supports_wps if bank else True,
+    })

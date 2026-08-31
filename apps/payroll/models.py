@@ -617,3 +617,9 @@ class BankColumn(models.Model):
 
     def __str__(self):
         return f"{self.position}. {self.header}"
+
+
+# بنوك السعودية ورموزها (ق-57)
+from apps.payroll.models_banks import (  # noqa: E402,F401
+    Bank, BankKind, OTHER_LABEL, label_for, lookup, sync_banks,
+)
