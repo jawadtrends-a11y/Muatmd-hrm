@@ -44,6 +44,10 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     # يجب أن يلي AuthenticationMiddleware — يعتمد على request.user
+    # وسيطا المنصة (ق-51) — يسبقان وسيط العزل: يفصلان مسارات
+    # اللوحة عن مسارات العملاء ويحرسان الكتابة أثناء الانتحال
+    "apps.accounts.middleware_platform.PlatformAuthMiddleware",
+    "apps.accounts.middleware_platform.ImpersonationGuardMiddleware",
     "apps.core.tenancy.middleware.AccountContextMiddleware",
     # يلي وسيط العزل — يلتقط الحساب والشركة في سجل الطلب (ق-45)
     "apps.core.logging_config.RequestLogMiddleware",

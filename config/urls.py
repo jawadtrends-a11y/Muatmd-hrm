@@ -14,6 +14,8 @@ from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
 from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
+from apps.accounts import api_platform_auth as platform_auth_api
+from apps.accounts import api_admin as platform_admin_api
 
 
 def health(request):
@@ -89,6 +91,23 @@ urlpatterns = [
     path("api/account/auto-renew/", acct_billing.toggle_auto_renew, name="acct-auto-renew"),
     path("api/account/cards/", acct_billing.saved_cards, name="acct-cards"),
     path("billing/callback", acct_billing.payment_callback, name="payment-callback"),
+    # ══ لوحة المنصة (ق-51) — معزولة عن مسارات العملاء ══
+    path("platform/auth/login", platform_auth_api.platform_login, name="platform-login"),
+    path("platform/auth/logout", platform_auth_api.platform_logout, name="platform-logout"),
+    path("platform/auth/me", platform_auth_api.platform_me, name="platform-me"),
+    path("platform/auth/totp", platform_auth_api.platform_totp_setup, name="platform-totp"),
+    path("platform/accounts/", platform_admin_api.accounts_list, name="platform-accounts"),
+    path("platform/accounts/<int:account_id>/", platform_admin_api.account_detail, name="platform-account"),
+    path("platform/accounts/<int:account_id>/impersonate", platform_auth_api.impersonate_start, name="impersonate-start"),
+    path("platform/impersonate/end", platform_auth_api.impersonate_end, name="impersonate-end"),
+    path("platform/impersonate/status", platform_auth_api.impersonation_status, name="impersonate-status"),
+    path("platform/accounts/<int:account_id>/activate", platform_admin_api.admin_activate, name="platform-activate"),
+    path("platform/accounts/<int:account_id>/extend", platform_admin_api.admin_extend, name="platform-extend"),
+    path("platform/invoices/<int:invoice_id>/mark-paid", platform_admin_api.admin_mark_invoice_paid, name="platform-mark-paid"),
+    path("platform/discounts/", platform_admin_api.admin_discounts, name="platform-discounts"),
+    path("platform/discounts/<int:discount_id>/", platform_admin_api.admin_discount_detail, name="platform-discount"),
+    path("platform/settings/", platform_admin_api.platform_settings, name="platform-settings"),
+    path("platform/dashboard/", platform_admin_api.admin_dashboard, name="platform-dashboard"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
