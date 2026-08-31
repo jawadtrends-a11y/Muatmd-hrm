@@ -138,9 +138,13 @@ def employees(request):
             probation_days=int(d.get("probation_days", 90)),
         )
     except DuplicatePersonError as e:
-        return Response({"detail": "شخص مكرر", "code": "duplicate_person",
-                         "blocking": e.blocking},
-                        status=status.HTTP_409_CONFLICT)
+        # الرسائل المفصّلة لا كلمة «مكرر» وحدها — العميل يحتاج
+        # معرفة أي حقل تكرر ليصححه
+        return Response({
+            "detail": " · ".join(e.blocking) or "شخص مكرر",
+            "code": "duplicate_person",
+            "blocking": e.blocking,
+        }, status=status.HTTP_409_CONFLICT)
     except HiringError as e:
         return Response({"detail": str(e), "code": "hiring_error"}, status=400)
     except (KeyError, ValueError) as e:

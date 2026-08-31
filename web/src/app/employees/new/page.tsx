@@ -70,6 +70,10 @@ const T: Dict = {
   cancel: { ar: "إلغاء", en: "Cancel" },
   required: { ar: "أكمل الحقول المطلوبة", en: "Complete required fields" },
   saved: { ar: "أُضيف الموظف", en: "Employee added" },
+  ibanBad: {
+    ar: "الآيبان يجب أن يكون SA متبوعًا بـ22 رقمًا",
+    en: "IBAN must be SA followed by 22 digits",
+  },
   warnings: { ar: "تنبيهات", en: "Warnings" },
   duplicate: { ar: "شخص مكرر", en: "Duplicate person" },
   forceAnyway: { ar: "متابعة رغم التنبيه", en: "Continue anyway" },
@@ -167,10 +171,15 @@ export default function NewEmployeePage() {
   const total = lines.reduce(
     (s, l) => s + (Number(l.amount) || 0), 0);
 
+  // تحقق فوري من الآيبان — 24 خانة تبدأ بـSA
+  const ibanBad = iban.trim().length > 0 &&
+    !/^SA\d{22}$/.test(iban.trim());
+
   const missing =
     !firstName.trim() || !familyName.trim() || !idNumber.trim() ||
     !employeeNo.trim() || !joinDate ||
-    !lines.some((l) => l.code === "BASIC" && Number(l.amount) > 0);
+    !lines.some((l) => l.code === "BASIC" && Number(l.amount) > 0) ||
+    ibanBad;
 
   async function save(force = false) {
     setSaving(true);
@@ -339,10 +348,19 @@ export default function NewEmployeePage() {
         </div>
 
         <div className="row" style={{ alignItems: "flex-start" }}>
-          <F label={L("iban")} hint={L("ibanHint")} wide>
-            <input className="input" dir="ltr" maxLength={24}
-              placeholder="SA…" value={iban}
-              onChange={(e) => setIban(e.target.value.toUpperCase())} />
+          <F label={L("iban")}
+            hint={ibanBad ? undefined : L("ibanHint")} wide>
+            <input
+              className="input" dir="ltr" maxLength={24} placeholder="SA…"
+              style={ibanBad ? { borderColor: "var(--danger)" } : undefined}
+              value={iban}
+              onChange={(e) => setIban(
+                e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} />
+            {ibanBad && (
+              <div className="error-text">
+                {L("ibanBad")} ({iban.trim().length}/24)
+              </div>
+            )}
           </F>
         </div>
       </div>
