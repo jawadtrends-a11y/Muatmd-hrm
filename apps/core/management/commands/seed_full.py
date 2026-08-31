@@ -158,6 +158,7 @@ class Command(BaseCommand):
             acc = self._seed_account(group)
             accounts.append(acc)
 
+        self._seed_cross_roles(accounts)
         self._summary(accounts)
 
     # ── المسح ──
@@ -500,13 +501,14 @@ class Command(BaseCommand):
         )
 
         slug = account.slug.replace("-", "")
-        for emp, role_code, scope, person in employments:
-            if role_code == "employee" and emp.employee_no[-1] not in "12":
-                continue      # نكتفي بموظفين عاديين لكل شركة
-
+        seen = {}
+        for idx, (emp, role_code, scope, person) in enumerate(employments):
             username = f"{slug}.{company.code.lower()}.{role_code}"
-            if role_code == "employee":
-                username += emp.employee_no[-1]
+
+            # ترقيم من يتكرر دوره: supervisor / supervisor2 …
+            seen[role_code] = seen.get(role_code, 0) + 1
+            if seen[role_code] > 1:
+                username += str(seen[role_code])
 
             if User.objects.filter(username=username).exists():
                 continue
@@ -788,6 +790,71 @@ class Command(BaseCommand):
                 continue
 
         return made
+
+    # ══════════ السيناريوهات المركّبة ══════════
+
+    def _seed_cross_roles(self, accounts):
+        """
+        حالات تكشف حدود نظام الصلاحيات:
+
+          1. عضو في شركتين بدورين مختلفين
+          2. عضو بدور على مستوى المجموعة ودور على مستوى شركة
+          3. مشرف نطاقه فريقه فقط
+        """
+        from apps.accounts.models_access import (
+            AccountMembership, Role, RoleAssignment,
+        )
+        from apps.core.tenancy.context import account_scope
+        from apps.employees.models import Employment
+
+        group = next((a for a in accounts
+                      if a["slug"] == "muatmd-group"), None)
+        if group is None:
+            return
+
+        acc = group["account"]
+        comps = {c.code: c for c in group["companies"]}
+
+        with account_scope(acc.id):
+            # ── 1. مدير موارد في C1 وموظف عادي في C2 ──
+            user1 = User.objects.create_user(
+                username="cross.two.companies", password="Test@2026",
+                email="cross1@demo.sa", first_name="ماجد")
+
+            emp_c1 = Employment.objects.filter(
+                company=comps["C1"]).order_by("employee_no")[2]
+            emp_c2 = Employment.objects.filter(
+                company=comps["C2"]).order_by("employee_no")[8]
+
+            m1 = AccountMembership.objects.create(
+                user=user1, account=acc, active_company=comps["C1"])
+            RoleAssignment.objects.create(
+                membership=m1,
+                role=Role.objects.get(account=acc, code="hr_manager"),
+                company=comps["C1"], scope="company")
+            RoleAssignment.objects.create(
+                membership=m1,
+                role=Role.objects.get(account=acc, code="employee"),
+                company=comps["C2"], scope="own")
+
+            # ── 2. مالك على المجموعة + مدير عام في C3 ──
+            user2 = User.objects.create_user(
+                username="cross.group.company", password="Test@2026",
+                email="cross2@demo.sa", first_name="سلطان")
+
+            m2 = AccountMembership.objects.create(
+                user=user2, account=acc, active_company=comps["C3"],
+                is_account_owner=True)
+            RoleAssignment.objects.create(
+                membership=m2,
+                role=Role.objects.get(account=acc, code="owner"),
+                company=None, scope="account")
+            RoleAssignment.objects.create(
+                membership=m2,
+                role=Role.objects.get(account=acc, code="dept_manager"),
+                company=comps["C3"], scope="company")
+
+        self.stdout.write("  ✓ السيناريوهات المركّبة")
 
     # ══════════ الملخص ══════════
 
