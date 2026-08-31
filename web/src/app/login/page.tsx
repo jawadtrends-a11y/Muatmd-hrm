@@ -39,7 +39,7 @@ export default function LoginPage() {
     setBusy(true);
     setError("");
     try {
-      const res = await apiPost<{ token: string }>("/auth/login", {
+      const res = await apiPost<{ token: string }>("/auth/login/", {
         username: username.trim(),
         password,
       });

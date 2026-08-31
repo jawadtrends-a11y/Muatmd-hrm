@@ -111,7 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    apiGet<Workspace>("/me/workspace")
+    apiGet<Workspace>("/me/workspace/")
       .then((data) => {
         setWs(data);
         setReady(true);

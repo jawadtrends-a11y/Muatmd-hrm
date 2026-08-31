@@ -62,14 +62,17 @@ def test_frontend_api_paths_end_with_slash():
         pytest.skip("مجلد الواجهة غير موجود")
 
     # المسارات المُمرَّرة لدوال الـAPI
+    # يقبل وسيط النوع: apiPost<{ token: string }>("/path/")
+    # النسخة السابقة أخطأت بالسماح لأنها لم تطابق <...>
     call = re.compile(
-        r'(?:apiGet|apiPost|apiPut|apiPatch|apiDelete|endpoint=)'
-        r'[<(\s"]*["\'](/[^"\']*?)["\']')
+        r'(?:apiGet|apiPost|apiPut|apiPatch|apiDelete|pGet|pPost|pPut|pDelete)'
+        r'\s*(?:<[^>]*>)?\s*\(\s*[`"\']([^`"\']*)["`\']'
+        r'|endpoint=\{?["\']([^"\']*)["\']')
 
     offenders = []
     for path in files:
         for m in call.finditer(path.read_text(encoding="utf-8")):
-            url = m.group(1)
+            url = m.group(1) or m.group(2) or ""
             if "?" in url or url.endswith("/") or "${" in url:
                 continue
             offenders.append(f"{path.name}: {url}")
