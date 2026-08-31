@@ -17,6 +17,7 @@ from apps.accounts import api_billing as acct_billing
 from apps.accounts import api_platform_auth as platform_auth_api
 from apps.accounts import api_admin as platform_admin_api
 from apps.accounts import api_auth as client_auth
+from apps.leaves import api as leaves_api
 
 
 def health(request):
@@ -113,6 +114,15 @@ urlpatterns = [
     path("api/auth/login/", client_auth.login_view, name="auth-login"),
     path("api/auth/logout/", client_auth.logout_view, name="auth-logout"),
     path("api/auth/sessions/", client_auth.sessions_view, name="auth-sessions"),
+    # الإجازات والطلبات
+    path("api/leaves/types/", leaves_api.leave_types, name="leave-types"),
+    path("api/leaves/balances/", leaves_api.leave_balances, name="leave-balances"),
+    path("api/leaves/requests/", leaves_api.leave_requests, name="leave-requests"),
+    path("api/leaves/requests/<int:request_id>/", leaves_api.request_detail, name="request-detail"),
+    path("api/leaves/requests/<int:request_id>/decide/", leaves_api.decide_request, name="request-decide"),
+    path("api/me/requests/", leaves_api.my_requests, name="my-requests"),
+    path("api/me/approvals/", leaves_api.my_approvals, name="my-approvals"),
+    path("api/me/leaves/", leaves_api.my_leave_summary, name="my-leaves"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

@@ -80,11 +80,11 @@ const NAV: NavItem[] = [
     perms: ["payroll.view"] },
   { href: "/reports", key: "reports", icon: IcChart,
     perms: ["payroll.view", "employees.view", "attendance.view"] },
-  { href: "/org", key: "org", icon: IcOrg, perms: ["organization.view"] },
+  { href: "/org", key: "org", icon: IcOrg, perms: ["org.view"] },
   { href: "/me/payslips", key: "myPayslips", icon: IcDoc,
     perms: ["payslips.view_own"] },
   { href: "/me/requests", key: "myRequests", icon: IcDoc,
-    perms: ["requests.create_own"] },
+    perms: ["requests.create"] },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

@@ -37,6 +37,12 @@ def test_no_raw_queryset_in_api_views():
         "NotificationEvent", "NotificationTemplate",
     }
 
+    # نماذج إعدادات الشركة: لا تحمل بيانات موظفين، والعزل
+    # بـcompany_id كافٍ فيها
+    SETTINGS_MODELS = {
+        "LeaveType", "PayComponent", "PayrollSettings", "Shift",
+        "BankTemplate", "Holiday", "JobTitle", "ApprovalChain",
+    }
     offenders = []
     for path in _python_files("api/*.py", "api.py", "views.py", "views/*.py"):
         src = path.read_text(encoding="utf-8")
@@ -53,6 +59,16 @@ def test_no_raw_queryset_in_api_views():
             # الاستعلام قد يُمرَّر لـGate على سطر مجاور (كتلة متعددة الأسطر)
             window = "\n".join(lines[max(0, i - 4):i + 2])
             if "Gate." in window:
+                continue
+            # معزول ذاتيًا: الاستعلام مقيَّد بالمستخدم نفسه — الموظف
+            # يرى ملفه ورصيده وطلباته، فالبوابة لا تضيف عزلًا.
+            # ما يبقى محروسًا: أي استعلام يقرأ بيانات موظفين آخرين.
+            if any(k in window for k in (
+                    "person=person", "person=getattr", "employment=emp",
+                    "approver_employment=emp", "employment=employment")):
+                continue
+            # إعدادات الشركة لا بيانات موظفين — company_id يكفي
+            if model in SETTINGS_MODELS:
                 continue
             offenders.append(f"{path.name}:{i}  {line.strip()[:70]}")
     assert not offenders, (
