@@ -1,0 +1,387 @@
+"use client";
+
+/**
+ * هيكل التطبيق: قائمة جانبية فاتحة + شريط علوي.
+ *
+ * 🔑 حارس التوثيق: أي مسار بلا توكن يُحوَّل للدخول **بلا رسم
+ * الهيكل** — فلا يرى المستخدم ومضة من واجهة لا يملكها.
+ *
+ * 🔑 الخيارات تختلف بالدور لا الشاشات (ق-53): الموظف يرى
+ * قسائمه وطلباته، ومدير الموارد يرى كل شيء — من نفس المسارات.
+ */
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+
+import { apiGet, getToken, setToken, ApiError } from "@/lib/api";
+import { loadPrefs, usePrefs, useT, type Dict } from "@/lib/prefs";
+import {
+  IcAlert, IcChart, IcClock, IcDoc, IcGlobe, IcHome, IcLeave, IcLogout,
+  IcMenu, IcMoon, IcOrg, IcPayroll, IcSettings, IcSun, IcUser, IcUsers,
+  IcWallet, IcX,
+} from "@/components/Icons";
+
+const PUBLIC_PATHS = ["/login", "/accept-invitation", "/signup"];
+
+const T: Dict = {
+  home: { ar: "الرئيسية", en: "Home" },
+  employees: { ar: "الموظفون", en: "Employees" },
+  attendance: { ar: "الحضور والانصراف", en: "Attendance" },
+  leaves: { ar: "الإجازات والطلبات", en: "Leaves & Requests" },
+  payroll: { ar: "الرواتب", en: "Payroll" },
+  reports: { ar: "التقارير", en: "Reports" },
+  org: { ar: "الهيكل التنظيمي", en: "Organization" },
+  myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
+  myRequests: { ar: "طلباتي", en: "My Requests" },
+  settings: { ar: "الإعدادات", en: "Settings" },
+  subscription: { ar: "الاشتراك", en: "Subscription" },
+  logout: { ar: "تسجيل الخروج", en: "Sign out" },
+  loading: { ar: "جارٍ التحميل…", en: "Loading…" },
+  readOnly: {
+    ar: "الحساب للقراءة فقط — جدّد الاشتراك لاستعادة الوصول الكامل",
+    en: "Account is read-only — renew to restore full access",
+  },
+  trialLeft: { ar: "تجربة مجانية — متبقٍ", en: "Free trial — remaining" },
+  days: { ar: "يوم", en: "days" },
+  renewSoon: { ar: "ينتهي اشتراكك خلال", en: "Subscription ends in" },
+  renew: { ar: "تجديد", en: "Renew" },
+};
+
+type Workspace = {
+  person: { display_name: string; preferred_locale?: string } | null;
+  account: { name: string } | null;
+  company: { name: string } | null;
+  permissions: string[];
+  subscription?: {
+    state: string;
+    is_writable: boolean;
+    days_left: number | null;
+    renewal_alert: boolean;
+    trial: { days_left: number | null } | null;
+  };
+};
+
+type NavItem = {
+  href: string;
+  key: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  /** يظهر لمن يملك إحدى هذه الصلاحيات — فارغ يعني للجميع */
+  perms?: string[];
+};
+
+const NAV: NavItem[] = [
+  { href: "/", key: "home", icon: IcHome },
+  { href: "/employees", key: "employees", icon: IcUsers,
+    perms: ["employees.view"] },
+  { href: "/attendance", key: "attendance", icon: IcClock,
+    perms: ["attendance.view"] },
+  { href: "/leaves", key: "leaves", icon: IcLeave, perms: ["leaves.view"] },
+  { href: "/payroll", key: "payroll", icon: IcPayroll,
+    perms: ["payroll.view"] },
+  { href: "/reports", key: "reports", icon: IcChart,
+    perms: ["payroll.view", "employees.view", "attendance.view"] },
+  { href: "/org", key: "org", icon: IcOrg, perms: ["organization.view"] },
+  { href: "/me/payslips", key: "myPayslips", icon: IcDoc,
+    perms: ["payslips.view_own"] },
+  { href: "/me/requests", key: "myRequests", icon: IcDoc,
+    perms: ["requests.create_own"] },
+];
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { lang, theme, isRtl, toggleLang, setTheme } = usePrefs();
+  const { L } = useT(T);
+
+  const [ready, setReady] = useState(false);
+  const [ws, setWs] = useState<Workspace | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+
+  useEffect(() => {
+    loadPrefs();
+  }, []);
+
+  useEffect(() => {
+    if (isPublic) {
+      setReady(true);
+      return;
+    }
+    if (!getToken()) {
+      router.replace("/login");
+      return;
+    }
+    apiGet<Workspace>("/me/workspace")
+      .then((data) => {
+        setWs(data);
+        setReady(true);
+      })
+      .catch((e: ApiError) => {
+        if (e.isAuth) {
+          setToken(null);
+          router.replace("/login");
+        } else {
+          setReady(true);
+        }
+      });
+  }, [pathname, isPublic, router]);
+
+  // الصفحات العامة بلا هيكل
+  if (isPublic) return <>{children}</>;
+
+  // 🔑 لا يُرسم الهيكل قبل التحقق
+  if (!ready) {
+    return (
+      <div style={{
+        display: "grid", placeItems: "center", minHeight: "100vh",
+        color: "var(--ink-3)",
+      }}>
+        {L("loading")}
+      </div>
+    );
+  }
+
+  const perms = new Set(ws?.permissions ?? []);
+  const can = (item: NavItem) =>
+    !item.perms || item.perms.some((p) => perms.has(p));
+  const nav = NAV.filter(can);
+
+  const sub = ws?.subscription;
+  const readOnly = sub && !sub.is_writable;
+
+  const logout = () => {
+    setToken(null);
+    router.replace("/login");
+  };
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      {/* ══ القائمة الجانبية ══ */}
+      <aside
+        className="no-print"
+        style={{
+          width: "var(--sidebar-w)",
+          background: "var(--paper)",
+          borderInlineEnd: "1px solid var(--line)",
+          position: "fixed",
+          insetBlock: 0,
+          insetInlineStart: 0,
+          zIndex: 40,
+          transform: menuOpen ? "none" : undefined,
+          display: "flex",
+          flexDirection: "column",
+        }}
+        data-open={menuOpen}
+      >
+        <div style={{
+          height: "var(--topbar-h)", display: "flex", alignItems: "center",
+          padding: "0 20px", borderBottom: "1px solid var(--line)",
+          fontWeight: 600, fontSize: "1.05rem", color: "var(--teal)",
+        }}>
+          معتمد
+          <span className="muted" style={{
+            fontSize: ".78rem", fontWeight: 500, marginInlineStart: 8,
+          }}>
+            HR
+          </span>
+        </div>
+
+        <nav style={{ padding: 12, flex: 1, overflowY: "auto" }}>
+          {nav.map((item) => {
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 11,
+                  padding: "9px 12px", borderRadius: "var(--radius-sm)",
+                  marginBottom: 2, fontWeight: 500,
+                  color: active ? "var(--teal)" : "var(--ink-2)",
+                  background: active ? "var(--teal-soft)" : "transparent",
+                }}
+              >
+                <Icon size={19} />
+                {L(item.key)}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div style={{ padding: 12, borderTop: "1px solid var(--line)" }}>
+          <Link
+            href="/settings"
+            style={{
+              display: "flex", alignItems: "center", gap: 11,
+              padding: "9px 12px", borderRadius: "var(--radius-sm)",
+              color: "var(--ink-2)", fontWeight: 500,
+            }}
+          >
+            <IcSettings size={19} />
+            {L("settings")}
+          </Link>
+        </div>
+      </aside>
+
+      {/* ══ المحتوى ══ */}
+      <div style={{
+        flex: 1,
+        marginInlineStart: "var(--sidebar-w)",
+        minWidth: 0,
+      }}>
+        {/* الشريط العلوي */}
+        <header
+          className="no-print"
+          style={{
+            height: "var(--topbar-h)",
+            background: "var(--paper)",
+            borderBottom: "1px solid var(--line)",
+            position: "sticky", top: 0, zIndex: 30,
+            display: "flex", alignItems: "center",
+            padding: "0 20px", gap: 12,
+          }}
+        >
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="menu"
+            style={{ display: "none" }}
+          >
+            {menuOpen ? <IcX size={18} /> : <IcMenu size={18} />}
+          </button>
+
+          <div className="grow truncate muted" style={{ fontSize: ".9rem" }}>
+            {ws?.company?.name || ws?.account?.name || ""}
+          </div>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={toggleLang}
+            title={lang === "ar" ? "English" : "العربية"}
+          >
+            <IcGlobe size={17} />
+            {lang === "ar" ? "EN" : "ع"}
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            title={theme === "dark" ? "نهاري" : "ليلي"}
+          >
+            {theme === "dark" ? <IcSun size={17} /> : <IcMoon size={17} />}
+          </button>
+
+          <div style={{ position: "relative" }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setAccountOpen((v) => !v)}
+            >
+              <IcUser size={17} />
+              <span className="truncate" style={{ maxWidth: 130 }}>
+                {ws?.person?.display_name || "—"}
+              </span>
+            </button>
+
+            {accountOpen && (
+              <div
+                className="card"
+                style={{
+                  position: "absolute", insetInlineEnd: 0, top: "calc(100% + 6px)",
+                  minWidth: 210, padding: 6, boxShadow: "var(--shadow-lg)",
+                  zIndex: 50,
+                }}
+              >
+                <Link
+                  href="/settings/subscription"
+                  onClick={() => setAccountOpen(false)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "9px 12px", borderRadius: "var(--radius-sm)",
+                    color: "var(--ink-2)",
+                  }}
+                >
+                  <IcWallet size={18} />
+                  {L("subscription")}
+                </Link>
+                <button
+                  onClick={logout}
+                  className="btn btn-ghost"
+                  style={{
+                    width: "100%", justifyContent: "flex-start",
+                    color: "var(--danger)",
+                  }}
+                >
+                  <IcLogout size={18} />
+                  {L("logout")}
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* شريط حالة الاشتراك — نحاسي لا أحمر */}
+        {readOnly && (
+          <div style={{
+            background: "var(--copper-soft)", color: "var(--copper)",
+            padding: "10px 20px", display: "flex", alignItems: "center",
+            gap: 10, borderBottom: "1px solid var(--line)", fontWeight: 500,
+          }}>
+            <IcAlert size={18} />
+            <span className="grow">{L("readOnly")}</span>
+            <Link href="/settings/subscription" className="btn btn-sm">
+              {L("renew")}
+            </Link>
+          </div>
+        )}
+
+        {!readOnly && sub?.trial?.days_left != null && (
+          <div style={{
+            background: "var(--teal-soft)", color: "var(--teal)",
+            padding: "9px 20px", display: "flex", alignItems: "center",
+            gap: 10, borderBottom: "1px solid var(--line)", fontWeight: 500,
+          }}>
+            <span className="grow">
+              {L("trialLeft")}{" "}
+              <span className="num">{sub.trial.days_left}</span> {L("days")}
+            </span>
+            <Link href="/settings/subscription" className="btn btn-sm btn-primary">
+              {L("renew")}
+            </Link>
+          </div>
+        )}
+
+        {!readOnly && sub?.renewal_alert && sub.days_left != null && (
+          <div style={{
+            background: "var(--copper-soft)", color: "var(--copper)",
+            padding: "9px 20px", display: "flex", alignItems: "center",
+            gap: 10, borderBottom: "1px solid var(--line)", fontWeight: 500,
+          }}>
+            <IcAlert size={17} />
+            <span className="grow">
+              {L("renewSoon")} <span className="num">{sub.days_left}</span>{" "}
+              {L("days")}
+            </span>
+            <Link href="/settings/subscription" className="btn btn-sm">
+              {L("renew")}
+            </Link>
+          </div>
+        )}
+
+        {/* حاوية 1440 موسّطة */}
+        <main style={{
+          maxWidth: "var(--shell-max)", margin: "0 auto",
+          padding: "24px 20px 48px", width: "100%",
+        }}>
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

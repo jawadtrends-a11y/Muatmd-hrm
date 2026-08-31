@@ -19,3 +19,9 @@ celerybeat.pid
 # سجلات النظام (ق-45)
 logs/
 *.jsonl
+
+# واجهات Next.js
+web/node_modules/
+web/.next/
+web-admin/node_modules/
+web-admin/.next/
