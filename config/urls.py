@@ -13,6 +13,7 @@ from apps.payroll import api_outputs as outputs_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
 from apps.core import api_audit as audit_api
+from apps.accounts import api_billing as acct_billing
 
 
 def health(request):
@@ -77,6 +78,17 @@ urlpatterns = [
     path("api/reports/<str:key>/", reports_api.run_report, name="run-report"),
     path("api/audit/", audit_api.audit_feed, name="audit-feed"),
     path("api/audit/<str:object_type>/<int:object_id>/", audit_api.object_history, name="audit-history"),
+    # اشتراك الحساب والفوترة (ق-47، ق-49) — يختلف عن
+    # api/billing/* أعلاه التي تخص اشتراك الشركة بباقة
+    path("api/account/subscription/", acct_billing.subscription_status, name="acct-subscription"),
+    path("api/account/plans/", acct_billing.available_plans, name="acct-plans"),
+    path("api/account/invoices/", acct_billing.invoices, name="acct-invoices"),
+    path("api/account/invoices/<int:invoice_id>/", acct_billing.invoice_detail, name="acct-invoice-detail"),
+    path("api/account/checkout/", acct_billing.start_checkout, name="acct-checkout"),
+    path("api/account/invoices/<int:invoice_id>/pay/", acct_billing.pay_invoice, name="acct-pay"),
+    path("api/account/auto-renew/", acct_billing.toggle_auto_renew, name="acct-auto-renew"),
+    path("api/account/cards/", acct_billing.saved_cards, name="acct-cards"),
+    path("billing/callback", acct_billing.payment_callback, name="payment-callback"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
