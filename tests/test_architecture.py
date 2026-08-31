@@ -107,7 +107,15 @@ def test_no_hardcoded_permission_strings_outside_catalog():
     # النظام يحمل كتالوجين بنفس النمط <وحدة>.<فعل>:
     #   الصلاحيات (employees.view) وأحداث الإشعارات (leave.approved).
     # المفتاح المشروع هو المسجّل في أيٍّ منهما؛ ما عداه يتيم.
-    known = PERMISSION_KEYS | EVENT_KEYS
+    # وكتالوج ثالث معزول: قدرات لوحة المنصة (ق-51). قدرات
+    # السوبر أدمن لا تُخلط بصلاحيات العملاء — العزل بينهما مقصود،
+    # فلها كتالوجها الخاص ROLE_CAPABILITIES.
+    from apps.accounts.models_admin import ROLE_CAPABILITIES
+    platform_caps = set()
+    for caps in ROLE_CAPABILITIES.values():
+        platform_caps |= caps
+
+    known = PERMISSION_KEYS | EVENT_KEYS | platform_caps
     modules = sorted({k.split(".")[0] for k in known})
     pattern = re.compile(r'["\'](' + "|".join(modules) + r')\.[a-z_]+["\']')
 

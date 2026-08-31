@@ -171,3 +171,58 @@ class PlatformAuditLog(TimeStampedModel):
 
     def __str__(self):
         return f"{self.user_name}: {self.action}"
+
+
+class ImpersonationSession(TimeStampedModel):
+    """
+    جلسة انتحال للدعم الفني (ق-51).
+
+    يرى السوبر أدمن ما يراه العميل بالضبط — الشاشة والصلاحيات معًا.
+    الجلسة مؤقتة (ساعة)، وكل كتابة تُسجَّل باسمه لا باسم العميل.
+
+    المنطق في apps/accounts/services/platform/impersonation.py
+    """
+
+    HOURS = 1      # تنتهي تلقائيًا فلا تُنسى مفتوحة
+
+    platform_user = models.ForeignKey(
+        PlatformUser, on_delete=models.CASCADE,
+        related_name="impersonations", verbose_name=_("مستخدم المنصة"))
+    account_id = models.PositiveIntegerField(_("الحساب"), db_index=True)
+    account_label = models.CharField(_("اسم الحساب"), max_length=200)
+    company_id = models.PositiveIntegerField(_("الشركة"), null=True,
+                                             blank=True)
+    as_role = models.CharField(
+        _("بدور"), max_length=40, blank=True,
+        help_text=_("hr_manager · employee — لتشخيص مشاكل الصلاحيات"))
+
+    token = models.CharField(_("الرمز"), max_length=128, unique=True,
+                             db_index=True)
+    reason = models.CharField(_("سبب الدخول"), max_length=300, blank=True)
+    expires_at = models.DateTimeField(_("تنتهي في"))
+    ended_at = models.DateTimeField(_("انتهت في"), null=True, blank=True)
+    ip_address = models.GenericIPAddressField(_("العنوان"), null=True,
+                                              blank=True)
+    writes_count = models.PositiveIntegerField(_("عمليات الكتابة"), default=0)
+
+    class Meta:
+        verbose_name = _("جلسة انتحال")
+        verbose_name_plural = _("جلسات الانتحال")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["account_id", "-created_at"]),
+            models.Index(fields=["platform_user", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.platform_user.username} → {self.account_label}"
+
+    @property
+    def is_active(self):
+        return self.ended_at is None and self.expires_at > timezone.now()
+
+    @property
+    def minutes_left(self):
+        if not self.is_active:
+            return 0
+        return int((self.expires_at - timezone.now()).total_seconds() / 60)

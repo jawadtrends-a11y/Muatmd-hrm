@@ -32,6 +32,7 @@ def test_every_business_table_has_rls():
         "accounts_platformuser",
         "accounts_platformsession",
         "accounts_platformauditlog",
+        "accounts_impersonationsession",
     }
     with connection.cursor() as cur:
         cur.execute("""
