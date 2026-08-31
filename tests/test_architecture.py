@@ -62,7 +62,16 @@ def test_no_raw_queryset_in_api_views():
 
 
 def test_all_celery_tasks_are_account_scoped():
-    """كل مهمة Celery ترث AccountTask — وإلا عملت بلا عزل."""
+    """
+    كل مهمة Celery معزولة — بأحد أسلوبين:
+
+      • ترث AccountTask: تعمل داخل حساب واحد يُمرَّر إليها
+      • تفتح account_scope صراحةً: مهام منصة تمر على كل الحسابات
+        وتدخل نطاق كل واحد على حدة (لقطة الموظفين، تقييم
+        الاشتراكات، التجديد التلقائي)
+
+    ما يُرفض: مهمة تلمس بيانات عملاء بلا أي من الاثنين.
+    """
     offenders = []
     for path in _python_files("tasks.py", "tasks/*.py", "tasks_*.py"):
         if path.name == "tasks.py" and path.parent.name == "core":
@@ -74,9 +83,14 @@ def test_all_celery_tasks_are_account_scoped():
                 continue
             for dec in node.decorator_list:
                 dec_src = ast.get_source_segment(src, dec) or ""
-                if "shared_task" in dec_src or "app.task" in dec_src:
-                    if "AccountTask" not in dec_src:
-                        offenders.append(f"{path.name}: {node.name}")
+                if "shared_task" not in dec_src and "app.task" not in dec_src:
+                    continue
+                if "AccountTask" in dec_src:
+                    continue
+                body = ast.get_source_segment(src, node) or ""
+                if "account_scope(" in body:
+                    continue      # معزولة بفتح النطاق صراحةً
+                offenders.append(f"{path.name}: {node.name}")
     assert not offenders, (
         "مهام Celery بلا AccountTask — تعمل بلا عزل:\n" + "\n".join(offenders)
     )

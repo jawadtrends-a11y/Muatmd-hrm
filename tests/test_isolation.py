@@ -23,6 +23,10 @@ def test_every_business_table_has_rls():
         "django_admin_log", "auth_user", "auth_group", "auth_permission",
         "auth_group_permissions", "auth_user_groups",
         "auth_user_user_permissions",
+        # إعدادات المنصة (ق-50): صف واحد لا يخص أي عميل — نسبة
+        # الضريبة وأيام التجربة وحدود المحاولات. لا يقرؤه إلا
+        # السوبر أدمن والنظام، فالعزل بالحساب لا معنى له هنا.
+        "accounts_platformsettings",
     }
     with connection.cursor() as cur:
         cur.execute("""
