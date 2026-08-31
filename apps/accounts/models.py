@@ -165,3 +165,10 @@ from apps.accounts.models_billing_v2 import (  # noqa: E402,F401
 from apps.accounts.models_platform import (  # noqa: E402,F401
     PlatformSettings, get_settings,
 )
+
+
+# مستخدمو المنصة — عزل تام عن نظام العملاء (ق-51)
+from apps.accounts.models_admin import (  # noqa: E402,F401
+    PlatformAuditLog, PlatformRole, PlatformSession, PlatformUser,
+    ROLE_CAPABILITIES,
+)

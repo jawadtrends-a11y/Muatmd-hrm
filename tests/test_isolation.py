@@ -27,6 +27,11 @@ def test_every_business_table_has_rls():
         # الضريبة وأيام التجربة وحدود المحاولات. لا يقرؤه إلا
         # السوبر أدمن والنظام، فالعزل بالحساب لا معنى له هنا.
         "accounts_platformsettings",
+        # بنية المنصة (ق-51): معزولة عن نظام العملاء تمامًا —
+        # مستخدمو اللوحة وجلساتهم وسجل عملياتهم لا يخصون أي حساب
+        "accounts_platformuser",
+        "accounts_platformsession",
+        "accounts_platformauditlog",
     }
     with connection.cursor() as cur:
         cur.execute("""
