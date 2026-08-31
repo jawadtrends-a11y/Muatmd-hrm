@@ -128,7 +128,9 @@ export default function AttendancePage() {
       });
 
     return () => { alive = false; };
-  }, [mode, day, year, month, L]);
+    // L مستثناة: تتغيّر مرجعيًا في كل رسم فتعيد إطلاق الطلب
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, day, year, month]);
 
   const counts = daily?.counts ?? {};
   const cards = useMemo(

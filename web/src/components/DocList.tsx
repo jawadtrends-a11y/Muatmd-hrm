@@ -113,7 +113,10 @@ export default function DocList<R>({
     return () => {
       alive = false;
     };
-  }, [endpoint, query, refreshKey, reload, L]);
+    // ⚠️ L مستثناة عمدًا: دالة الترجمة تتغيّر مرجعيًا في كل رسم،
+    // فإدراجها يعيد إطلاق الطلب بلا نهاية — الجدول يظهر ثم يختفي.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint, query, refreshKey, reload]);
 
   const visible = useMemo(() => {
     if (!search.trim() || !searchFields) return rows;
