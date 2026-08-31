@@ -120,8 +120,18 @@ class Invoice(AccountScopedModel):
     discount = models.ForeignKey(
         Discount, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="invoices", verbose_name=_("الخصم المطبَّق"))
-    total = models.DecimalField(_("الإجمالي المستحق"), max_digits=12,
-                                decimal_places=2, default=0)
+    # ── الضريبة (ق-50) ──
+    vat_rate = models.DecimalField(
+        _("نسبة الضريبة %"), max_digits=5, decimal_places=2, default=15,
+        help_text=_("تُضبط من لوحة السوبر أدمن"))
+    vat_amount = models.DecimalField(_("قيمة الضريبة"), max_digits=12,
+                                     decimal_places=2, default=0)
+    total_before_vat = models.DecimalField(
+        _("الإجمالي قبل الضريبة"), max_digits=12, decimal_places=2,
+        default=0, help_text=_("السعر البارز في صفحة الباقات"))
+    total = models.DecimalField(
+        _("الإجمالي شامل الضريبة"), max_digits=12, decimal_places=2,
+        default=0, help_text=_("المبلغ المشحون من البطاقة"))
 
     status = models.CharField(_("الحالة"), max_length=20,
                               choices=InvoiceStatus.choices,

@@ -224,10 +224,20 @@ def create_invoice(*, subscription, period_start=None, headcount=None,
 
     InvoiceLine.objects.bulk_create(lines)
 
+    # ── الضريبة (ق-50): تُحفظ الثلاثة فلا يُحتسب أي منها لاحقًا ──
+    from apps.accounts.models_platform import get_settings
+    ps = get_settings()
+
+    before_vat = r2(base + setup - disc.amount)
+    vat = r2(before_vat * ps.vat_rate / Decimal("100"))
+
     inv.setup_fee = setup
     inv.discount_amount = disc.amount
     inv.discount = disc.discount
-    inv.total = r2(base + setup - disc.amount)
+    inv.vat_rate = ps.vat_rate
+    inv.total_before_vat = before_vat
+    inv.vat_amount = vat
+    inv.total = r2(before_vat + vat)
     inv.save()
     return inv, disc
 

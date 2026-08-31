@@ -159,3 +159,9 @@ from apps.accounts.models_billing_v2 import (  # noqa: E402,F401
     DiscountScope, Invoice, InvoiceLine, InvoiceStatus, Payment,
     PaymentStatus, SavedCard, SubscriptionState,
 )
+
+
+# إعدادات المنصة (ق-50)
+from apps.accounts.models_platform import (  # noqa: E402,F401
+    PlatformSettings, get_settings,
+)
