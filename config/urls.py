@@ -123,6 +123,12 @@ urlpatterns = [
     path("api/me/requests/", leaves_api.my_requests, name="my-requests"),
     path("api/me/approvals/", leaves_api.my_approvals, name="my-approvals"),
     path("api/me/leaves/", leaves_api.my_leave_summary, name="my-leaves"),
+    # إدارة المسيرات
+    path("api/payroll/runs/", payroll_api.payroll_runs, name="payroll-runs"),
+    path("api/payroll/runs/<int:run_id>/calculate/", payroll_api.run_calculate, name="run-calculate"),
+    path("api/payroll/runs/<int:run_id>/submit/", payroll_api.run_submit, name="run-submit"),
+    path("api/payroll/runs/<int:run_id>/approve/", payroll_api.run_approve, name="run-approve"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
+

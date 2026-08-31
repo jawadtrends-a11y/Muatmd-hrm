@@ -275,3 +275,183 @@ def termination_reasons(request):
         ],
         "total": len(ALL_REASONS),
     })
+
+
+# ══════════════════ إدارة المسيرات ══════════════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def payroll_runs(request):
+    """قائمة المسيرات وإنشاؤها."""
+    from apps.payroll.models import PayrollRun, PayrollRunType
+    from apps.payroll.services.engine import PayrollError, create_run
+
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "GET":
+        Gate.require(request.user, "payroll.view")
+        qs = Gate.filter_queryset(request.user, "payroll.view",
+                                  PayrollRun.objects.all())
+        qs = qs.filter(company_id=company_id)
+
+        if request.GET.get("year"):
+            qs = qs.filter(period_year=int(request.GET["year"]))
+        if request.GET.get("status"):
+            qs = qs.filter(status=request.GET["status"])
+        if request.GET.get("run_type"):
+            qs = qs.filter(run_type=request.GET["run_type"])
+
+        return Response([
+            {
+                "id": r.id,
+                "run_no": r.run_no,
+                "period": f"{r.period_year}-{r.period_month:02d}",
+                "period_year": r.period_year,
+                "period_month": r.period_month,
+                "run_type": r.run_type,
+                "run_type_label": r.get_run_type_display(),
+                "status": r.status,
+                "status_label": r.get_status_display(),
+                "employee_count": r.employee_count,
+                "total_gross": str(r.total_gross),
+                "total_deductions": str(r.total_deductions),
+                "total_net": str(r.total_net),
+                "variance_count": r.variance_count,
+                "error_count": len(r.error_log or []),
+                "accrual_date": r.accrual_date,
+                "payment_date": r.payment_date,
+                "calculated_at": r.calculated_at,
+                "approved_at": r.approved_at,
+            }
+            for r in qs.order_by("-period_year", "-period_month", "-id")[:100]
+        ])
+
+    # ── إنشاء مسير ──
+    Gate.require(request.user, "payroll.create")
+    from apps.accounts.models import Company
+    comp = Gate.filter_queryset(
+        request.user, "payroll.create", Company.objects.all()
+    ).filter(id=company_id).first()
+    if comp is None:
+        return Response({"detail": "الشركة غير متاحة"}, status=404)
+
+    run_type = request.data.get("run_type", PayrollRunType.REGULAR)
+    if run_type not in PayrollRunType.values:
+        return Response({"detail": f"نوع مسير غير معروف: {run_type}"},
+                        status=400)
+
+    try:
+        run = create_run(
+            company=comp, run_type=run_type,
+            year=int(request.data["year"]),
+            month=int(request.data["month"]))
+    except PayrollError as e:
+        return Response({"detail": str(e), "code": "run_exists"}, status=409)
+    except (KeyError, ValueError) as e:
+        return Response({"detail": f"بيانات ناقصة: {e}"}, status=400)
+
+    return Response({
+        "id": run.id, "run_no": run.run_no,
+        "period": f"{run.period_year}-{run.period_month:02d}",
+        "status": run.status,
+    }, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def run_calculate(request, run_id):
+    """
+    احتساب المسير.
+
+    فشل موظف لا يوقف الباقين — يُسجَّل في error_log.
+    """
+    from apps.payroll.models import PayrollRun
+    from apps.payroll.services.eosb import EOSBBasisNotSet
+    from apps.payroll.services.engine import PayrollError, calculate_run
+
+    run = Gate.filter_queryset(
+        request.user, "payroll.create", PayrollRun.objects.all()
+    ).filter(id=run_id, company_id=_company_id(request)).first()
+    if run is None:
+        return Response({"detail": "المسير غير موجود"}, status=404)
+
+    Gate.require(request.user, "payroll.create")
+    try:
+        res = calculate_run(run)
+    except EOSBBasisNotSet as e:
+        return Response({"detail": str(e), "code": "eosb_basis_not_set",
+                         "settings_url": "/settings/payroll"}, status=409)
+    except PayrollError as e:
+        return Response({"detail": str(e), "code": "cannot_calculate"},
+                        status=409)
+
+    run.refresh_from_db()
+    return Response({
+        "run_no": run.run_no,
+        "status": run.status,
+        "calculated": res.calculated,
+        "failed": res.failed,
+        "errors": res.errors,
+        "total_net": str(run.total_net),
+        "variance_count": run.variance_count,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def run_submit(request, run_id):
+    """رفع المسير للاعتماد."""
+    from apps.payroll.models import PayrollRun
+    from apps.payroll.services.engine import PayrollError, submit_run
+
+    run = Gate.filter_queryset(
+        request.user, "payroll.create", PayrollRun.objects.all()
+    ).filter(id=run_id, company_id=_company_id(request)).first()
+    if run is None:
+        return Response({"detail": "المسير غير موجود"}, status=404)
+
+    Gate.require(request.user, "payroll.create")
+    person = getattr(request.user, "person", None)
+    try:
+        submit_run(run, person)
+    except PayrollError as e:
+        return Response({"detail": str(e), "code": "cannot_submit"},
+                        status=409)
+
+    run.refresh_from_db()
+    return Response({"run_no": run.run_no, "status": run.status})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def run_approve(request, run_id):
+    """
+    اعتماد المسير — سجل مالي نهائي لا يُعاد احتسابه.
+    """
+    from apps.payroll.models import PayrollRun
+    from apps.payroll.services.engine import PayrollError, approve_run
+
+    Gate.require(request.user, "payroll.approve")
+    run = Gate.filter_queryset(
+        request.user, "payroll.approve", PayrollRun.objects.all()
+    ).filter(id=run_id, company_id=_company_id(request)).first()
+    if run is None:
+        return Response({"detail": "المسير غير موجود"}, status=404)
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=400)
+
+    try:
+        approve_run(run, person)
+    except PayrollError as e:
+        return Response({"detail": str(e), "code": "cannot_approve"},
+                        status=409)
+
+    run.refresh_from_db()
+    return Response({
+        "run_no": run.run_no, "status": run.status,
+        "approved_at": run.approved_at,
+    })
