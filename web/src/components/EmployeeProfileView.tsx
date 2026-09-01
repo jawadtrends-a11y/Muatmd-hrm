@@ -260,6 +260,39 @@ function Row({
   );
 }
 
+/* ══ شبكة عرض — نفس شكل وضع التعديل ══ */
+
+function ViewGrid({
+  items,
+}: {
+  items: { label: string; value: React.ReactNode; numeric?: boolean }[];
+}) {
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+      gap: 14,
+    }}>
+      {items.map((it, i) => (
+        <div key={i}>
+          <div className="muted" style={{ fontSize: ".8rem", marginBottom: 5 }}>
+            {it.label}
+          </div>
+          <div style={{
+            padding: "9px 12px", background: "var(--paper-2)",
+            borderRadius: "var(--radius-sm)", fontWeight: 500,
+            minHeight: 38, display: "flex", alignItems: "center",
+          }}>
+            {it.value == null || it.value === "" ? "—"
+              : it.numeric ? <span className="num">{it.value}</span>
+              : it.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ══ حقل تعديل ══ */
 
 type FieldDef = {
@@ -654,9 +687,10 @@ function ContactTab({
     <div className="stack">
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>{L("contact")}</h3>
-        <Row label={L("mobile")}
-          value={<span className="num">{personal.mobile || "—"}</span>} />
-        <Row label={L("email")} value={personal.email} />
+        <ViewGrid items={[
+          { label: L("mobile"), value: personal.mobile, numeric: true },
+          { label: L("email"), value: personal.email },
+        ]} />
       </div>
 
       <div className="spread">
@@ -968,15 +1002,15 @@ export default function EmployeeProfileView({
             <IcOrg size={19} />
             <h3 style={{ fontSize: "1rem" }}>{L("job")}</h3>
           </div>
-          <Row label={L("jobTitle")} value={data.job.job_title} />
-          <Row label={L("department")} value={data.job.department} />
-          <Row label={L("branch")} value={data.job.branch} />
-          <Row label={L("site")} value={data.job.site} />
-          <Row label={L("manager")} value={data.job.manager} />
-          <Row label={`${L("grade")} (${L("optional")})`}
-            value={data.job.grade} />
-          <Row label={`${L("step")} (${L("optional")})`}
-            value={data.job.step} />
+          <ViewGrid items={[
+            { label: L("jobTitle"), value: data.job.job_title },
+            { label: L("department"), value: data.job.department },
+            { label: L("branch"), value: data.job.branch },
+            { label: L("site"), value: data.job.site },
+            { label: L("manager"), value: data.job.manager },
+            { label: `${L("grade")} (${L("optional")})`, value: data.job.grade },
+            { label: `${L("step")} (${L("optional")})`, value: data.job.step },
+          ]} />
         </div>
       )}
 
@@ -986,31 +1020,36 @@ export default function EmployeeProfileView({
             <IcDoc size={19} />
             <h3 style={{ fontSize: "1rem" }}>{L("contract")}</h3>
           </div>
-          <Row label={L("contractType")} value={data.contract.contract_type} />
-          <Row label={L("joinDate")} value={data.contract.join_date} numeric />
-          <Row label={L("serviceStart")}
-            value={data.contract.service_start_date} numeric />
-          <Row label={L("contractStart")}
-            value={data.contract.contract_start_date} numeric />
-          <Row label={L("contractEnd")}
-            value={data.contract.contract_end_date} numeric />
-          <Row label={L("probationDays")}
-            value={data.contract.probation_days} numeric />
-          <Row label={L("probationEnd")} value={
-            data.contract.in_probation ? (
-              <span className="badge badge-warn">
-                <span className="num">{String(data.contract.probation_end_date)}</span>
-              </span>
-            ) : String(data.contract.probation_end_date ?? "—")
-          } />
-          <Row label={L("serviceLength")} value={
-            <>
-              <span className="num">{String(data.contract.service_years)}</span>
-              {" "}{L("years")}{" "}
-              <span className="num">{String(data.contract.service_months)}</span>
-              {" "}{L("months")}
-            </>
-          } />
+          <ViewGrid items={[
+            { label: L("contractType"), value: data.contract.contract_type },
+            { label: L("joinDate"), value: data.contract.join_date,
+              numeric: true },
+            { label: L("serviceStart"),
+              value: data.contract.service_start_date, numeric: true },
+            { label: L("contractStart"),
+              value: data.contract.contract_start_date, numeric: true },
+            { label: L("contractEnd"),
+              value: data.contract.contract_end_date, numeric: true },
+            { label: L("probationDays"),
+              value: data.contract.probation_days, numeric: true },
+            { label: L("probationEnd"), value: data.contract.in_probation ? (
+                <span className="badge badge-warn">
+                  <span className="num">
+                    {String(data.contract.probation_end_date)}
+                  </span>
+                </span>
+              ) : String(data.contract.probation_end_date ?? "") },
+            { label: L("serviceLength"), value: (
+                <>
+                  <span className="num">
+                    {String(data.contract.service_years)}
+                  </span>{" "}{L("years")}{" "}
+                  <span className="num">
+                    {String(data.contract.service_months)}
+                  </span>{" "}{L("months")}
+                </>
+              ) },
+          ]} />
         </div>
       )}
 
