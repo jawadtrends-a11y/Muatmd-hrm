@@ -38,6 +38,7 @@ const T: Dict = {
   myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
   myLetters: { ar: "خطاباتي", en: "My Letters" },
   myAccount: { ar: "حسابي", en: "My Account" },
+  sites: { ar: "مواقع العمل", en: "Work Sites" },
   settings: { ar: "الإعدادات", en: "Settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   logout: { ar: "تسجيل الخروج", en: "Sign out" },
@@ -97,6 +98,8 @@ const NAV: NavItem[] = [
     perms: ["payroll.view", "employees.view"], needsScope: true },
   { href: "/org", key: "org", icon: IcOrg,
     perms: ["org.view"], needsScope: true },
+  { href: "/sites", key: "sites", icon: IcClock,
+    perms: ["attendance.view"], needsScope: true },
 
   // ── شخصية: لكل موظف عن نفسه ──
   { href: "/me/attendance", key: "myAttendance", icon: IcClock,

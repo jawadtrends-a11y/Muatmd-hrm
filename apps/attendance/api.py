@@ -647,9 +647,10 @@ def site_assignments(request, site_id):
     Gate.require(request.user, "attendance.shifts")
 
     if request.method == "DELETE":
-        SiteAssignment.objects.filter(
-            site=site, employment_id=request.data.get("employment_id")
-        ).delete()
+        # المعرّف من الرابط أو الجسم — الحذف يقبل الاثنين
+        eid = (request.GET.get("employment_id")
+               or request.data.get("employment_id"))
+        SiteAssignment.objects.filter(site=site, employment_id=eid).delete()
         return Response({"removed": True})
 
     ids = request.data.get("employment_ids") or []
