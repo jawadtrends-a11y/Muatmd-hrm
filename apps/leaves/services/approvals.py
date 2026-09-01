@@ -290,6 +290,14 @@ def decide(*, request_obj, approver_employment, decision, comment="",
         request_obj.status = RequestStatus.APPROVED
         request_obj.closed_at = timezone.now()
         request_obj.save()
+
+        # الطلب المعتمد يترك أثرًا حقيقيًا: سلفة تُنشأ، وبصمة
+        # تُصحَّح، ويوم يُسجَّل حاضرًا (ق-54). فشل الأثر يُسجَّل
+        # ولا يلغي الاعتماد — القرار الإداري تمّ.
+        from apps.leaves.services.requests import apply_effect
+        effect = apply_effect(request_obj)
+        ctx["effect"] = effect
+
         emit("request.approved", account_id=request_obj.account_id,
              company_id=request_obj.company_id, context=ctx, recipients=[])
     else:

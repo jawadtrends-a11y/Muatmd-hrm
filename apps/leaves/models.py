@@ -273,6 +273,8 @@ class RequestType(models.TextChoices):
     RESIGNATION = "resignation", _("استقالة")
     OVERTIME = "overtime", _("عمل إضافي")
     ATTENDANCE_FIX = "attendance_fix", _("تصحيح بصمة")
+    REMOTE_WORK = "remote_work", _("عمل عن بُعد")
+    BUSINESS_TRIP = "business_trip", _("رحلة عمل")
 
 
 class RequestStatus(models.TextChoices):

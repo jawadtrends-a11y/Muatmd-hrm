@@ -377,3 +377,76 @@ def my_leave_summary(request):
             employment=emp, status=RequestStatus.PENDING).count(),
         "recent": [_serialize_request(r) for r in recent],
     })
+
+
+# ══════════════════ الطلبات العامة (ق-54) ══════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def request_types(request):
+    """
+    الأنواع التي يستحق المستخدم تقديمها، بحقولها.
+
+    الواجهة تبني النموذج من هنا — فإضافة نوع لا تحتاج تعديلها.
+    """
+    from apps.leaves.services.requests import eligible_types
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    return Response({
+        "employee_no": emp.employee_no,
+        "is_saudi": emp.person.nationality_code == "SA",
+        "types": eligible_types(emp),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_request(request):
+    """
+    تقديم طلب — أي نوع.
+
+    الموظف يقدّم لنفسه، ومدير الموارد يقدّم بالنيابة.
+    """
+    from apps.leaves.services.requests import RequestError, create_request
+
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    emp_id = request.data.get("employment_id")
+    if emp_id:
+        Gate.require(request.user, "requests.manage")
+        from apps.employees.models import Employment
+        emp = Gate.filter_queryset(
+            request.user, "requests.manage", Employment.objects.all()
+        ).filter(id=emp_id, company_id=company_id).first()
+    else:
+        Gate.require(request.user, "requests.create")
+        emp = _my_employment(request)
+
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    rtype = request.data.get("request_type", "")
+    payload = request.data.get("payload") or {}
+
+    try:
+        res = create_request(
+            employment=emp, request_type=rtype, payload=payload,
+            note=request.data.get("note", ""),
+            attachment_url=request.data.get("attachment_url", ""))
+    except RequestError as e:
+        return Response({"detail": str(e), "code": "invalid_request"},
+                        status=400)
+
+    return Response({
+        "id": res.request.id,
+        "request_no": res.request.request_no,
+        "status": res.request.status,
+        "status_label": res.request.get_status_display(),
+        "warnings": res.warnings,
+        "effect": res.effect,
+    }, status=201)

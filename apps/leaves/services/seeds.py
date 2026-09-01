@@ -139,6 +139,40 @@ DEFAULT_CHAINS = [
      [(1, ApproverType.DIRECT_MANAGER, "", True, 72),
       (2, ApproverType.ROLE, "hr_manager", True, 72),
       (3, ApproverType.ROLE, "owner", True, None)]),
+
+    # ── الأنواع المضافة (ق-54) ──
+
+    # تصحيح البصمة: المدير المباشر يعرف إن كان الموظف حاضرًا
+    (RequestType.ATTENDANCE_FIX, "تصحيح البصمة — المدير المباشر", {}, 0,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 24)]),
+
+    # العمل عن بُعد: المدير المباشر، ودرجة ثانية للمدد الطويلة
+    (RequestType.REMOTE_WORK, "العمل عن بُعد — المدير المباشر", {}, 0,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 24)]),
+    (RequestType.REMOTE_WORK, "عمل عن بُعد ممتد — درجتان",
+     {"days_gt": 5}, 10,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 24),
+      (2, ApproverType.ROLE, "hr_manager", True, 48)]),
+
+    # الإضافي: المدير يعتمد، والموارد تراجع أثره المالي
+    (RequestType.OVERTIME, "اعتماد العمل الإضافي", {}, 0,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
+      (2, ApproverType.ROLE, "hr_staff", True, 72)]),
+
+    # العهدة: الموارد تسجّلها فهي مسؤولة عن جردها
+    (RequestType.ASSET, "تسجيل العهدة", {}, 0,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
+      (2, ApproverType.ROLE, "hr_staff", True, 72)]),
+
+    # التذكرة: استحقاق سنوي — الموارد ثم المالية عبر المالك
+    (RequestType.TICKET, "تذكرة السفر السنوية", {}, 0,
+     [(1, ApproverType.ROLE, "hr_manager", True, 72),
+      (2, ApproverType.ROLE, "owner", True, None)]),
+
+    # رحلة العمل: المدير ثم الموارد — والبدل بسياسة المنشأة
+    (RequestType.BUSINESS_TRIP, "رحلة العمل", {}, 0,
+     [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
+      (2, ApproverType.ROLE, "hr_manager", True, 72)]),
 ]
 
 
