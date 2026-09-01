@@ -426,3 +426,81 @@ def monthly_board(request):
         "total": len(rows),
         "rows": rows,
     })
+
+
+# ══════════════════ حضوري (ق-58) ══════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_attendance(request):
+    """
+    سجل حضور الموظف نفسه — بلا صلاحية إدارية.
+
+    ق-58: الموظف يرى حضوره هو، لا حضور زملائه.
+    """
+    from datetime import date
+
+    from apps.attendance.models import AttendanceDay
+    from apps.employees.models import Employment, EmploymentStatus
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    emp = Employment.objects.filter(
+        person=person, company_id=_company_id(request),
+        status=EmploymentStatus.ACTIVE).first()
+    if emp is None:
+        emp = Employment.objects.filter(person=person).first()
+    if emp is None:
+        return Response({"detail": "لا ارتباط وظيفي"}, status=404)
+
+    try:
+        year = int(request.GET.get("year") or date.today().year)
+        month = int(request.GET.get("month") or date.today().month)
+    except ValueError:
+        return Response({"detail": "سنة أو شهر غير صالح"}, status=400)
+
+    days = AttendanceDay.objects.filter(
+        employment=emp, work_date__year=year, work_date__month=month
+    ).order_by("work_date")
+
+    rows = []
+    totals = {"present": 0, "absent": 0, "leave": 0, "weekend": 0,
+              "late_minutes": 0, "worked_minutes": 0,
+              "overtime_minutes": 0, "approved_overtime": 0}
+
+    for d in days:
+        totals[d.status] = totals.get(d.status, 0) + 1
+        totals["late_minutes"] += d.late_minutes or 0
+        totals["worked_minutes"] += d.worked_minutes or 0
+        totals["overtime_minutes"] += d.overtime_minutes or 0
+        totals["approved_overtime"] += d.approved_overtime_minutes or 0
+
+        rows.append({
+            "date": d.work_date,
+            "status": d.status,
+            "status_label": d.get_status_display(),
+            "first_in": (timezone.localtime(d.first_in).strftime("%H:%M")
+                         if d.first_in else ""),
+            "last_out": (timezone.localtime(d.last_out).strftime("%H:%M")
+                         if d.last_out else ""),
+            "late_minutes": d.late_minutes or 0,
+            "worked_minutes": d.worked_minutes or 0,
+            "overtime_minutes": d.overtime_minutes or 0,
+            "approved_overtime": d.approved_overtime_minutes or 0,
+            "adjusted": d.is_manually_adjusted,
+            "note": d.adjustment_note or "",
+        })
+
+    return Response({
+        "employee_no": emp.employee_no,
+        "year": year,
+        "month": month,
+        "totals": {
+            **totals,
+            "worked_hours": f"{totals['worked_minutes'] / 60:.1f}",
+            "overtime_hours": f"{totals['approved_overtime'] / 60:.1f}",
+        },
+        "days": rows,
+    })

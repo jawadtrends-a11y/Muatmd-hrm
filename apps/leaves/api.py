@@ -450,3 +450,130 @@ def submit_request(request):
         "warnings": res.warnings,
         "effect": res.effect,
     }, status=201)
+
+
+# ══════════════════ إجازاتي وخطاباتي (ق-58) ══════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_leaves_detail(request):
+    """
+    إجازاتي — تبويبان: الأرصدة والتاريخ (ق-58).
+
+    الأرصدة تعرض التدرّج النظامي: السنوية، والمرضية بشرائحها
+    الثلاث (م/117).
+    """
+    from datetime import date
+
+    from apps.leaves.models import LeaveBalance, LeaveType, RequestType
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    year = int(request.GET.get("year") or date.today().year)
+
+    # ── الأرصدة ──
+    balances = []
+    for b in LeaveBalance.objects.filter(
+            employment=emp, year=year).select_related("leave_type"):
+        lt = b.leave_type
+        tiers = [
+            {"from_day": t.from_day, "to_day": t.to_day,
+             "pay_percentage": str(t.pay_percentage)}
+            for t in lt.tiers.order_by("from_day")
+        ]
+        balances.append({
+            "code": lt.code,
+            "name_ar": lt.name_ar,
+            "is_paid": lt.is_paid,
+            "days_per_year": str(lt.days_per_year),
+            "opening": str(b.opening_balance),
+            "accrued": str(b.accrued),
+            "consumed": str(b.consumed),
+            "adjusted": str(b.adjusted),
+            "available": str(b.available),
+            "tiers": tiers,
+        })
+
+    # أنواع بلا رصيد (تُصرف بالحدث لا بالرصيد)
+    coded = {b["code"] for b in balances}
+    event_types = [
+        {"code": t.code, "name_ar": t.name_ar,
+         "days_per_event": str(t.days_per_event),
+         "is_paid": t.is_paid,
+         "once_per_service": t.once_per_service}
+        for t in LeaveType.objects.filter(
+            company_id=emp.company_id, is_active=True)
+        if t.code not in coded and t.days_per_event
+    ]
+
+    # ── التاريخ: السابقة والمستقبلية ──
+    from apps.leaves.models import Request as LeaveRequest
+
+    history = []
+    for r in LeaveRequest.objects.filter(
+            employment=emp,
+            request_type=RequestType.LEAVE).order_by("-created_at")[:60]:
+        p = r.payload or {}
+        start = p.get("start_date", "")
+        history.append({
+            "request_no": r.request_no,
+            "leave_type": p.get("leave_type_name") or p.get("leave_type_code", ""),
+            "start_date": start,
+            "end_date": p.get("end_date", ""),
+            "days": str(p.get("charged_days") or p.get("days") or ""),
+            "status": r.status,
+            "status_label": r.get_status_display(),
+            "is_future": bool(start and start > str(date.today())),
+        })
+
+    return Response({
+        "year": year,
+        "employee_no": emp.employee_no,
+        "balances": balances,
+        "event_types": event_types,
+        "history": history,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_letters(request):
+    """
+    خطاباتي — الشهادات التي صدرت لي (ق-58).
+
+    الشهادة صالحة 30 يومًا من إصدارها (ق-54).
+    """
+    from datetime import date
+
+    from apps.leaves.models import Request as LeaveRequest
+    from apps.leaves.models import RequestStatus, RequestType
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    rows = []
+    for r in LeaveRequest.objects.filter(
+            employment=emp,
+            request_type=RequestType.CERTIFICATE).order_by("-created_at"):
+        p = r.payload or {}
+        valid_until = p.get("valid_until", "")
+        expired = bool(valid_until and valid_until < str(date.today()))
+        rows.append({
+            "id": r.id,
+            "request_no": r.request_no,
+            "certificate_type": p.get("certificate_type", ""),
+            "addressed_to": p.get("addressed_to", ""),
+            "include_salary": bool(p.get("include_salary")),
+            "status": r.status,
+            "status_label": r.get_status_display(),
+            "issued_at": p.get("issued_at", ""),
+            "valid_until": valid_until,
+            "expired": expired,
+            "downloadable": (r.status == RequestStatus.APPROVED
+                             and not expired),
+        })
+
+    return Response(rows)

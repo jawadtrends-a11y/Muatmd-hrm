@@ -465,6 +465,7 @@ class Command(BaseCommand):
 
         self._seed_users_and_roles(account, company, employments)
         self._seed_managers(employments)
+        self._seed_balances(employments)
         self._seed_documents(account, company, employments)
         self._seed_advances_assets(account, company, employments)
 
@@ -534,6 +535,26 @@ class Command(BaseCommand):
                 scope=scope)
 
     # ══════════ الوثائق والسلف والعهد ══════════
+
+    def _seed_balances(self, employments):
+        """
+        أرصدة الإجازات — تُستحق بالتناسب من تاريخ المباشرة.
+
+        بلاها لا يرى الموظف رصيده ولا يستطيع طلب إجازة.
+        """
+        from apps.leaves.models import LeaveType
+        from apps.leaves.services.balances import accrue, ensure_balance
+
+        for emp, *_ in employments:
+            types = LeaveType.objects.filter(
+                company_id=emp.company_id, is_active=True,
+                accrual_method__in=("monthly", "annual"))
+            for lt in types:
+                try:
+                    ensure_balance(emp, lt, date.today().year)
+                    accrue(emp, lt)
+                except Exception:
+                    continue
 
     def _seed_documents(self, account, company, employments):
         """وثائق بحالات انتهاء متنوعة — منتهية وحرجة وسليمة."""

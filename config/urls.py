@@ -135,6 +135,9 @@ urlpatterns = [
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
     path("api/requests/", leaves_api.submit_request, name="submit-request"),
     path("api/me/profile/", employees_api.my_profile, name="my-profile"),
+    path("api/me/attendance/", attendance_api.my_attendance, name="my-attendance"),
+    path("api/me/leaves-detail/", leaves_api.my_leaves_detail, name="my-leaves-detail"),
+    path("api/me/letters/", leaves_api.my_letters, name="my-letters"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
