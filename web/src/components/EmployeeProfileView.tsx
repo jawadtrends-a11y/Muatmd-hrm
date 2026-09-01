@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiPost, apiPut, apiDelete, API_BASE, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
+import NationalityField, { nationalityLabel } from "@/components/NationalityField";
 import {
   IcAlert, IcCheck, IcClock, IcDoc, IcLeave, IcOrg, IcPayroll,
   IcPlus, IcUser, IcUsers, IcWallet, IcX,
@@ -349,6 +350,10 @@ function EditableSection({
             } else if (f.kind === "select" && f.options) {
               display = f.options.find((o) => o.value === String(v))?.label
                 || display;
+            } else if (f.key === "nationality_code") {
+              display = nationalityLabel(String(v || ""), "ar") || "—";
+            } else if (f.key === "nationality_code") {
+              display = nationalityLabel(String(v || ""), "ar") || "—";
             } else if (f.kind === "number" || f.kind === "date") {
               display = <span className="num">{display}</span>;
             }
@@ -388,6 +393,12 @@ function EditableSection({
                 }}>
                   {String(values[f.key] ?? "—")}
                 </div>
+              ) : f.key === "nationality_code" ? (
+                <NationalityField value={draft[f.key] ?? ""}
+                  onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
+              ) : f.key === "nationality_code" ? (
+                <NationalityField value={draft[f.key] ?? ""}
+                  onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
               ) : f.kind === "date" ? (
                 <DateField value={draft[f.key] ?? ""}
                   onChange={(v) => setDraft({ ...draft, [f.key]: v })} />

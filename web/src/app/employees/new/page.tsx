@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
+import NationalityField from "@/components/NationalityField";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 
 const T: Dict = {
@@ -81,13 +82,6 @@ const T: Dict = {
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
 };
 
-const NATIONALITIES = [
-  ["SA", "السعودية"], ["EG", "مصر"], ["PK", "باكستان"], ["IN", "الهند"],
-  ["BD", "بنغلاديش"], ["PH", "الفلبين"], ["SD", "السودان"],
-  ["YE", "اليمن"], ["SY", "سوريا"], ["JO", "الأردن"], ["LB", "لبنان"],
-  ["NP", "نيبال"], ["LK", "سريلانكا"], ["ID", "إندونيسيا"],
-  ["ET", "إثيوبيا"], ["KE", "كينيا"], ["MA", "المغرب"], ["TN", "تونس"],
-];
 
 type Component = { id: number; code: string; name_ar: string;
                    is_recurring: boolean };
@@ -304,12 +298,7 @@ export default function NewEmployeePage() {
             </select>
           </F>
           <F label={L("nationality")}>
-            <select className="select" value={nationality}
-              onChange={(e) => setNationality(e.target.value)}>
-              {NATIONALITIES.map(([code, name]) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
-            </select>
+            <NationalityField value={nationality} onChange={setNationality} />
           </F>
         </div>
 
