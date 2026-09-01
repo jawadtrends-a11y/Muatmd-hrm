@@ -44,6 +44,10 @@ def test_no_raw_queryset_in_api_views():
         "BankTemplate", "Holiday", "JobTitle", "ApprovalChain",
         # رموز البنوك (ق-57): حقيقة نظامية مشتركة بين كل الحسابات
         "Bank",
+        # الملفات (ق-61): معزولة بـRLS، والوصول عبر مسار محمي
+        "StoredFile",
+        # رموز المصادقة: مقيّدة بـuser=request.user — لا مجال لتسرّب
+        "AuthToken",
     }
     offenders = []
     for path in _python_files("api/*.py", "api.py", "views.py", "views/*.py"):

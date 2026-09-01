@@ -37,6 +37,7 @@ const T: Dict = {
   myTrack: { ar: "طلباتي", en: "My Requests" },
   myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
   myLetters: { ar: "خطاباتي", en: "My Letters" },
+  myAccount: { ar: "حسابي", en: "My Account" },
   settings: { ar: "الإعدادات", en: "Settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   logout: { ar: "تسجيل الخروج", en: "Sign out" },
@@ -110,6 +111,8 @@ const NAV: NavItem[] = [
     perms: ["payslips.view_own"] },
   { href: "/me/letters", key: "myLetters", icon: IcDoc,
     perms: ["requests.create"] },
+  // ق-58: حسابي لكل مستخدم — صورته ولغته وكلمة مروره
+  { href: "/me/account", key: "myAccount", icon: IcUser },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -256,19 +259,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ padding: 12, borderTop: "1px solid var(--line)" }}>
-          <Link
-            href="/settings"
-            style={{
-              display: "flex", alignItems: "center", gap: 11,
-              padding: "9px 12px", borderRadius: "var(--radius-sm)",
-              color: "var(--ink-2)", fontWeight: 500,
-            }}
-          >
-            <IcSettings size={19} />
-            {L("settings")}
-          </Link>
-        </div>
+        {/* ق-58: إعدادات الشركة لمن يملكها — والموظف له «حسابي» */}
+        {hasAdminScope && (
+          <div style={{ padding: 12, borderTop: "1px solid var(--line)" }}>
+            <Link
+              href="/settings"
+              style={{
+                display: "flex", alignItems: "center", gap: 11,
+                padding: "9px 12px", borderRadius: "var(--radius-sm)",
+                color: "var(--ink-2)", fontWeight: 500,
+              }}
+            >
+              <IcSettings size={19} />
+              {L("settings")}
+            </Link>
+          </div>
+        )}
       </aside>
 
       {/* ══ المحتوى ══ */}

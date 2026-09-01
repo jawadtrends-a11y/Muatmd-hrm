@@ -139,6 +139,10 @@ urlpatterns = [
     path("api/me/leaves-detail/", leaves_api.my_leaves_detail, name="my-leaves-detail"),
     path("api/me/letters/", leaves_api.my_letters, name="my-letters"),
     path("api/requests/preview/", leaves_api.preview_request, name="preview-request"),
+    path("api/me/account/", employees_api.my_account, name="my-account"),
+    path("api/me/password/", employees_api.change_my_password, name="my-password"),
+    path("api/me/avatar/", employees_api.my_avatar, name="my-avatar"),
+    path("api/files/<int:file_id>/", employees_api.serve_file, name="serve-file"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

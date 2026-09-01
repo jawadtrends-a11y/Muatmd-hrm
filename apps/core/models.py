@@ -59,3 +59,9 @@ class CompanyScopedModel(AccountScopedModel):
 
 # سجل عمليات المنشأة (ق-44)
 from apps.core.models_audit import AuditAction, AuditEntry  # noqa: E402,F401
+
+
+# التخزين الموحّد للملفات (ق-61)
+from apps.core.models_files import (  # noqa: E402,F401
+    BLOCKED_EXTENSIONS, KIND_RULES, FileKind, StoredFile,
+)

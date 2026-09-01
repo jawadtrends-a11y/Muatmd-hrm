@@ -79,6 +79,12 @@ class Account(TimeStampedModel):
         _("حساب تجريبي"), default=False,
         help_text=_("الحسابات التجريبية وحدها قابلة للتصفير"),
     )
+    # ق-61: حدّ التخزين بالميغابايت — يضبطه السوبر أدمن.
+    # فارغ يعني بلا حد، وهو الافتراضي حتى نقيس الاستخدام الفعلي.
+    storage_limit_mb = models.IntegerField(
+        _("حد التخزين (ميغابايت)"), null=True, blank=True,
+        help_text=_("فارغ = بلا حد"))
+
     suspended_at = models.DateTimeField(_("تاريخ الإيقاف"), null=True, blank=True)
     suspension_reason = models.TextField(_("سبب الإيقاف"), blank=True)
 

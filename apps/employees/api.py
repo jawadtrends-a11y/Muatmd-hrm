@@ -446,3 +446,157 @@ def my_profile(request):
             "assets_value": f"{sum(float(a.value) for a in assets):.2f}",
         },
     })
+
+
+# ══════════════════ حسابي — الإعدادات الشخصية (ق-58) ══════════════════
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def my_account(request):
+    """
+    إعدادات المستخدم عن نفسه: الصورة واللغة.
+
+    متاحة لكل مصادَق بلا صلاحية — فهي بياناته هو.
+    """
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    if request.method == "PUT":
+        locale = request.data.get("preferred_locale")
+        if locale in ("ar", "en", "ur", "hi", "tl", "bn"):
+            person.preferred_locale = locale
+            person.save(update_fields=["preferred_locale", "updated_at"])
+
+    from apps.core.models_files import FileKind, StoredFile
+    avatar = StoredFile.objects.filter(
+        person=person, kind=FileKind.AVATAR, is_deleted=False
+    ).order_by("-created_at").first()
+
+    return Response({
+        "username": request.user.username,
+        "name_ar": person.display_name,
+        "email": person.email,
+        "mobile": person.mobile_e164,
+        "preferred_locale": person.preferred_locale,
+        "avatar_id": avatar.id if avatar else None,
+        "avatar_url": f"/api/files/{avatar.id}/" if avatar else None,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_my_password(request):
+    """
+    تغيير كلمة المرور — بالقديمة والجديدة.
+
+    القديمة شرط: من ترك جهازه مفتوحًا لا يُغيَّر عليه.
+    """
+    from django.contrib.auth import update_session_auth_hash
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    old = request.data.get("current_password", "")
+    new = request.data.get("new_password", "")
+
+    if not request.user.check_password(old):
+        return Response({"detail": "كلمة المرور الحالية غير صحيحة",
+                         "code": "wrong_password"}, status=400)
+
+    if old == new:
+        return Response({"detail": "كلمة المرور الجديدة تطابق الحالية"},
+                        status=400)
+
+    try:
+        validate_password(new, request.user)
+    except DjangoValidationError as e:
+        return Response({"detail": " · ".join(e.messages),
+                         "code": "weak_password"}, status=400)
+
+    request.user.set_password(new)
+    request.user.save(update_fields=["password"])
+    update_session_auth_hash(request, request.user)
+
+    # إبطال كل الرموز الأخرى — تغيير كلمة المرور يُخرج الأجهزة
+    from apps.accounts.models_tokens import AuthToken
+    AuthToken.objects.filter(user=request.user).update(revoked=True)
+
+    return Response({
+        "changed": True,
+        "note": "غُيّرت كلمة المرور — سُجّل خروجك من كل الأجهزة",
+    })
+
+
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def my_avatar(request):
+    """رفع الصورة الشخصية أو حذفها (ق-61)."""
+    from apps.core.models_files import FileKind, StoredFile
+    from apps.core.services.files import UploadError, soft_delete, store
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    if request.method == "DELETE":
+        for f in StoredFile.objects.filter(
+                person=person, kind=FileKind.AVATAR, is_deleted=False):
+            soft_delete(f, by_person=person)
+        return Response({"deleted": True})
+
+    uploaded = request.FILES.get("file")
+    if uploaded is None:
+        return Response({"detail": "لم يُرفع ملف"}, status=400)
+
+    # الصورة الجديدة تحلّ محل القديمة
+    for f in StoredFile.objects.filter(
+            person=person, kind=FileKind.AVATAR, is_deleted=False):
+        soft_delete(f, by_person=person)
+
+    try:
+        obj, dup = store(
+            uploaded=uploaded, kind=FileKind.AVATAR,
+            account=person.account, person=person, uploaded_by=person)
+    except UploadError as e:
+        return Response({"detail": str(e), "code": "upload_error"},
+                        status=400)
+
+    return Response({
+        "id": obj.id,
+        "url": f"/api/files/{obj.id}/",
+        "size": obj.size_label,
+        "was_duplicate": dup,
+    }, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def serve_file(request, file_id):
+    """
+    يخدم ملفًا بعد فحص الصلاحية (ق-61).
+
+    لا رابط مباشر: من يعرف المسار لا يصل، ومن له حق الوصول يصل.
+    """
+    from django.http import FileResponse, Http404
+
+    from apps.core.models_files import FileKind, StoredFile
+
+    obj = StoredFile.objects.filter(id=file_id, is_deleted=False).first()
+    if obj is None:
+        raise Http404
+
+    person = getattr(request.user, "person", None)
+
+    # الصورة الشخصية وملفات صاحبها: يراها هو
+    if person and obj.person_id == person.id:
+        pass
+    elif obj.kind == FileKind.AVATAR:
+        pass      # الصور الشخصية مرئية لزملاء الحساب
+    else:
+        Gate.require(request.user, "employees.view")
+
+    try:
+        return FileResponse(obj.file.open("rb"),
+                            filename=obj.original_name)
+    except FileNotFoundError:
+        raise Http404
