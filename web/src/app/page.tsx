@@ -390,15 +390,39 @@ export default function HomePage() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
+  const [ws, setWs] = useState<{
+    permissions: string[];
+    roles?: { scope: string }[];
+  } | null>(null);
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
+    apiGet<{ permissions: string[]; roles?: { scope: string }[] }>(
+      "/me/workspace/")
+      .then(setWs)
+      .catch(() => setWs({ permissions: [] }));
+  }, []);
+
+  useEffect(() => {
     const year = new Date().getFullYear();
+
+    // الموظف العادي لا يستدعي المسارات الإدارية أصلًا — فلا
+    // نداءات تفشل ولا تحذيرات في وحدة التحكم
+    const perms = new Set(ws?.permissions ?? []);
+    const scopes = (ws?.roles ?? []).map((r) => r.scope);
+    const isAdmin = scopes.some((s) => s !== "own");
+
     Promise.all([
       apiGet<Profile>("/me/profile/").catch(() => null),
-      apiGet<Approval[]>("/me/approvals/").catch(() => [] as Approval[]),
-      apiGet<Run[]>(`/payroll/runs/?year=${year}`).catch(() => [] as Run[]),
-      apiGet<Board>("/attendance/daily/").catch(() => null),
+      isAdmin
+        ? apiGet<Approval[]>("/me/approvals/").catch(() => [] as Approval[])
+        : Promise.resolve([] as Approval[]),
+      isAdmin && perms.has("payroll.view")
+        ? apiGet<Run[]>(`/payroll/runs/?year=${year}`).catch(() => [] as Run[])
+        : Promise.resolve([] as Run[]),
+      isAdmin && perms.has("attendance.view")
+        ? apiGet<Board>("/attendance/daily/").catch(() => null)
+        : Promise.resolve(null),
     ]).then(([p, a, runs, b]) => {
       setProfile(p);
       setApprovals(a);
@@ -406,7 +430,8 @@ export default function HomePage() {
       setBoard(b);
       setBusy(false);
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws]);
 
   if (busy) {
     return (
