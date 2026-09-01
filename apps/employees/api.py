@@ -702,19 +702,64 @@ def employee_profile(request, employment_id):
                 "component": localized(ln.component, locale=lang),
                 "code": ln.component.code,
                 "amount": str(ln.amount),
+                "is_deduction": getattr(ln.component, "is_deduction", False),
                 "in_gosi": getattr(ln.component, "in_gosi_wage", False),
                 "in_eosb": getattr(ln.component, "in_eosb_wage", False),
             })
             gross += float(ln.amount)
 
-    # ── السجل التاريخي للراتب ──
-    history = [{
-        "effective_from": st.effective_from,
-        "effective_to": st.effective_to,
-        "gross": str(sum(l.amount for l in st.lines.all())),
-        "reason": getattr(st, "change_reason", ""),
-    } for st in SalaryStructure.objects.filter(
-        employment=emp).order_by("-effective_from")[:10]]
+    # ── السجل التاريخي (ق-66): نسبة التغيير ومن أجراه ──
+    structures = list(SalaryStructure.objects.filter(
+        employment=emp).order_by("-effective_from").prefetch_related(
+        "lines__component").select_related("approved_by_person")[:12])
+
+    history = []
+    for i, st in enumerate(structures):
+        total = sum(float(l.amount) for l in st.lines.all())
+
+        # النسبة مقارنةً بما قبله (الأقدم في القائمة)
+        change_pct = None
+        if i + 1 < len(structures):
+            prev = sum(float(l.amount) for l in structures[i + 1].lines.all())
+            if prev > 0:
+                change_pct = round((total - prev) / prev * 100, 2)
+
+        history.append({
+            "id": st.id,
+            "effective_from": st.effective_from,
+            "effective_to": st.effective_to,
+            "gross": f"{total:.2f}",
+            "change_percent": change_pct,
+            "reason": st.reason or "",
+            "note": st.note or "",
+            "changed_by": (st.approved_by_person.display_name
+                           if st.approved_by_person else ""),
+            "lines": [{
+                "component": localized(l.component, locale=lang),
+                "amount": str(l.amount),
+                "is_deduction": getattr(l.component, "is_deduction", False),
+            } for l in st.lines.all()],
+        })
+
+    # ── تفصيل الراتب الحالي (ق-66): استحقاقات ثم خصومات ثم صافٍ ──
+    earnings = [l for l in lines if not l.get("is_deduction")]
+    deductions = [l for l in lines if l.get("is_deduction")]
+    total_earnings = sum(float(l["amount"]) for l in earnings)
+    total_deductions = sum(float(l["amount"]) for l in deductions)
+
+    # حصة الموظف من التأمينات — خصم فعلي من راتبه
+    # الحصة تُحتسب في المسير — نأخذها من آخر قسيمة معتمدة
+    gosi_employee = 0.0
+    if emp.is_gosi_registered and not emp.gosi_borne_by_company:
+        try:
+            from apps.payroll.models import Payslip
+            last = Payslip.objects.filter(
+                employment=emp).order_by("-id").first()
+            if last:
+                gosi_employee = float(
+                    getattr(last, "gosi_employee_share", 0) or 0)
+        except Exception:      # noqa: BLE001
+            gosi_employee = 0.0
 
     # ── التابعون وأرقام الطوارئ ──
     dependents = [{
@@ -807,6 +852,13 @@ def employee_profile(request, employment_id):
         "salary": {
             "gross": f"{gross:.2f}",
             "lines": lines,
+            # ق-66: الراتب يُعرض كما يُبنى
+            "earnings": earnings,
+            "deductions": deductions,
+            "total_earnings": f"{total_earnings:.2f}",
+            "total_deductions": f"{total_deductions:.2f}",
+            "gosi_employee": f"{gosi_employee:.2f}",
+            "net": f"{total_earnings - total_deductions - gosi_employee:.2f}",
             "history": history,
         },
 

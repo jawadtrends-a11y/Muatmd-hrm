@@ -97,6 +97,14 @@ const T: Dict = {
   inGosi: { ar: "بأجر التأمينات", en: "In GOSI" },
   inEosb: { ar: "بأجر المكافأة", en: "In EOSB" },
   history: { ar: "السجل التاريخي", en: "History" },
+  earnings: { ar: "الاستحقاقات", en: "Earnings" },
+  totalEarnings: { ar: "إجمالي الاستحقاقات", en: "Total earnings" },
+  deductions: { ar: "الاستقطاعات", en: "Deductions" },
+  gosiShare: { ar: "حصة التأمينات", en: "GOSI share" },
+  netSalary: { ar: "صافي الراتب", en: "Net salary" },
+  changedBy: { ar: "عدّله", en: "Changed by" },
+  noChange: { ar: "بلا تغيير", en: "No change" },
+  currentSalary: { ar: "الراتب الحالي", en: "Current" },
   effectiveFrom: { ar: "ساري من", en: "From" },
 
   // التأمينات
@@ -183,10 +191,22 @@ type Profile = Record<string, never> & {
   contract: Record<string, string | number | boolean | null>;
   salary: {
     gross: string;
-    lines: { component: string; amount: string;
-             in_gosi: boolean; in_eosb: boolean }[];
-    history: { effective_from: string; effective_to: string | null;
-               gross: string }[];
+    earnings: { component: string; amount: string }[];
+    deductions: { component: string; amount: string }[];
+    total_earnings: string;
+    total_deductions: string;
+    gosi_employee: string;
+    net: string;
+    history: {
+      id: number;
+      effective_from: string;
+      effective_to: string | null;
+      gross: string;
+      change_percent: number | null;
+      reason: string;
+      changed_by: string;
+      lines: { component: string; amount: string }[];
+    }[];
   };
   gosi: Record<string, string | boolean>;
   bank: Record<string, string>;
@@ -988,54 +1008,79 @@ export default function EmployeeProfileView({
 
       {tab === "salary" && (
         <div className="stack">
+          {/* ق-66: الراتب يُعرض كما يُبنى */}
           <div className="card" style={{ padding: 20 }}>
-            <div className="spread" style={{ marginBottom: 14 }}>
-              <div className="row">
-                <IcPayroll size={19} />
-                <h3 style={{ fontSize: "1rem" }}>{L("salary")}</h3>
-              </div>
-              <div style={{
-                fontSize: "1.5rem", fontWeight: 600, color: "var(--teal)",
-              }}>
-                <span className="num">{money(data.salary.gross)}</span>
-              </div>
+            <div className="row" style={{ marginBottom: 16 }}>
+              <IcPayroll size={19} />
+              <h3 style={{ fontSize: "1rem" }}>{L("currentSalary")}</h3>
             </div>
 
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{L("component")}</th>
-                  <th style={{ textAlign: "end" }}>{L("amount")}</th>
-                  <th style={{ width: 120 }}>{L("inGosi")}</th>
-                  <th style={{ width: 130 }}>{L("inEosb")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.salary.lines.map((l, i) => (
-                  <tr key={i}>
-                    <td>{l.component}</td>
-                    <td style={{ textAlign: "end" }}>
-                      <span className="num">{money(l.amount)}</span>
-                    </td>
-                    <td>{l.in_gosi
-                      ? <span className="badge badge-ok">{L("yes")}</span> : "—"}</td>
-                    <td>{l.in_eosb
-                      ? <span className="badge badge-ok">{L("yes")}</span> : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {/* الاستحقاقات */}
+            {data.salary.earnings.map((l, i) => (
+              <div key={i} className="spread" style={{
+                padding: "10px 0", borderBottom: "1px solid var(--line)",
+              }}>
+                <span>{l.component}</span>
+                <span style={{ fontWeight: 600, color: "var(--ok)" }}>
+                  + <span className="num">{money(l.amount)}</span>
+                </span>
+              </div>
+            ))}
+
+            <div className="spread" style={{
+              padding: "12px 0", borderBottom: "2px solid var(--line)",
+              fontWeight: 600,
+            }}>
+              <span>{L("totalEarnings")}</span>
+              <span className="num">{money(data.salary.total_earnings)}</span>
+            </div>
+
+            {/* الاستقطاعات */}
+            {data.salary.deductions.map((l, i) => (
+              <div key={i} className="spread" style={{
+                padding: "10px 0", borderBottom: "1px solid var(--line)",
+              }}>
+                <span>{l.component}</span>
+                <span style={{ fontWeight: 600, color: "var(--danger)" }}>
+                  − <span className="num">{money(l.amount)}</span>
+                </span>
+              </div>
+            ))}
+
+            {Number(data.salary.gosi_employee) > 0 && (
+              <div className="spread" style={{
+                padding: "10px 0", borderBottom: "1px solid var(--line)",
+              }}>
+                <span>{L("gosiShare")}</span>
+                <span style={{ fontWeight: 600, color: "var(--danger)" }}>
+                  − <span className="num">{money(data.salary.gosi_employee)}</span>
+                </span>
+              </div>
+            )}
+
+            {/* الصافي */}
+            <div className="spread" style={{
+              padding: "16px 0 4px", marginTop: 4,
+            }}>
+              <span style={{ fontSize: "1.05rem", fontWeight: 600 }}>
+                {L("netSalary")}
+              </span>
+              <span style={{
+                fontSize: "1.6rem", fontWeight: 700, color: "var(--teal)",
+              }}>
+                <span className="num">{money(data.salary.net)}</span>
+              </span>
+            </div>
           </div>
 
-          {data.salary.history.length > 1 && (
+          {/* السجل التاريخي */}
+          {data.salary.history.length > 0 && (
             <div className="card" style={{ padding: 20 }}>
-              <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>
+              <h3 style={{ fontSize: "1rem", marginBottom: 14 }}>
                 {L("history")}
               </h3>
-              {data.salary.history.map((h, i) => (
-                <Row key={i}
-                  label={`${L("effectiveFrom")} ${h.effective_from}`}
-                  value={money(h.gross)} numeric />
+              {data.salary.history.map((h) => (
+                <SalaryHistoryRow key={h.id} row={h} L={L} />
               ))}
             </div>
           )}
@@ -1248,6 +1293,93 @@ function AuditTab({
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/* ══ صف السجل التاريخي للراتب (ق-66) ══ */
+
+function SalaryHistoryRow({
+  row, L,
+}: {
+  row: {
+    effective_from: string; gross: string;
+    change_percent: number | null; reason: string; changed_by: string;
+    lines: { component: string; amount: string }[];
+  };
+  L: (k: string, f?: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const pct = row.change_percent;
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--line)" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", width: "100%", alignItems: "center", gap: 12,
+          padding: "12px 0", border: "none", background: "transparent",
+          font: "inherit", cursor: "pointer", textAlign: "start",
+        }}
+      >
+        <span style={{
+          width: 18, color: "var(--ink-3)", fontSize: "1.1rem",
+        }}>
+          {open ? "−" : "+"}
+        </span>
+
+        <span className="num" style={{ minWidth: 100 }}>
+          {row.effective_from}
+        </span>
+
+        {pct != null && (
+          <span style={{
+            fontWeight: 600, minWidth: 80,
+            color: pct > 0 ? "var(--ok)" : pct < 0 ? "var(--danger)" : undefined,
+          }}>
+            {pct > 0 ? "+" : ""}<span className="num">{pct}</span>%
+          </span>
+        )}
+
+        <span className="grow" />
+
+        <span style={{ fontWeight: 600 }}>
+          <span className="num">
+            {Number(row.gross).toLocaleString("en-US", {
+              minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 0 14px 30px" }}>
+          {row.lines.map((l, i) => (
+            <div key={i} className="spread" style={{
+              padding: "6px 0", fontSize: ".9rem",
+            }}>
+              <span className="muted">{l.component}</span>
+              <span className="num">
+                {Number(l.amount).toLocaleString("en-US", {
+                  minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          ))}
+
+          {(row.reason || row.changed_by) && (
+            <div className="muted" style={{
+              fontSize: ".84rem", marginTop: 8,
+              paddingTop: 8, borderTop: "1px solid var(--line)",
+            }}>
+              {row.reason && <div>{row.reason}</div>}
+              {row.changed_by && (
+                <div>{L("changedBy")}: {row.changed_by}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
