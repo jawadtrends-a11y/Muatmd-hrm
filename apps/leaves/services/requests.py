@@ -53,15 +53,15 @@ class RequestSpec:
 SPECS = {
     RequestType.LEAVE: RequestSpec(
         code="leave", name_ar="طلب إجازة", icon="leave",
-        required_fields=("leave_type_code", "start_date", "days"),
+        required_fields=("leave_type_code", "start_date", "end_date"),
         optional_fields=("note", "attachment_url"),
-        hint_ar="يُخصم من رصيدك ويُسجَّل في الحضور عند الاعتماد",
+        hint_ar="اختر من تاريخ إلى تاريخ — النظام يحتسب المخصوم من رصيدك",
     ),
     RequestType.ATTENDANCE_FIX: RequestSpec(
         code="attendance_fix", name_ar="طلب تصحيح بصمة", icon="clock",
-        required_fields=("work_date", "reason"),
+        required_fields=("work_date", "fix_target", "reason"),
         optional_fields=("first_in", "last_out", "note"),
-        hint_ar="يعدّل سجل حضورك لذلك اليوم عند الاعتماد",
+        hint_ar="حدّد أي بصمة تصحّح — ولا يُقبل طلبان لنفس اليوم",
     ),
     RequestType.PERMISSION: RequestSpec(
         code="permission", name_ar="طلب استئذان", icon="clock",
@@ -89,9 +89,9 @@ SPECS = {
     ),
     RequestType.BUSINESS_TRIP: RequestSpec(
         code="business_trip", name_ar="طلب رحلة عمل", icon="doc",
-        required_fields=("destination", "start_date", "days", "purpose"),
+        required_fields=("destination", "start_date", "end_date", "purpose"),
         optional_fields=("estimated_cost", "note"),
-        hint_ar="بدل الانتداب حسب سياسة المنشأة",
+        hint_ar="من المغادرة إلى العودة — لا تُخصم من رصيد الإجازات",
     ),
     RequestType.TICKET: RequestSpec(
         code="ticket", name_ar="طلب تذكرة سفر", icon="doc",
@@ -108,15 +108,15 @@ SPECS = {
     ),
     RequestType.RESIGNATION: RequestSpec(
         code="resignation", name_ar="طلب إنهاء عقد", icon="alert",
-        required_fields=("last_working_day", "reason"),
+        required_fields=("termination_reason", "request_date"),
         optional_fields=("note",),
-        hint_ar="يبقى مفتوحًا حتى إنهاء كل معاملاتك",
+        hint_ar="مدة الإشعار 30 يومًا تبدأ من تاريخ الاعتماد النهائي",
     ),
     RequestType.OVERTIME: RequestSpec(
         code="overtime", name_ar="طلب اعتماد عمل إضافي", icon="clock",
-        required_fields=("work_date", "hours"),
+        required_fields=("work_date", "from_time", "to_time"),
         optional_fields=("reason", "note"),
-        hint_ar="الإضافي لا يدخل المسير إلا باعتماد صريح",
+        hint_ar="من أي وقت إلى أي وقت — تُحتسب بالدقيقة لا بالساعة",
     ),
 }
 
@@ -223,12 +223,34 @@ def create_request(*, employment, request_type, payload, note="",
     الإجازة لها مسار خاص (رصيد وحضور وأجر) فتُحوَّل لخدمتها.
     """
     if request_type == RequestType.LEAVE:
+        from apps.leaves.models import LeaveType
+        from apps.leaves.services.balances import compute_days_between
         from apps.leaves.services.leave_requests import create_leave_request
+
+        start = date.fromisoformat(str(payload["start_date"]))
+
+        # ق-59: الموظف يختار تاريخين، والنظام يحتسب الأيام المخصومة
+        days = payload.get("days")
+        if payload.get("end_date"):
+            lt = LeaveType.objects.filter(
+                company_id=employment.company_id,
+                code=payload.get("leave_type_code", "")).first()
+            if lt is None:
+                raise RequestError("نوع إجازة غير معروف")
+            calc = compute_days_between(
+                company=employment.company, leave_type=lt,
+                start_date=start,
+                end_date=date.fromisoformat(str(payload["end_date"])))
+            days = calc.charged_days
+
+        if not days:
+            raise RequestError("حدّد تاريخي البداية والنهاية")
+
         res = create_leave_request(
             employment=employment,
             leave_type_code=payload.get("leave_type_code", ""),
-            start_date=date.fromisoformat(str(payload["start_date"])),
-            requested_days=payload.get("days"),
+            start_date=start,
+            requested_days=days,
             note=note, attachment_url=attachment_url,
             channel=channel, submit=submit)
         return RequestResult(request=res.request,
@@ -304,6 +326,52 @@ def _pre_checks(employment, request_type, payload):
         if (date.today() - work_date).days > 60:
             warnings.append("اليوم المطلوب تصحيحه أقدم من شهرين")
 
+        # ق-59: لا طلبان لنفس اليوم — الثاني يتعارض مع الأول
+        dup = Request.objects.filter(
+            employment=employment,
+            request_type=RequestType.ATTENDANCE_FIX,
+            status__in=[RequestStatus.PENDING, RequestStatus.APPROVED],
+            payload__work_date=str(work_date)).first()
+        if dup:
+            raise RequestError(
+                f"لديك طلب تصحيح لنفس اليوم: {dup.request_no} "
+                f"({dup.get_status_display()})")
+
+        # لا بد من بصمة واحدة على الأقل حسب المختار
+        target = payload.get("fix_target", "both")
+        if target in ("in", "both") and not payload.get("first_in"):
+            raise RequestError("حدّد وقت الحضور")
+        if target in ("out", "both") and not payload.get("last_out"):
+            raise RequestError("حدّد وقت الانصراف")
+
+    elif request_type == RequestType.OVERTIME:
+        # ق-59: من وقت إلى وقت — تُحتسب بالدقيقة
+        try:
+            h1, m1 = map(int, str(payload["from_time"]).split(":")[:2])
+            h2, m2 = map(int, str(payload["to_time"]).split(":")[:2])
+        except (KeyError, ValueError):
+            raise RequestError("حدّد وقتي بداية ونهاية العمل الإضافي")
+        minutes = (h2 * 60 + m2) - (h1 * 60 + m1)
+        if minutes <= 0:
+            minutes += 24 * 60
+        payload["minutes"] = minutes
+        payload["hours"] = round(minutes / 60, 2)
+        if minutes > 600:
+            warnings.append("أكثر من عشر ساعات — راجع الاحتساب")
+
+    elif request_type == RequestType.BUSINESS_TRIP:
+        start = date.fromisoformat(str(payload["start_date"]))
+        end = date.fromisoformat(str(payload["end_date"]))
+        if end < start:
+            raise RequestError("تاريخ العودة قبل المغادرة")
+        payload["days"] = (end - start).days + 1
+
+    elif request_type == RequestType.RESIGNATION:
+        # ق-59: مدة الإشعار من الاعتماد لا من التقديم (م/75)
+        payload["notice_days"] = 30
+        payload["request_date"] = payload.get(
+            "request_date") or str(date.today())
+
     return warnings
 
 
@@ -369,9 +437,10 @@ def _effect_attendance_fix(req):
         return timezone.make_aware(
             datetime.fromisoformat(f"{work_date}T{value}"))
 
-    if p.get("first_in"):
+    target = p.get("fix_target", "both")
+    if p.get("first_in") and target in ("in", "both"):
         day.first_in = _dt(p["first_in"])
-    if p.get("last_out"):
+    if p.get("last_out") and target in ("out", "both"):
         day.last_out = _dt(p["last_out"])
 
     if day.first_in and day.last_out:
@@ -500,7 +569,7 @@ def _effect_overtime(req):
     if day is None:
         return {"skipped": "لا سجل حضور لذلك اليوم"}
 
-    minutes = int(float(p["hours"]) * 60)
+    minutes = int(p.get("minutes") or float(p.get("hours", 0)) * 60)
     day.approved_overtime_minutes = minutes
     day.is_manually_adjusted = True
     day.adjustment_note = f"إضافي معتمد بطلب {req.request_no}"
