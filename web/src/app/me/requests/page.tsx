@@ -62,6 +62,26 @@ const T: Dict = {
   include_salary: { ar: "يتضمن الراتب", en: "Include salary" },
   last_working_day: { ar: "آخر يوم عمل", en: "Last working day" },
   hours: { ar: "عدد الساعات", en: "Hours" },
+  end_date: { ar: "تاريخ النهاية", en: "End date" },
+  fix_target: { ar: "أي بصمة تصحّح؟", en: "Which punch?" },
+  fixIn: { ar: "الحضور", en: "Check-in" },
+  fixOut: { ar: "الانصراف", en: "Check-out" },
+  fixBoth: { ar: "كلاهما", en: "Both" },
+  termination_reason: { ar: "سبب الإنهاء", en: "Termination reason" },
+  request_date: { ar: "تاريخ الطلب", en: "Request date" },
+  // المعاينة
+  preview: { ar: "المعاينة", en: "Preview" },
+  chargedDays: { ar: "الأيام المخصومة", en: "Days charged" },
+  calendarDays: { ar: "أيام تقويمية", en: "Calendar days" },
+  excludedDays: { ar: "أيام لا تُخصم", en: "Not charged" },
+  balanceBefore: { ar: "رصيدك الآن", en: "Balance now" },
+  balanceAfter: { ar: "رصيدك بعدها", en: "After" },
+  returnDate: { ar: "تعود في", en: "Return on" },
+  tripDays: { ar: "أيام الرحلة", en: "Trip days" },
+  otDuration: { ar: "المدة المحتسبة", en: "Duration" },
+  noticeDays: { ar: "مدة الإشعار", en: "Notice period" },
+  duplicateFound: { ar: "طلب مكرر", en: "Duplicate" },
+  currentRecord: { ar: "السجل الحالي", en: "Current record" },
   yes: { ar: "نعم", en: "Yes" },
   no: { ar: "لا", en: "No" },
 };
@@ -88,6 +108,8 @@ function fieldKind(name: string): string {
        "estimated_cost", "family_members"].includes(name)) return "number";
   if (name === "include_salary") return "bool";
   if (name === "leave_type_code") return "leave_type";
+  if (name === "fix_target") return "fix_target";
+  if (name === "termination_reason") return "termination_reason";
   if (name === "asset_category") return "asset_category";
   if (name === "certificate_type") return "certificate_type";
   if (["reason", "purpose", "note"].includes(name)) return "textarea";
@@ -97,6 +119,10 @@ function fieldKind(name: string): string {
 const ASSET_CATEGORIES = [
   ["electronics", "أجهزة إلكترونية"], ["vehicle", "مركبة"],
   ["tools", "أدوات"], ["furniture", "أثاث"], ["other", "أخرى"],
+];
+
+const FIX_TARGETS = [
+  ["in", "الحضور"], ["out", "الانصراف"], ["both", "كلاهما"],
 ];
 
 const CERTIFICATE_TYPES = [
@@ -111,13 +137,14 @@ const CERTIFICATE_TYPES = [
 /* ══ حقل ديناميكي — خارج المكوّن الرئيسي ══ */
 
 function DynField({
-  name, required, value, onChange, leaveTypes, L,
+  name, required, value, onChange, leaveTypes, terminationReasons, L,
 }: {
   name: string;
   required: boolean;
   value: string;
   onChange: (v: string) => void;
   leaveTypes: { code: string; name_ar: string }[];
+  terminationReasons: { code: string; name_ar: string }[];
   L: (k: string, f?: string) => string;
 }) {
   const kind = fieldKind(name);
@@ -165,6 +192,24 @@ function DynField({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      ) : kind === "fix_target" ? (
+        <div className="row" style={{ gap: 4 }}>
+          {FIX_TARGETS.map(([v, l]) => (
+            <button key={v} type="button"
+              className={`btn btn-sm ${value === v ? "btn-primary" : ""}`}
+              onClick={() => onChange(v)}>
+              {l}
+            </button>
+          ))}
+        </div>
+      ) : kind === "termination_reason" ? (
+        <select className="select" value={value}
+          onChange={(e) => onChange(e.target.value)}>
+          <option value="">—</option>
+          {terminationReasons.map((r) => (
+            <option key={r.code} value={r.code}>{r.name_ar}</option>
+          ))}
+        </select>
       ) : kind === "certificate_type" ? (
         <select className="select" value={value}
           onChange={(e) => onChange(e.target.value)}>
@@ -199,6 +244,9 @@ export default function MyRequestsPage() {
   const [selected, setSelected] = useState<ReqType | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  const [reasons, setReasons] = useState<{ code: string; name_ar: string }[]>([]);
+  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -211,9 +259,12 @@ export default function MyRequestsPage() {
         .catch(() => { setDenied(true); return { types: [] }; }),
       apiGet<{ code: string; name_ar: string }[]>("/leaves/types/")
         .catch(() => []),
-    ]).then(([t, lt]) => {
+      apiGet<{ code: string; name_ar: string }[]>("/payroll/termination-reasons/")
+        .catch(() => []),
+    ]).then(([t, lt, rs]) => {
       setTypes(t.types || []);
       setLeaveTypes(lt);
+      setReasons(rs);
       setBusy(false);
 
       // فتح نوع محدد من الرابط (?type=leave)
@@ -237,6 +288,47 @@ export default function MyRequestsPage() {
   const missing = selected
     ? selected.required_fields.filter((f) => !values[f]?.trim())
     : [];
+
+  /**
+   * ق-59: المعاينة الحيّة — النظام يحتسب ويعرض قبل التقديم.
+   *
+   * الموظف يرى الأيام المخصومة ورصيده بعدها، أو مدة الإضافي
+   * بالدقيقة، أو تحذير التكرار — قبل أن يضغط «تقديم».
+   */
+  useEffect(() => {
+    if (!selected) { setPreview(null); return; }
+
+    const PREVIEWABLE = ["leave", "overtime", "business_trip",
+                         "attendance_fix", "resignation"];
+    if (!PREVIEWABLE.includes(selected.code)) { setPreview(null); return; }
+
+    // الحقول اللازمة للمعاينة
+    const needed: Record<string, string[]> = {
+      leave: ["leave_type_code", "start_date", "end_date"],
+      overtime: ["from_time", "to_time"],
+      business_trip: ["start_date", "end_date"],
+      attendance_fix: ["work_date"],
+      resignation: [],
+    };
+    const req = needed[selected.code] || [];
+    if (req.some((f) => !values[f])) { setPreview(null); return; }
+
+    let alive = true;
+    setPreviewing(true);
+    const payload: Record<string, unknown> = {};
+    for (const f of [...selected.required_fields,
+                     ...selected.optional_fields]) {
+      if (values[f]) payload[f] = values[f];
+    }
+
+    apiPost<Record<string, unknown>>("/requests/preview/", {
+      request_type: selected.code, payload,
+    })
+      .then((d) => { if (alive) { setPreview(d); setPreviewing(false); } })
+      .catch(() => { if (alive) { setPreview(null); setPreviewing(false); } });
+
+    return () => { alive = false; };
+  }, [selected, values]);
 
   async function submit() {
     if (!selected || missing.length > 0) return;
@@ -362,14 +454,14 @@ export default function MyRequestsPage() {
             {selected.required_fields.map((f) => (
               <DynField key={f} name={f} required value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
-                leaveTypes={leaveTypes} L={L} />
+                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
             ))}
             {selected.optional_fields.filter((f) => f !== "note"
               && f !== "attachment_url").map((f) => (
               <DynField key={f} name={f} required={false}
                 value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
-                leaveTypes={leaveTypes} L={L} />
+                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
             ))}
           </div>
 
@@ -378,6 +470,192 @@ export default function MyRequestsPage() {
             <textarea className="textarea" rows={2} value={note}
               onChange={(e) => setNote(e.target.value)} />
           </div>
+
+          {/* ══ المعاينة الحيّة (ق-59) ══ */}
+          {preview && !previewing && (
+            <div style={{
+              marginTop: 16, padding: "14px 16px",
+              background: preview.duplicate
+                ? "var(--danger-soft)" : "var(--teal-soft)",
+              borderRadius: "var(--radius-sm)",
+            }}>
+              {/* تكرار البصمة */}
+              {preview.duplicate ? (
+                <div style={{ color: "var(--danger)", fontWeight: 500 }}>
+                  <IcAlert size={17} /> {L("duplicateFound")}:{" "}
+                  <span className="num">{String(preview.duplicate_no)}</span>
+                </div>
+              ) : (
+                <>
+                  {/* الإجازة */}
+                  {preview.charged_days != null && (
+                    <div className="row" style={{
+                      flexWrap: "wrap", gap: 20, alignItems: "flex-start",
+                    }}>
+                      <div>
+                        <div className="muted" style={{ fontSize: ".8rem" }}>
+                          {L("chargedDays")}
+                        </div>
+                        <div style={{
+                          fontSize: "1.5rem", fontWeight: 600,
+                          color: "var(--teal)",
+                        }}>
+                          <span className="num">
+                            {String(preview.charged_days)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="muted" style={{ fontSize: ".8rem" }}>
+                          {L("calendarDays")}
+                        </div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+                          <span className="num">
+                            {String(preview.calendar_days)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {Number(preview.excluded_days) > 0 && (
+                        <div>
+                          <div className="muted" style={{ fontSize: ".8rem" }}>
+                            {L("excludedDays")}
+                          </div>
+                          <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+                            <span className="num">
+                              {String(preview.excluded_days)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {preview.available_before != null && (
+                        <div>
+                          <div className="muted" style={{ fontSize: ".8rem" }}>
+                            {L("balanceAfter")}
+                          </div>
+                          <div style={{
+                            fontSize: "1.1rem", fontWeight: 600,
+                            color: Number(preview.available_after) < 0
+                              ? "var(--danger)" : "var(--ink)",
+                          }}>
+                            <span className="num">
+                              {String(preview.available_before)}
+                            </span>
+                            {" → "}
+                            <span className="num">
+                              {String(preview.available_after)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {preview.return_date != null && (
+                        <div>
+                          <div className="muted" style={{ fontSize: ".8rem" }}>
+                            {L("returnDate")}
+                          </div>
+                          <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+                            <span className="num">
+                              {String(preview.return_date)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* الإضافي */}
+                  {preview.label != null && (
+                    <div>
+                      <div className="muted" style={{ fontSize: ".8rem" }}>
+                        {L("otDuration")}
+                      </div>
+                      <div style={{
+                        fontSize: "1.4rem", fontWeight: 600,
+                        color: "var(--teal)",
+                      }}>
+                        {String(preview.label)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* رحلة العمل */}
+                  {preview.days != null && preview.charged_days == null && (
+                    <div>
+                      <div className="muted" style={{ fontSize: ".8rem" }}>
+                        {L("tripDays")}
+                      </div>
+                      <div style={{
+                        fontSize: "1.4rem", fontWeight: 600,
+                        color: "var(--teal)",
+                      }}>
+                        <span className="num">{String(preview.days)}</span>
+                      </div>
+                      {preview.note != null && (
+                        <div className="muted" style={{
+                          fontSize: ".84rem", marginTop: 4,
+                        }}>
+                          {String(preview.note)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* إنهاء العقد */}
+                  {preview.notice_days != null && (
+                    <div>
+                      <div className="row">
+                        <span className="muted" style={{ fontSize: ".85rem" }}>
+                          {L("noticeDays")}:
+                        </span>
+                        <strong>
+                          <span className="num">
+                            {String(preview.notice_days)}
+                          </span>{" "}
+                          يومًا
+                        </strong>
+                      </div>
+                      <div className="muted" style={{
+                        fontSize: ".84rem", marginTop: 4,
+                      }}>
+                        {String(preview.note || "")}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* السجل الحالي للبصمة */}
+                  {preview.current != null && (
+                    <div className="muted" style={{ fontSize: ".87rem" }}>
+                      {L("currentRecord")}:{" "}
+                      {String((preview.current as Record<string, unknown>).status)}
+                      {" · "}
+                      <span className="num">
+                        {String((preview.current as Record<string, unknown>)
+                          .first_in) || "—"}
+                      </span>
+                      {" → "}
+                      <span className="num">
+                        {String((preview.current as Record<string, unknown>)
+                          .last_out) || "—"}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* تحذيرات المعاينة */}
+              {Array.isArray(preview.warnings) &&
+                (preview.warnings as string[]).length > 0 && (
+                <div style={{ marginTop: 10, color: "var(--copper)" }}>
+                  {(preview.warnings as string[]).map((w, i) => (
+                    <div key={i} style={{ fontSize: ".87rem" }}>• {w}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {error && (
             <div style={{
