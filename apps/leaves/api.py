@@ -767,3 +767,33 @@ def preview_request(request):
         })
 
     return Response({"detail": "لا معاينة لهذا النوع"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_editable_fields(request):
+    """
+    الحقول التي يطلب الموظف تعديلها بقيمها الحالية (ق-65).
+
+    الراتب والعقد غائبان — قرارات إدارية والتزامات تعاقدية.
+    """
+    from apps.leaves.services.requests import (
+        EDITABLE_BY_EMPLOYEE, current_value,
+    )
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    return Response({
+        "employee_no": emp.employee_no,
+        "fields": [{
+            "key": key,
+            "label": label,
+            "current": current_value(emp, key),
+            "kind": ("date" if key.endswith("_date")
+                     else "select" if key == "marital_status"
+                     else "text"),
+        } for key, label in EDITABLE_BY_EMPLOYEE.items()],
+        "note": "الراتب والعقد لا يُعدَّلان بطلب — راجع الموارد البشرية",
+    })

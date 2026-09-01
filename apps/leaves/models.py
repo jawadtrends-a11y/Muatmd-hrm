@@ -275,6 +275,7 @@ class RequestType(models.TextChoices):
     ATTENDANCE_FIX = "attendance_fix", _("تصحيح بصمة")
     REMOTE_WORK = "remote_work", _("عمل عن بُعد")
     BUSINESS_TRIP = "business_trip", _("رحلة عمل")
+    PROFILE_UPDATE = "profile_update", _("تعديل بيانات")
 
 
 class RequestStatus(models.TextChoices):

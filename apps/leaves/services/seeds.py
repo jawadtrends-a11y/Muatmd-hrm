@@ -173,6 +173,11 @@ DEFAULT_CHAINS = [
     (RequestType.BUSINESS_TRIP, "رحلة العمل", {}, 0,
      [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
       (2, ApproverType.ROLE, "hr_manager", True, 72)]),
+
+    # ق-65: تعديل البيانات يذهب لموظف الموارد مباشرةً —
+    # يتجاوز المدير المباشر، فتصحيح رقم جوال ليس قرارًا إداريًا
+    (RequestType.PROFILE_UPDATE, "تعديل بيانات الموظف", {}, 0,
+     [(1, ApproverType.ROLE, "hr_staff", True, 48)]),
 ]
 
 

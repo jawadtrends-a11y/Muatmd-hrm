@@ -151,6 +151,7 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/update/", employees_api.update_employee_profile, name="employee-update"),
     path("api/employees/<int:employment_id>/dependents/", employees_api.employee_dependents, name="employee-dependents"),
     path("api/employees/<int:employment_id>/contacts/", employees_api.employee_contacts, name="employee-contacts"),
+    path("api/me/editable-fields/", leaves_api.my_editable_fields, name="my-editable-fields"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

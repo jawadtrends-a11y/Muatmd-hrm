@@ -112,6 +112,12 @@ SPECS = {
         optional_fields=("note",),
         hint_ar="مدة الإشعار 30 يومًا تبدأ من تاريخ الاعتماد النهائي",
     ),
+    RequestType.PROFILE_UPDATE: RequestSpec(
+        code="profile_update", name_ar="طلب تعديل بياناتي", icon="user",
+        required_fields=(),
+        optional_fields=("note",),
+        hint_ar="يعتمده موظف الموارد البشرية مباشرةً",
+    ),
     RequestType.OVERTIME: RequestSpec(
         code="overtime", name_ar="طلب اعتماد عمل إضافي", icon="clock",
         required_fields=("work_date", "from_time", "to_time"),
@@ -258,10 +264,15 @@ def create_request(*, employment, request_type, payload, note="",
                              effect={"charged_days": str(res.charged_days),
                                      "end_date": str(res.end_date)})
 
-    clean = _validate(request_type, payload)
-
-    # فحوص خاصة قبل الإنشاء
-    warnings = _pre_checks(employment, request_type, clean)
+    # ق-65: طلب التعديل يبني الفرق «من → إلى» قبل الحفظ
+    if request_type == RequestType.PROFILE_UPDATE:
+        diff = build_profile_diff(employment, payload.get("changes")
+                                  or payload)
+        clean = {"changes": diff, "count": len(diff)}
+        warnings = []
+    else:
+        clean = _validate(request_type, payload)
+        warnings = _pre_checks(employment, request_type, clean)
 
     # يُنشأ مسودةً دائمًا ثم يُرفع — submit_request هي التي
     # تبني السلسلة وتنقل الحالة، وترفض ما ليس مسودة.
@@ -602,7 +613,142 @@ def _effect_resignation(req):
     return {"note": "يبقى مفتوحًا حتى إنهاء المخالصة وإخلاء الطرف"}
 
 
+
+
+
+# ══════════ طلب تعديل البيانات (ق-65) ══════════
+
+# الحقول التي يطلب الموظف تعديلها — كل شيء عدا الراتب والعقد
+EDITABLE_BY_EMPLOYEE = {
+    # الشخصية
+    "first_name_ar": "الاسم الأول",
+    "father_name_ar": "اسم الأب",
+    "grandfather_name_ar": "اسم الجد",
+    "family_name_ar": "اسم العائلة",
+    "full_name_en": "الاسم بالإنجليزية",
+    "birth_date": "تاريخ الميلاد",
+    "marital_status": "الحالة الاجتماعية",
+    "id_expiry_date": "انتهاء الهوية",
+    "passport_number": "رقم الجواز",
+    "passport_expiry_date": "انتهاء الجواز",
+    "border_number": "رقم الحدود",
+    "mobile": "الجوال",
+    "email": "البريد الإلكتروني",
+    # البنك
+    "iban": "الآيبان",
+    # التأمينات
+    "gosi_scheme_code": "نظام التأمينات",
+}
+
+# ما لا يُطلب أبدًا (ق-65): قرارات إدارية والتزامات تعاقدية
+FORBIDDEN_FIELDS = {
+    "salary", "basic_salary", "allowances",
+    "contract_type", "contract_start_date", "contract_end_date",
+    "probation_days", "join_date", "service_start_date",
+}
+
+PERSON_FIELDS = {
+    "first_name_ar", "father_name_ar", "grandfather_name_ar",
+    "family_name_ar", "full_name_en", "birth_date", "marital_status",
+    "id_expiry_date", "passport_number", "passport_expiry_date",
+    "border_number", "email", "gosi_scheme_code",
+}
+
+
+def field_label(key):
+    return EDITABLE_BY_EMPLOYEE.get(key, key)
+
+
+def current_value(employment, key):
+    """القيمة الحالية للحقل — من الشخص أو الارتباط."""
+    person = employment.person
+    if key == "mobile":
+        return person.mobile_e164 or ""
+    if key in PERSON_FIELDS:
+        v = getattr(person, key, "")
+    else:
+        v = getattr(employment, key, "")
+    return "" if v is None else str(v)
+
+
+def build_profile_diff(employment, requested):
+    """
+    يبني قائمة الفروقات: من → إلى (ق-65).
+
+    **المعتمِد يرى ما يتغيّر بالضبط** — لا «طلب تعديل بيانات»
+    مبهمًا.
+    """
+    diff = []
+    for key, new_value in (requested or {}).items():
+        if key in FORBIDDEN_FIELDS:
+            raise RequestError(
+                f"{field_label(key)} لا يُعدَّل بطلب — راجع الموارد البشرية")
+        if key not in EDITABLE_BY_EMPLOYEE:
+            continue
+
+        old_value = current_value(employment, key)
+        new_str = "" if new_value is None else str(new_value)
+        if old_value == new_str:
+            continue
+
+        diff.append({
+            "field": key,
+            "label": field_label(key),
+            "from": old_value,
+            "to": new_str,
+        })
+
+    if not diff:
+        raise RequestError("لا تغييرات — عدّل حقلًا واحدًا على الأقل")
+
+    return diff
+
+
+def _effect_profile_update(req):
+    """
+    يطبّق التعديلات المعتمدة على الملف (ق-65).
+
+    ويُسجَّل في سجل العمليات باسم الموظف ومعتمِده معًا.
+    """
+    emp = req.employment
+    person = emp.person
+    applied = []
+
+    for change in (req.payload.get("changes") or []):
+        key = change.get("field")
+        value = change.get("to")
+        if key in FORBIDDEN_FIELDS or key not in EDITABLE_BY_EMPLOYEE:
+            continue
+
+        if key == "mobile":
+            from apps.employees.services.validators import normalize_mobile
+            normalized, err = normalize_mobile(value)
+            if err:
+                continue
+            person.mobile_e164 = normalized
+        elif key == "iban":
+            from apps.employees.services.validators import validate_saudi_iban
+            ok, _err = validate_saudi_iban(value)
+            if not ok:
+                continue
+            emp.iban = value
+        elif key in PERSON_FIELDS:
+            setattr(person, key, value or None)
+        else:
+            setattr(emp, key, value or None)
+
+        applied.append(key)
+
+    person.save()
+    emp.save()
+
+    return {"applied": applied, "count": len(applied)}
+
+
+# ══════════ خريطة الآثار — بعد تعريف كل الدوال ══════════
+
 EFFECTS = {
+    RequestType.PROFILE_UPDATE: _effect_profile_update,
     RequestType.ATTENDANCE_FIX: _effect_attendance_fix,
     RequestType.REMOTE_WORK: _effect_remote_work,
     RequestType.PERMISSION: _effect_permission,
