@@ -48,6 +48,13 @@ const TONE: Record<string, string> = {
 
 function summarize(r: Req): string {
   const p = r.payload || {};
+
+  // ق-65: طلب التعديل يعرض الحقول المتغيّرة صراحةً
+  if (Array.isArray(p.changes)) {
+    const ch = p.changes as { label: string; from: string; to: string }[];
+    return ch.map((c) => `${c.label}: ${c.from || "—"} ← ${c.to}`).join(" · ");
+  }
+
   const bits: string[] = [];
   if (p.start_date) bits.push(String(p.start_date));
   if (p.work_date) bits.push(String(p.work_date));
