@@ -11,6 +11,7 @@ import Link from "next/link";
 
 import { apiGet } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import PunchCard from "@/components/PunchCard";
 import {
   IcAlert, IcCheck, IcClock, IcDoc, IcLeave, IcPayroll, IcUser,
   IcUsers, IcWallet, IcX,
@@ -423,6 +424,9 @@ export default function HomePage() {
         {L("welcome")}
         {profile?.employee?.name_ar ? `، ${profile.employee.name_ar}` : ""}
       </h1>
+
+      {/* ق-62: البصمة أول ما يراه الموظف — زرّان لا أكثر */}
+      <PunchCard />
 
       {isManager && (
         <ManagerHome approvals={approvals} run={run} board={board} L={L} />
