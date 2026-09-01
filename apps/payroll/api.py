@@ -256,24 +256,39 @@ def eosb_calculator(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def termination_reasons(request):
-    """قائمة أسباب انتهاء العلاقة — من المرجع الحكومي حرفيًا (ق-26)."""
-    Gate.require(request.user, "payroll.view")
+    """
+    قائمة أسباب انتهاء العلاقة — من المرجع الحكومي حرفيًا (ق-26).
+
+    متاحة لكل مصادَق: الموظف يحتاجها ليختار سبب استقالته (ق-59)،
+    وهي قائمة نظامية عامة لا بيانات رواتب.
+    """
     from apps.payroll.services.eosb import (
         ALL_REASONS, FULL_ENTITLEMENT, NO_ENTITLEMENT, PRORATED_ENTITLEMENT,
+        TERMINATION_INITIATOR, notice_days_for,
     )
+
+    # ق-60: الموظف يرى ما يبادر به هو فقط
+    wanted = request.GET.get("initiator", "")
+
     return Response({
         "source": "حاسبة مكافأة نهاية الخدمة الرسمية — وزارة الموارد البشرية",
         "reasons": [
             {
                 "code": code, "label": label,
+                "name_ar": label,
+                "initiator": TERMINATION_INITIATOR.get(code, ("employer", 0))[0],
+                "notice_days": notice_days_for(code),
                 "entitlement": ("full" if code in FULL_ENTITLEMENT
                                 else "none" if code in NO_ENTITLEMENT
                                 else "prorated"),
                 "requires_compensation_77": code == "unlawful_termination",
             }
             for code, label in ALL_REASONS.items()
+            if not wanted or TERMINATION_INITIATOR.get(
+                code, ("employer", 0))[0] == wanted
         ],
         "total": len(ALL_REASONS),
+        "initiator_filter": wanted or "all",
     })
 
 

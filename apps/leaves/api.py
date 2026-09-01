@@ -735,12 +735,34 @@ def preview_request(request):
 
     # ── إنهاء العقد: مدة الإشعار ──
     if rtype == RequestType.RESIGNATION:
-        # م/75 بعد تعديل م/44: العامل 30 يومًا، صاحب العمل 60
-        notice_days = 30
+        # ق-60: المدة تتبع السبب لا رقمًا ثابتًا
+        from apps.payroll.services.eosb import ALL_REASONS, notice_days_for
+
+        code = p.get("termination_reason", "")
+        if not code:
+            return Response({"detail": "اختر سبب الإنهاء"}, status=400)
+
+        days = notice_days_for(code)
+        label = ALL_REASONS.get(code, code)
+
+        if days is None:
+            note = "مدة الإشعار بالاتفاق بين الطرفين"
+            expected = None
+        elif days == 0:
+            note = "لا تُشترط مدة إشعار لهذا السبب"
+            expected = None
+        else:
+            note = (f"مدة الإشعار {days} يومًا تبدأ من تاريخ الاعتماد "
+                    "النهائي لا من التقديم")
+            expected = str(date.today() + timedelta(days=days))
+
         return Response({
-            "notice_days": notice_days,
-            "note": (f"مدة الإشعار النظامية {notice_days} يومًا تبدأ من "
-                     "تاريخ الاعتماد النهائي لا من التقديم"),
+            "reason": label,
+            "notice_days": days,
+            "note": note,
+            "expected_last_day": expected,
+            "expected_note": ("آخر يوم عمل متوقع لو اعتُمد اليوم"
+                              if expected else ""),
             "reference": "المادة 75 — تعديل م/44 لعام 1446هـ",
         })
 

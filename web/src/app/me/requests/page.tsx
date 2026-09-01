@@ -259,7 +259,10 @@ export default function MyRequestsPage() {
         .catch(() => { setDenied(true); return { types: [] }; }),
       apiGet<{ code: string; name_ar: string }[]>("/leaves/types/")
         .catch(() => []),
-      apiGet<{ code: string; name_ar: string }[]>("/payroll/termination-reasons/")
+      // ق-60: الموظف يرى ما يبادر به هو فقط
+      apiGet<{ reasons: { code: string; name_ar: string }[] }>(
+        "/payroll/termination-reasons/?initiator=employee")
+        .then((d) => d.reasons || [])
         .catch(() => []),
     ]).then(([t, lt, rs]) => {
       setTypes(t.types || []);
@@ -456,8 +459,17 @@ export default function MyRequestsPage() {
                 onChange={(v) => setValues({ ...values, [f]: v })}
                 leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
             ))}
-            {selected.optional_fields.filter((f) => f !== "note"
-              && f !== "attachment_url").map((f) => (
+            {selected.optional_fields.filter((f) => {
+              if (f === "note" || f === "attachment_url") return false;
+              // ق-59: حقل الوقت يظهر حسب البصمة المختارة
+              if (selected.code === "attendance_fix") {
+                const target = values.fix_target || "";
+                if (f === "first_in" && target === "out") return false;
+                if (f === "last_out" && target === "in") return false;
+                if (!target) return false;
+              }
+              return true;
+            }).map((f) => (
               <DynField key={f} name={f} required={false}
                 value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
@@ -540,11 +552,11 @@ export default function MyRequestsPage() {
                             color: Number(preview.available_after) < 0
                               ? "var(--danger)" : "var(--ink)",
                           }}>
+                            {/* السهم داخل span معزول — RTL يقلب
+                                الاتجاه لو تُرك في تدفق النص */}
                             <span className="num">
                               {String(preview.available_before)}
-                            </span>
-                            {" → "}
-                            <span className="num">
+                              {" ← "}
                               {String(preview.available_after)}
                             </span>
                           </div>

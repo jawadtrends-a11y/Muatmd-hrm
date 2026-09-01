@@ -344,3 +344,47 @@ def calculate_unlawful_termination_compensation(
         minimum_applied=minimum_applied,
         explanation=explanation,
     )
+
+
+# ══════════ من يبادر بالإنهاء ومدة إشعاره (ق-60) ══════════
+# (المُبادِر، مدة الإشعار بالأيام — None يعني بالاتفاق)
+
+TERMINATION_INITIATOR = {
+    # ── يبادر بها الموظف ──
+    "resignation":          ("employee", 30),
+    "article_81":           ("employee", 0),
+    "probation":            ("employee", 0),
+    "female_marriage":      ("employee", 0),
+    "female_childbirth":    ("employee", 0),
+    "retirement":           ("employee", 0),
+    "worker_disability":    ("employee", 0),
+
+    # ── تبادر بها الشركة ──
+    "notice_article_75":    ("employer", 60),
+    "article_80":           ("employer", 0),
+    "unlawful_termination": ("employer", 0),
+    "contract_expiry":      ("employer", 0),
+    "force_majeure":        ("employer", 0),
+    "ownership_transfer":   ("employer", 0),
+    "worker_death":         ("employer", 0),
+    "employer_death":       ("employer", 0),
+
+    # الاتفاق يقع بين الطرفين، لكن الشركة توثّقه (ق-60)
+    "mutual_agreement":     ("employer", None),
+}
+
+
+def notice_days_for(reason_code):
+    """
+    مدة الإشعار النظامية للسبب — بالأيام.
+
+    None تعني «بالاتفاق»، و0 تعني «لا إشعار».
+    """
+    entry = TERMINATION_INITIATOR.get(reason_code)
+    return entry[1] if entry else 0
+
+
+def reasons_for_initiator(initiator):
+    """أسباب الإنهاء التي يبادر بها هذا الطرف (ق-60)."""
+    return [code for code, (who, _days) in TERMINATION_INITIATOR.items()
+            if who == initiator]
