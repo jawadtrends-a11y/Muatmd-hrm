@@ -182,6 +182,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const nav = NAV.filter(can);
 
   /**
+   * البند النشط = الأطول تطابقًا مع المسار.
+   *
+   * بلا هذا: /me يطابق /me/attendance و/me/leaves، فيُضاء
+   * «قسائم راتبي» مع كل شاشة شخصية.
+   */
+  const activeHref = nav
+    .filter((n) => n.href === "/"
+      ? pathname === "/"
+      : pathname === n.href || pathname.startsWith(n.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? "";
+
+  /**
    * حارس المسارات (ق-58).
    *
    * إخفاء البند من القائمة ليس حماية — من يعرف الرابط يفتحه
@@ -197,8 +209,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // وبند "/" يُستثنى من البحث لأن startsWith يطابقه دائمًا.
     if (pathname === "/") return;
 
-    const item = NAV.find((n) =>
-      n.href !== "/" && pathname.startsWith(n.href));
+    const item = NAV
+      .filter((n) => n.href !== "/" &&
+        (pathname === n.href || pathname.startsWith(n.href + "/")))
+      .sort((a, b) => b.href.length - a.href.length)[0];
 
     if (item && !can(item)) {
       router.replace("/");
@@ -265,10 +279,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav style={{ padding: 12, flex: 1, overflowY: "auto" }}>
           {nav.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+            const active = item.href === activeHref;
             const Icon = item.icon;
             return (
               <Link
