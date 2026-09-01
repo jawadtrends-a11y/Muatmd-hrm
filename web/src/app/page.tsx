@@ -55,6 +55,7 @@ const T: Dict = {
   assets: { ar: "عهد", en: "Assets" },
   // الروابط
   requestSomething: { ar: "تقديم طلب", en: "Submit a request" },
+  fullProfile: { ar: "ملفي الكامل", en: "My full profile" },
   myLeaves: { ar: "إجازاتي", en: "My leaves" },
   myPayslips: { ar: "قسائم راتبي", en: "My payslips" },
   // المدير
@@ -71,7 +72,9 @@ const T: Dict = {
 };
 
 type Profile = {
+  employment_id?: number;
   employee: {
+    employment_id: number;
     employee_no: string; name_ar: string; department: string;
     branch: string; job_title: string; manager: string;
     status_label: string;
@@ -272,7 +275,11 @@ function EmployeeHome({
 
       {/* روابط سريعة */}
       <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-        <Link href="/me/requests" className="btn btn-primary">
+        <Link href={`/employees/${p.employee.employment_id}`} className="btn btn-primary">
+          <IcUser size={17} />
+          {L("fullProfile")}
+        </Link>
+        <Link href="/me/requests" className="btn">
           <IcDoc size={17} />
           {L("requestSomething")}
         </Link>

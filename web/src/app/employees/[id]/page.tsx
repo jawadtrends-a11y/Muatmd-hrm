@@ -145,6 +145,23 @@ const T: Dict = {
   fileKind: { ar: "النوع", en: "Kind" },
   fileSize: { ar: "الحجم", en: "Size" },
   view: { ar: "عرض", en: "View" },
+  ownHint: {
+    ar: "تعديلاتك تُقدَّم كطلب يعتمده موظف الموارد البشرية",
+    en: "Your edits are submitted as a request for HR approval",
+  },
+  requestSubmitted: {
+    ar: "قُدّم طلب التعديل",
+    en: "Edit request submitted",
+  },
+  pendingApproval: {
+    ar: "بانتظار اعتماد الموارد البشرية",
+    en: "Awaiting HR approval",
+  },
+  trackIt: { ar: "تابعه من «طلباتي»", en: "Track in My Requests" },
+  notEditable: {
+    ar: "لا يُعدَّل بطلب — راجع الموارد البشرية",
+    en: "Not editable by request",
+  },
 };
 
 const TABS = [
@@ -156,6 +173,8 @@ type Tab = (typeof TABS)[number];
 type Profile = Record<string, never> & {
   employment_id: number;
   employee_no: string;
+  is_own?: boolean;
+  can_edit?: boolean;
   status_label: string;
   avatar_url: string | null;
   personal: Record<string, string>;
@@ -232,8 +251,9 @@ type FieldDef = {
 };
 
 function EditableSection({
-  title, icon: Icon, fields, values, L, onSave, busy,
+  title, icon: Icon, fields, values, L, onSave, busy, readOnly,
 }: {
+  readOnly?: boolean;
   title: string;
   icon: React.ComponentType<{ size?: number }>;
   fields: FieldDef[];
@@ -285,7 +305,7 @@ function EditableSection({
             </span>
           )}
         </div>
-        {!editing ? (
+        {readOnly ? null : !editing ? (
           <button className="btn btn-sm btn-ghost" onClick={start}>
             {L("edit")}
           </button>
@@ -666,6 +686,7 @@ export default function EmployeeProfilePage() {
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [requested, setRequested] = useState("");
 
   const load = useCallback(() => {
     apiGet<Profile>(`/employees/${empId}/profile/`)
@@ -675,12 +696,32 @@ export default function EmployeeProfilePage() {
 
   useEffect(load, [load]);
 
+  /**
+   * الحفظ يفرّق بالدور (ق-65):
+   *
+   *   صاحب الملف   → يُنشأ طلب تعديل يعتمده موظف الموارد
+   *   مدير الموارد → يُعدَّل مباشرةً
+   *
+   * والواجهة واحدة — فالموظف لا يتعلّم شاشتين لنفس الغرض.
+   */
   async function save(section: string, changed: Record<string, unknown>) {
     setSaving(true);
     setError("");
+    setRequested("");
+
     try {
-      await apiPut(`/employees/${empId}/update/`, { section, data: changed });
-      load();
+      if (data?.is_own) {
+        const res = await apiPost<{ request_no: string }>("/requests/", {
+          request_type: "profile_update",
+          payload: { changes: changed },
+          note: `تعديل ${section}`,
+        });
+        setRequested(res.request_no);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        await apiPut(`/employees/${empId}/update/`, { section, data: changed });
+        load();
+      }
     } catch (e) {
       setError((e as ApiError).message);
     } finally {
@@ -752,6 +793,31 @@ export default function EmployeeProfilePage() {
         </div>
       </div>
 
+      {data.is_own && (
+        <div style={{
+          fontSize: ".87rem", padding: "9px 13px",
+          background: "var(--teal-soft)", color: "var(--teal)",
+          borderRadius: "var(--radius-sm)", fontWeight: 500,
+        }}>
+          {L("ownHint")}
+        </div>
+      )}
+
+      {requested && (
+        <div style={{
+          background: "var(--ok-soft)", color: "var(--ok)",
+          padding: "12px 15px", borderRadius: "var(--radius-sm)",
+        }}>
+          <div className="row" style={{ fontWeight: 600 }}>
+            <IcCheck size={17} />
+            {L("requestSubmitted")} — <span className="num">{requested}</span>
+          </div>
+          <div style={{ fontSize: ".87rem", marginTop: 4 }}>
+            {L("pendingApproval")} · {L("trackIt")}
+          </div>
+        </div>
+      )}
+
       {/* التبويبات */}
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         {TABS.map((t) => {
@@ -790,6 +856,7 @@ export default function EmployeeProfilePage() {
       {tab === "personal" && (
         <EditableSection
           title={L("personal")} icon={IcUser} L={L} busy={saving}
+          readOnly={false}
           values={data.personal}
           onSave={(d) => save("personal", d)}
           fields={[
@@ -929,6 +996,7 @@ export default function EmployeeProfilePage() {
       {tab === "gosi" && (
         <EditableSection
           title={L("gosi")} icon={IcCheck} L={L} busy={saving}
+          readOnly={false}
           values={data.gosi}
           onSave={(d) => save("gosi", d)}
           fields={[
@@ -947,6 +1015,7 @@ export default function EmployeeProfilePage() {
       {tab === "bank" && (
         <EditableSection
           title={L("bank")} icon={IcWallet} L={L} busy={saving}
+          readOnly={false}
           values={data.bank}
           onSave={(d) => save("bank", d)}
           fields={[

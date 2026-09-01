@@ -662,10 +662,20 @@ def employee_profile(request, employment_id):
     from apps.core.i18n import localized, request_locale
     lang = request_locale(request)
 
-    Gate.require(request.user, "employees.view")
-    emp = Gate.filter_queryset(
-        request.user, "employees.view", Employment.objects.all()
-    ).filter(id=employment_id).select_related(
+    # ق-65: الموظف يرى ملفه هو بلا صلاحية إدارية — بياناته ملكه.
+    # وغيره يحتاج employees.view بنطاقه.
+    person = getattr(request.user, "person", None)
+    own = person and Employment.objects.filter(
+        id=employment_id, person=person).exists()
+
+    if not own:
+        Gate.require(request.user, "employees.view")
+        base = Gate.filter_queryset(
+            request.user, "employees.view", Employment.objects.all())
+    else:
+        base = Employment.objects.filter(person=person)
+
+    emp = base.filter(id=employment_id).select_related(
         "person", "department", "branch", "job_title",
         "direct_manager__person", "job_grade", "job_step",
         "primary_site", "company").first()
@@ -754,6 +764,9 @@ def employee_profile(request, employment_id):
         "status": emp.status,
         "status_label": emp.get_status_display(),
         "avatar_url": avatar["url"] if avatar else None,
+        # الموظف يقرأ ملفه ويطلب تعديله؛ الموارد تعدّل مباشرةً
+        "is_own": bool(own),
+        "can_edit": not own,
 
         "personal": _person_block(p),
 
