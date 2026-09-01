@@ -31,7 +31,12 @@ const T: Dict = {
   payroll: { ar: "الرواتب", en: "Payroll" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
+  myAttendance: { ar: "حضوري", en: "My Attendance" },
+  myLeaves: { ar: "إجازاتي", en: "My Leaves" },
   myServices: { ar: "خدماتي", en: "My Services" },
+  myTrack: { ar: "طلباتي", en: "My Requests" },
+  myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
+  myLetters: { ar: "خطاباتي", en: "My Letters" },
   settings: { ar: "الإعدادات", en: "Settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   logout: { ar: "تسجيل الخروج", en: "Sign out" },
@@ -51,6 +56,7 @@ type Workspace = {
   account: { name: string } | null;
   company: { name: string } | null;
   permissions: string[];
+  roles?: { code: string; name_ar: string; scope: string }[];
   subscription?: {
     state: string;
     is_writable: boolean;
@@ -66,23 +72,44 @@ type NavItem = {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   /** يظهر لمن يملك إحدى هذه الصلاحيات — فارغ يعني للجميع */
   perms?: string[];
+  /**
+   * ق-58: البند الإداري يحتاج نطاقًا أوسع من «نفسي».
+   * الموظف يملك employees.view بنطاق own — فيرى نفسه فقط،
+   * ولا معنى لعرض شاشة «الموظفون» له.
+   */
+  needsScope?: boolean;
 };
 
 const NAV: NavItem[] = [
   { href: "/", key: "home", icon: IcHome },
+
+  // ── إدارية: تحتاج نطاقًا أوسع من «نفسي» (ق-58) ──
   { href: "/employees", key: "employees", icon: IcUsers,
-    perms: ["employees.view"] },
+    perms: ["employees.view"], needsScope: true },
   { href: "/attendance", key: "attendance", icon: IcClock,
-    perms: ["attendance.view"] },
-  { href: "/leaves", key: "leaves", icon: IcLeave, perms: ["leaves.view"] },
+    perms: ["attendance.view"], needsScope: true },
+  { href: "/leaves", key: "leaves", icon: IcLeave,
+    perms: ["leaves.view"], needsScope: true },
   { href: "/payroll", key: "payroll", icon: IcPayroll,
-    perms: ["payroll.view"] },
+    perms: ["payroll.view"], needsScope: true },
   { href: "/reports", key: "reports", icon: IcChart,
-    perms: ["payroll.view", "employees.view", "attendance.view"] },
-  { href: "/org", key: "org", icon: IcOrg, perms: ["org.view"] },
-  // بند واحد يجمع القسائم والرصيد والطلبات — أبسط للموظف
-  { href: "/me", key: "myServices", icon: IcDoc,
-    perms: ["payslips.view_own", "requests.create"] },
+    perms: ["payroll.view", "employees.view"], needsScope: true },
+  { href: "/org", key: "org", icon: IcOrg,
+    perms: ["org.view"], needsScope: true },
+
+  // ── شخصية: لكل موظف عن نفسه ──
+  { href: "/me/attendance", key: "myAttendance", icon: IcClock,
+    perms: ["attendance.view"] },
+  { href: "/me/leaves", key: "myLeaves", icon: IcLeave,
+    perms: ["leaves.view", "requests.create"] },
+  { href: "/me/requests", key: "myServices", icon: IcDoc,
+    perms: ["requests.create"] },
+  { href: "/me/track", key: "myTrack", icon: IcDoc,
+    perms: ["requests.create"] },
+  { href: "/me", key: "myPayslips", icon: IcPayroll,
+    perms: ["payslips.view_own"] },
+  { href: "/me/letters", key: "myLetters", icon: IcDoc,
+    perms: ["requests.create"] },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -142,8 +169,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const perms = new Set(ws?.permissions ?? []);
-  const can = (item: NavItem) =>
-    !item.perms || item.perms.some((p) => perms.has(p));
+
+  /**
+   * ق-58: البند الإداري يحتاج نطاقًا أوسع من «نفسي».
+   *
+   * الموظف يملك employees.view بنطاق own — يرى نفسه فقط، فلا
+   * معنى لعرض شاشة «الموظفون» أو «التقارير» له.
+   */
+  const SCOPE_RANK: Record<string, number> = {
+    own: 0, team: 1, department: 2, branch: 3, company: 4, account: 5,
+  };
+  const widestScope = (ws?.roles ?? []).reduce(
+    (max, r) => Math.max(max, SCOPE_RANK[r.scope] ?? 0), 0);
+  const hasAdminScope = widestScope >= 1;
+
+  const can = (item: NavItem) => {
+    if (item.needsScope && !hasAdminScope) return false;
+    return !item.perms || item.perms.some((p) => perms.has(p));
+  };
   const nav = NAV.filter(can);
 
   const sub = ws?.subscription;
