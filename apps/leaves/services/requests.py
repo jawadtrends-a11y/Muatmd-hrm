@@ -112,12 +112,6 @@ SPECS = {
         optional_fields=("note",),
         hint_ar="مدة الإشعار 30 يومًا تبدأ من تاريخ الاعتماد النهائي",
     ),
-    RequestType.PROFILE_UPDATE: RequestSpec(
-        code="profile_update", name_ar="طلب تعديل بياناتي", icon="user",
-        required_fields=(),
-        optional_fields=("note",),
-        hint_ar="يعتمده موظف الموارد البشرية مباشرةً",
-    ),
     RequestType.OVERTIME: RequestSpec(
         code="overtime", name_ar="طلب اعتماد عمل إضافي", icon="clock",
         required_fields=("work_date", "from_time", "to_time"),
@@ -128,6 +122,11 @@ SPECS = {
 
 
 # ══════════ الأهلية ══════════
+
+# ق-65: تعديل البيانات يُطلب من الملف لا من «خدماتي» — فلا
+# بطاقة له هنا، لكن النوع يبقى صالحًا للإنشاء والاعتماد.
+HIDDEN_FROM_SERVICES = {RequestType.PROFILE_UPDATE}
+
 
 def eligible_types(employment):
     """
@@ -147,6 +146,8 @@ def eligible_types(employment):
     is_saudi = employment.person.nationality_code == "SA"
 
     for rtype, spec in SPECS.items():
+        if rtype in HIDDEN_FROM_SERVICES:
+            continue
         if spec.eligibility == "ticket_eligible":
             if is_saudi and not tickets_for_saudis:
                 continue
