@@ -134,6 +134,7 @@ urlpatterns = [
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
     path("api/requests/", leaves_api.submit_request, name="submit-request"),
+    path("api/me/profile/", employees_api.my_profile, name="my-profile"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

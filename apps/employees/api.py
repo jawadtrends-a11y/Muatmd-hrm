@@ -309,3 +309,140 @@ def registration_flags(request, employment_id):
         "note": ("نطاقات تحتسب المسجّلين في قوى فقط. حقوق نهاية الخدمة "
                  "والإجازات تُحتسب للجميع بغض النظر عن التسجيل."),
     })
+
+
+# ══════════════════ الملف الشخصي للموظف (ق-54) ══════════════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_profile(request):
+    """
+    ملف الموظف عن نفسه — الشاشة الرئيسية له.
+
+    بياناته وراتبه وخدمته ووثائقه، بلا صلاحيات إدارية.
+    """
+    from datetime import date
+
+    from apps.employees.models import (
+        Employment, EmploymentStatus, SalaryStructure,
+    )
+    from apps.employees.models_assets import (
+        Advance, AdvanceStatus, Asset, AssetStatus, EmployeeDocument,
+    )
+    from apps.payroll.models_banks import label_for
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    company_id = _company_id(request)
+    emp = Employment.objects.filter(
+        person=person, company_id=company_id,
+        status=EmploymentStatus.ACTIVE).select_related(
+        "person", "department", "branch", "job_title",
+        "direct_manager__person").first()
+
+    if emp is None:
+        emp = Employment.objects.filter(
+            person=person).select_related("person").first()
+    if emp is None:
+        return Response({"detail": "لا ارتباط وظيفي"}, status=404)
+
+    # مدة الخدمة
+    start = emp.service_start_date or emp.join_date
+    days = (date.today() - start).days
+    years, rem = divmod(days, 365)
+    months = rem // 30
+
+    # هيكل الراتب الساري
+    structure = SalaryStructure.objects.filter(
+        employment=emp, effective_to__isnull=True
+    ).prefetch_related("lines__component").first()
+
+    salary_lines = []
+    gross = 0
+    if structure:
+        for line in structure.lines.all():
+            salary_lines.append({
+                "component": line.component.name_ar,
+                "code": line.component.code,
+                "amount": str(line.amount),
+            })
+            gross += float(line.amount)
+
+    # الوثائق القريبة من الانتهاء
+    docs = []
+    for d in EmployeeDocument.objects.filter(employment=emp):
+        if not d.expiry_date:
+            continue
+        left = (d.expiry_date - date.today()).days
+        if left > 90:
+            continue
+        docs.append({
+            "type": d.get_document_type_display(),
+            "number": d.document_number,
+            "expiry_date": d.expiry_date,
+            "days_left": left,
+            "severity": ("منتهية" if left < 0
+                         else "حرجة" if left <= 14
+                         else "قريبة" if left <= 30 else "تنبيه"),
+        })
+    docs.sort(key=lambda x: x["days_left"])
+
+    # السلف والعهد
+    advances = Advance.objects.filter(
+        employment=emp, status=AdvanceStatus.ACTIVE)
+    outstanding = sum(
+        float(a.amount) - float(a.repaid_amount) for a in advances)
+    assets = Asset.objects.filter(
+        employment=emp, status=AssetStatus.ASSIGNED)
+
+    return Response({
+        "employee": {
+            "employment_id": emp.id,
+            "employee_no": emp.employee_no,
+            "name_ar": emp.person.display_name,
+            "name_en": emp.person.full_name_en,
+            "id_number": emp.person.id_number,
+            "id_type": emp.person.get_id_type_display(),
+            "nationality": emp.person.nationality_code,
+            "mobile": emp.person.mobile_e164,
+            "email": emp.person.email,
+            "department": emp.department.name_ar if emp.department else "",
+            "branch": emp.branch.name_ar if emp.branch else "",
+            "job_title": emp.job_title.name_ar if emp.job_title else "",
+            "manager": (emp.direct_manager.person.display_name
+                        if emp.direct_manager else ""),
+            "status": emp.status,
+            "status_label": emp.get_status_display(),
+        },
+        "service": {
+            "join_date": emp.join_date,
+            "service_start_date": start,
+            "years": years,
+            "months": months,
+            "days_total": days,
+            "in_probation": (
+                emp.probation_end_date is not None
+                and emp.probation_end_date >= date.today()),
+            "probation_end": emp.probation_end_date,
+        },
+        "salary": {
+            "gross": f"{gross:.2f}",
+            "lines": salary_lines,
+            "iban": emp.iban,
+            "bank": label_for(emp.iban),
+        },
+        "registration": {
+            "gosi": emp.is_gosi_registered,
+            "mol": emp.is_mol_registered,
+            "wps": emp.include_in_wps,
+        },
+        "documents": docs,
+        "obligations": {
+            "advances_outstanding": f"{outstanding:.2f}",
+            "advances_count": advances.count(),
+            "assets_count": assets.count(),
+            "assets_value": f"{sum(float(a.value) for a in assets):.2f}",
+        },
+    })
