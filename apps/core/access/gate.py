@@ -81,6 +81,12 @@ class Gate:
         if membership.is_account_owner:
             return Decision(True, Scope.ACCOUNT, "مالك الحساب")
 
+        # الاستثناء الشخصي يعلو على الدور (ق-67): مدير الحساب
+        # يزيد أو ينقص لموظف بعينه بلا تغيير دوره.
+        override = cls._override(membership, permission_key)
+        if override is not None and not override.granted:
+            return Decision(False, Scope.OWN, "منزوعة باستثناء شخصي")
+
         best = None
         for assignment in membership.role_assignments.select_related("role"):
             if permission_key not in assignment.role.permission_keys:
@@ -89,9 +95,31 @@ class Gate:
             if best is None or scope.rank > best.rank:
                 best = scope
 
+        if override is not None and override.granted:
+            granted = Scope(override.scope) if override.scope else Scope.OWN
+            if best is None or granted.rank > best.rank:
+                best = granted
+
         if best is None:
             return Decision(False, Scope.OWN, "لا دور يمنح هذه الصلاحية")
         return Decision(True, best)
+
+    @classmethod
+    def _override(cls, membership, permission_key):
+        """
+        استثناء هذه الصلاحية لهذه العضوية — أو None.
+
+        الاستثناء المقيّد بشركة يسبق العام، فالشركة أخصّ.
+        """
+        rows = [
+            o for o in membership.permission_overrides.all()
+            if o.permission_key == permission_key
+            and o.company_id in (None, membership.active_company_id)
+        ]
+        if not rows:
+            return None
+        rows.sort(key=lambda o: (o.company_id is None))
+        return rows[0]
 
     @classmethod
     def require(cls, user, permission_key: str) -> Decision:
@@ -195,4 +223,13 @@ class Gate:
         keys = set()
         for a in membership.role_assignments.select_related("role"):
             keys |= a.role.permission_keys
+
+        # الاستثناءات الشخصية (ق-67) — تُضاف وتُنزع بعد الدور
+        for o in membership.permission_overrides.all():
+            if o.company_id not in (None, membership.active_company_id):
+                continue
+            if o.granted:
+                keys.add(o.permission_key)
+            else:
+                keys.discard(o.permission_key)
         return keys

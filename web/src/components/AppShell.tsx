@@ -58,6 +58,8 @@ type Workspace = {
   account: { name: string } | null;
   company: { name: string } | null;
   permissions: string[];
+  /** نطاق كل صلاحية على حدة (ق-67) — الاستثناء الشخصي قد يوسّعه */
+  permission_scopes?: Record<string, string>;
   roles?: { code: string; name_ar: string; scope: string }[];
   subscription?: {
     state: string;
@@ -171,13 +173,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const SCOPE_RANK: Record<string, number> = {
     own: 0, team: 1, department: 2, branch: 3, company: 4, account: 5,
   };
-  const widestScope = (ws?.roles ?? []).reduce(
-    (max, r) => Math.max(max, SCOPE_RANK[r.scope] ?? 0), 0);
-  const hasAdminScope = widestScope >= 1;
+  /**
+   * ق-67: النطاق يُفحص لكل صلاحية على حدة لا لأوسع نطاق للمستخدم.
+   *
+   * فالموظف قد يُمنح صلاحية واحدة بنطاق أوسع من دوره باستثناء
+   * شخصي — وفحص أوسع نطاق عام يحجب البند رغم المنح، فيبدو المنح
+   * معطوبًا وهو يعمل.
+   */
+  const scopes: Record<string, string> = ws?.permission_scopes ?? {};
+
+  const wideEnough = (perm: string) =>
+    (SCOPE_RANK[scopes[perm]] ?? 0) >= 1;
 
   const can = (item: NavItem) => {
-    if (item.needsScope && !hasAdminScope) return false;
-    return !item.perms || item.perms.some((p) => perms.has(p));
+    if (!item.perms) return true;
+    const held = item.perms.filter((p) => perms.has(p));
+    if (held.length === 0) return false;
+    // البند الإداري يحتاج صلاحية واحدة على الأقل بنطاق أوسع من «نفسي»
+    if (item.needsScope) return held.some(wideEnough);
+    return true;
   };
   const nav = NAV.filter(can);
 
@@ -301,8 +315,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* ق-58: إعدادات الشركة لمن يملكها — والموظف له «حسابي» */}
-        {hasAdminScope && (
+        {/* ق-58: إعدادات الشركة لمن يملك صلاحيتها — والموظف له «حسابي».
+            ق-68: تُحجب عن المشرف، فهو لا يملك company.edit. */}
+        {perms.has("company.edit") && (
           <div style={{ padding: 12, borderTop: "1px solid var(--line)" }}>
             <Link
               href="/settings"

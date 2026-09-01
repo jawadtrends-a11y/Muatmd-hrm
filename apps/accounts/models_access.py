@@ -152,3 +152,57 @@ class RoleAssignment(models.Model):
 
     def __str__(self):
         return f"{self.membership} → {self.role.code} ({self.scope})"
+
+class PermissionOverride(models.Model):
+    """
+    استثناء شخصي في الصلاحيات (ق-67).
+
+    مدير الحساب يزيد أو ينقص صلاحيات **موظف بعينه** بلا تغيير دوره
+    ولا التأثير على بقية أصحاب الدور نفسه. فالواقع المهني يكلّف
+    موظفًا بمهمة إضافية بلا ترقية.
+
+    والصلاحية الفعلية = صلاحيات الدور + الممنوح شخصيًا − المنزوع.
+
+    والاستثناء يحمل نطاقًا لا صلاحية مجردة: منح employees.view بلا
+    نطاق يُبقي الموظف على own فيرى نفسه فقط — أي منح بلا أثر.
+    """
+
+    membership = models.ForeignKey(
+        AccountMembership, on_delete=models.CASCADE,
+        related_name="permission_overrides",
+    )
+    company = models.ForeignKey(
+        "accounts.Company", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="+",
+        help_text=_("فارغ = يسري على كل شركات الحساب"),
+    )
+    permission_key = models.CharField(_("الصلاحية"), max_length=60)
+    granted = models.BooleanField(
+        _("ممنوحة"), default=True,
+        help_text=_("صح = تُضاف، خطأ = تُنزع ولو منحها الدور"),
+    )
+    scope = models.CharField(
+        _("النطاق"), max_length=20,
+        choices=[(s.value, s.value) for s in Scope],
+        blank=True,
+        help_text=_("عند المنح — يُهمل عند النزع"),
+    )
+    note = models.CharField(
+        _("سبب الاستثناء"), max_length=200, blank=True,
+        help_text=_("لماذا خُصّ هذا الموظف — للمراجعة لاحقًا"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("استثناء صلاحية")
+        verbose_name_plural = _("استثناءات الصلاحيات")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membership", "company", "permission_key"],
+                name="uq_override_per_member_company_perm",
+            ),
+        ]
+
+    def __str__(self):
+        sign = "+" if self.granted else "−"
+        return f"{self.membership} {sign}{self.permission_key}"

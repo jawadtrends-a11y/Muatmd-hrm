@@ -80,6 +80,12 @@ def workspace(request):
             for a in membership.role_assignments.select_related("role")
         ],
         "permissions": sorted(perms),
+        # نطاق كل صلاحية على حدة (ق-67): الموظف قد يملك صلاحية
+        # واحدة بنطاق أوسع من دوره باستثناء شخصي — فالواجهة تحتاج
+        # نطاق الصلاحية المعنية لا أوسع نطاق للمستخدم عمومًا.
+        "permission_scopes": {
+            key: Gate.check(user, key).scope.value for key in sorted(perms)
+        },
         "navigation": [
             {k: v for k, v in item.items() if k != "permission"}
             for item in NAV_ITEMS if _allowed(item["permission"], perms)
