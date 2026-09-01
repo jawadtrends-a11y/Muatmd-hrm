@@ -69,6 +69,18 @@ function headers(extra?: Record<string, string>): Record<string, string> {
   };
   const t = getToken();
   if (t) h["Authorization"] = `Bearer ${t}`;
+
+  /**
+   * لغة الواجهة تُرسل مع كل طلب (ق-64).
+   *
+   * فالخادم يرجع أسماء الأقسام والمكوّنات والبنوك جاهزة بلغة
+   * المستخدم — والاختيار في الخادم لا في عشرين شاشة.
+   */
+  if (typeof document !== "undefined") {
+    const lang = document.documentElement.lang || "ar";
+    h["Accept-Language"] = lang;
+  }
+
   return h;
 }
 

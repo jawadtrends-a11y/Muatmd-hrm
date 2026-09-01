@@ -323,6 +323,7 @@ def my_profile(request):
     """
     from datetime import date
 
+    from apps.core.i18n import localized, request_locale
     from apps.employees.models import (
         Employment, EmploymentStatus, SalaryStructure,
     )
@@ -348,6 +349,8 @@ def my_profile(request):
     if emp is None:
         return Response({"detail": "لا ارتباط وظيفي"}, status=404)
 
+    lang = request_locale(request)
+
     # مدة الخدمة
     start = emp.service_start_date or emp.join_date
     days = (date.today() - start).days
@@ -364,7 +367,7 @@ def my_profile(request):
     if structure:
         for line in structure.lines.all():
             salary_lines.append({
-                "component": line.component.name_ar,
+                "component": localized(line.component, locale=lang),
                 "code": line.component.code,
                 "amount": str(line.amount),
             })
@@ -408,9 +411,9 @@ def my_profile(request):
             "nationality": emp.person.nationality_code,
             "mobile": emp.person.mobile_e164,
             "email": emp.person.email,
-            "department": emp.department.name_ar if emp.department else "",
-            "branch": emp.branch.name_ar if emp.branch else "",
-            "job_title": emp.job_title.name_ar if emp.job_title else "",
+            "department": localized(emp.department, locale=lang),
+            "branch": localized(emp.branch, locale=lang),
+            "job_title": localized(emp.job_title, locale=lang),
             "manager": (emp.direct_manager.person.display_name
                         if emp.direct_manager else ""),
             "status": emp.status,
@@ -656,6 +659,9 @@ def employee_profile(request, employment_id):
     )
     from apps.payroll.models_banks import label_for
 
+    from apps.core.i18n import localized, request_locale
+    lang = request_locale(request)
+
     Gate.require(request.user, "employees.view")
     emp = Gate.filter_queryset(
         request.user, "employees.view", Employment.objects.all()
@@ -683,7 +689,7 @@ def employee_profile(request, employment_id):
     if structure:
         for ln in structure.lines.all():
             lines.append({
-                "component": ln.component.name_ar,
+                "component": localized(ln.component, locale=lang),
                 "code": ln.component.code,
                 "amount": str(ln.amount),
                 "in_gosi": getattr(ln.component, "in_gosi_wage", False),
@@ -752,20 +758,20 @@ def employee_profile(request, employment_id):
         "personal": _person_block(p),
 
         "job": {
-            "job_title": emp.job_title.name_ar if emp.job_title else "",
+            "job_title": localized(emp.job_title, locale=lang),
             "job_title_id": emp.job_title_id,
-            "department": emp.department.name_ar if emp.department else "",
+            "department": localized(emp.department, locale=lang),
             "department_id": emp.department_id,
-            "branch": emp.branch.name_ar if emp.branch else "",
+            "branch": localized(emp.branch, locale=lang),
             "branch_id": emp.branch_id,
-            "site": emp.primary_site.name_ar if emp.primary_site else "",
+            "site": localized(emp.primary_site, locale=lang),
             "site_id": emp.primary_site_id,
             "manager": (emp.direct_manager.person.display_name
                         if emp.direct_manager else ""),
             "manager_id": emp.direct_manager_id,
-            "grade": emp.job_grade.name_ar if emp.job_grade else "",
+            "grade": localized(emp.job_grade, locale=lang),
             "grade_id": emp.job_grade_id,
-            "step": emp.job_step.name_ar if emp.job_step else "",
+            "step": localized(emp.job_step, locale=lang),
             "step_id": emp.job_step_id,
             "employment_type": emp.employment_type,
             "work_ratio": str(emp.work_ratio),

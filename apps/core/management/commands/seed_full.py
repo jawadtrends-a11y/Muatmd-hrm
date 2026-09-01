@@ -68,17 +68,47 @@ EXPAT_NAMES = [
 
 # ══════════ الأقسام والمسميات ══════════
 
+# (بالعربية، بالإنجليزية) — الاسمان معًا (ق-64)
 DEPARTMENTS = {
-    "مقاولات": ["الإدارة العليا", "الموارد البشرية", "المالية",
-                "المشاريع", "السلامة", "المشتريات"],
-    "تجارة": ["الإدارة العليا", "الموارد البشرية", "المالية",
-              "المبيعات", "المستودعات", "خدمة العملاء"],
-    "خدمات": ["الإدارة العليا", "الموارد البشرية", "المالية",
-              "العمليات", "النقل", "الصيانة"],
-    "استشارات": ["الإدارة العليا", "الموارد البشرية", "المالية",
-                 "الاستشارات", "تطوير الأعمال"],
-    "صناعة": ["الإدارة العليا", "الموارد البشرية", "المالية",
-              "الإنتاج", "الجودة", "الصيانة"],
+    "مقاولات": [
+        ("الإدارة العليا", "Executive Management"),
+        ("الموارد البشرية", "Human Resources"),
+        ("المالية", "Finance"),
+        ("المشاريع", "Projects"),
+        ("السلامة", "Safety"),
+        ("المشتريات", "Procurement"),
+    ],
+    "تجارة": [
+        ("الإدارة العليا", "Executive Management"),
+        ("الموارد البشرية", "Human Resources"),
+        ("المالية", "Finance"),
+        ("المبيعات", "Sales"),
+        ("المستودعات", "Warehousing"),
+        ("خدمة العملاء", "Customer Service"),
+    ],
+    "خدمات": [
+        ("الإدارة العليا", "Executive Management"),
+        ("الموارد البشرية", "Human Resources"),
+        ("المالية", "Finance"),
+        ("العمليات", "Operations"),
+        ("النقل", "Logistics"),
+        ("الصيانة", "Maintenance"),
+    ],
+    "استشارات": [
+        ("الإدارة العليا", "Executive Management"),
+        ("الموارد البشرية", "Human Resources"),
+        ("المالية", "Finance"),
+        ("الاستشارات", "Consulting"),
+        ("تطوير الأعمال", "Business Development"),
+    ],
+    "صناعة": [
+        ("الإدارة العليا", "Executive Management"),
+        ("الموارد البشرية", "Human Resources"),
+        ("المالية", "Finance"),
+        ("الإنتاج", "Production"),
+        ("الجودة", "Quality"),
+        ("الصيانة", "Maintenance"),
+    ],
 }
 
 JOB_TITLES = [
@@ -351,15 +381,22 @@ class Command(BaseCommand):
 
     def _seed_branches(self, account, company, city):
         from apps.organization.models import Branch
+        CITY_EN = {
+            "الرياض": "Riyadh", "جدة": "Jeddah", "الدمام": "Dammam",
+            "ينبع": "Yanbu", "مكة": "Makkah", "المدينة": "Madinah",
+        }
+        city_en = CITY_EN.get(city, city)
+
         rows = [
-            ("BR1", f"الفرع الرئيسي — {city}"),
-            ("BR2", f"فرع {city} الصناعي"),
+            ("BR1", f"الفرع الرئيسي — {city}", f"Head Office — {city_en}"),
+            ("BR2", f"فرع {city} الصناعي", f"{city_en} Industrial Branch"),
         ]
         out = []
-        for code, name in rows:
+        for code, name_ar, name_en in rows:
             b, _ = Branch.objects.get_or_create(
                 account=account, company=company, code=code,
-                defaults={"name_ar": name, "city": city})
+                defaults={"name_ar": name_ar, "name_en": name_en,
+                          "city": city})
             out.append(b)
         return out
 
@@ -374,10 +411,11 @@ class Command(BaseCommand):
 
         out = []
         parent = None
-        for i, name in enumerate(DEPARTMENTS[kind]):
+        for i, (name_ar, name_en) in enumerate(DEPARTMENTS[kind]):
             d, _ = Department.objects.get_or_create(
                 account=account, company=company, code=f"D{i+1}",
-                defaults={"name_ar": name, "parent": parent})
+                defaults={"name_ar": name_ar, "name_en": name_en,
+                          "parent": parent})
             if i == 0:
                 parent = d
             out.append(d)
