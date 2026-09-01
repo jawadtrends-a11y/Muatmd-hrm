@@ -207,8 +207,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || isPublic || !ws) return;
 
+    // ⚠️ الرئيسية لا تُفحص — وإلا صارت الحلقة لا نهائية.
+    // وبند "/" يُستثنى من البحث لأن startsWith يطابقه دائمًا.
+    if (pathname === "/") return;
+
     const item = NAV.find((n) =>
-      n.href === "/" ? pathname === "/" : pathname.startsWith(n.href));
+      n.href !== "/" && pathname.startsWith(n.href));
 
     if (item && !can(item)) {
       router.replace("/");
