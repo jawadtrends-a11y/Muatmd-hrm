@@ -237,6 +237,22 @@ function DynField({
   );
 }
 
+/**
+ * هل للمعاينة محتوى يستحق العرض؟
+ *
+ * بلا هذا الفحص يظهر شريط فارغ حين ترجع المعاينة بلا بيانات —
+ * كتصحيح بصمة ليوم لا سجل حضور له ولا طلب سابق عليه.
+ */
+function hasPreviewContent(p: Record<string, unknown>): boolean {
+  if (p.duplicate) return true;
+  if (p.charged_days != null) return true;
+  if (p.label != null) return true;
+  if (p.days != null) return true;
+  if (p.notice_days != null) return true;
+  if (p.current != null) return true;
+  return Array.isArray(p.warnings) && (p.warnings as string[]).length > 0;
+}
+
 /* ══ الشاشة ══ */
 
 export default function MyRequestsPage() {
@@ -503,7 +519,7 @@ export default function MyRequestsPage() {
           </div>
 
           {/* ══ المعاينة الحيّة (ق-59) ══ */}
-          {preview && !previewing && (
+          {preview && !previewing && hasPreviewContent(preview) && (
             <div style={{
               marginTop: 16, padding: "14px 16px",
               background: preview.duplicate
