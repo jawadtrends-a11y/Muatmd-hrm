@@ -131,6 +131,7 @@ export default function PunchCard() {
     <div className="card" style={{ padding: 18 }}>
       <div className="row" style={{
         gap: 12, flexWrap: "wrap", alignItems: "center",
+        justifyContent: "center",
       }}>
         <button
           className="btn"
@@ -164,9 +165,7 @@ export default function PunchCard() {
             : L("checkOut")}
         </button>
 
-        <div className="grow" />
-
-        {/* ملخص اليوم */}
+        {/* ملخص اليوم — بجانب الزرّين لا في الطرف */}
         {!busy && punches.length > 0 && (
           <div className="row" style={{ gap: 18 }}>
             <div>
@@ -196,7 +195,7 @@ export default function PunchCard() {
         <div style={{
           marginTop: 12, background: "var(--ok-soft)", color: "var(--ok)",
           padding: "10px 13px", borderRadius: "var(--radius-sm)",
-          fontWeight: 500, fontSize: ".9rem",
+          fontWeight: 500, fontSize: ".9rem", textAlign: "center",
         }}>
           <IcCheck size={16} /> {ok}
         </div>
