@@ -285,13 +285,26 @@ export default function MyRequestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * النوع المختار يُحفظ في الرابط (?type=…) لا في الحالة وحدها.
+   *
+   * فتحديث الصفحة يبقيك في النموذج، والرابط قابل للمشاركة،
+   * وزر الرجوع في المتصفح يعمل كما يتوقع المستخدم.
+   */
   const pick = useCallback((t: ReqType) => {
     setSelected(t);
     setValues({});
     setNote("");
     setError("");
     setDone(null);
-  }, []);
+    router.replace(`/me/requests?type=${t.code}`, { scroll: false });
+  }, [router]);
+
+  const clearSelection = useCallback(() => {
+    setSelected(null);
+    setError("");
+    router.replace("/me/requests", { scroll: false });
+  }, [router]);
 
   const missing = selected
     ? selected.required_fields.filter((f) => !values[f]?.trim())
@@ -360,6 +373,7 @@ export default function MyRequestsPage() {
 
       setDone({ no: res.request_no, warnings: res.warnings || [] });
       setSelected(null);
+      router.replace("/me/requests", { scroll: false });
     } catch (e) {
       setError((e as ApiError).message);
     } finally {
@@ -391,7 +405,7 @@ export default function MyRequestsPage() {
       <div>
         {selected && (
           <button className="btn btn-sm btn-ghost"
-            onClick={() => setSelected(null)}>
+            onClick={clearSelection}>
             ← {L("back")}
           </button>
         )}
@@ -690,7 +704,7 @@ export default function MyRequestsPage() {
               <IcCheck size={17} />
               {saving ? L("submitting") : L("submit")}
             </button>
-            <button className="btn btn-ghost" onClick={() => setSelected(null)}>
+            <button className="btn btn-ghost" onClick={clearSelection}>
               {L("cancel")}
             </button>
             {missing.length > 0 && (
