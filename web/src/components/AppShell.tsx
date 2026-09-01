@@ -160,20 +160,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname, isPublic, router]);
 
   // الصفحات العامة بلا هيكل
-  if (isPublic) return <>{children}</>;
-
-  // 🔑 لا يُرسم الهيكل قبل التحقق
-  if (!ready) {
-    return (
-      <div style={{
-        display: "grid", placeItems: "center", minHeight: "100vh",
-        color: "var(--ink-3)",
-      }}>
-        {L("loading")}
-      </div>
-    );
-  }
-
   const perms = new Set(ws?.permissions ?? []);
 
   /**
@@ -219,6 +205,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, pathname, ws]);
+
+  if (isPublic) return <>{children}</>;
+
+  // 🔑 لا يُرسم الهيكل قبل التحقق
+  if (!ready) {
+    return (
+      <div style={{
+        display: "grid", placeItems: "center", minHeight: "100vh",
+        color: "var(--ink-3)",
+      }}>
+        {L("loading")}
+      </div>
+    );
+  }
+
+
+
 
   const sub = ws?.subscription;
   const readOnly = sub && !sub.is_writable;
