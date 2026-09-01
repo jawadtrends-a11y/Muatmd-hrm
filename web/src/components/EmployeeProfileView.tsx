@@ -324,29 +324,61 @@ function EditableSection({
       </div>
 
       {!editing ? (
-        fields.map((f) => {
-          const v = values[f.key];
-          let display: React.ReactNode = v == null || v === "" ? "" : String(v);
+        /**
+         * شبكة حقول لا صفوف جدول.
+         *
+         * القيمة داخل إطار الحقل تحت عنوانها مباشرةً — فالعين
+         * تربطهما بلا قطع الشاشة، والشكل يطابق وضع التعديل
+         * فلا يتغيّر التخطيط عند الضغط على «تعديل».
+         */
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+          gap: 14,
+        }}>
+          {fields.map((f) => {
+            const v = values[f.key];
+            let display: React.ReactNode = v == null || v === "" ? "—" : String(v);
 
-          if (f.kind === "bool") {
-            display = (
-              <span className={v ? "badge badge-ok" : "badge"}>
-                {v ? L("yes") : L("no")}
-              </span>
+            if (f.kind === "bool") {
+              display = (
+                <span className={v ? "badge badge-ok" : "badge"}>
+                  {v ? L("yes") : L("no")}
+                </span>
+              );
+            } else if (f.kind === "select" && f.options) {
+              display = f.options.find((o) => o.value === String(v))?.label
+                || display;
+            } else if (f.kind === "number" || f.kind === "date") {
+              display = <span className="num">{display}</span>;
+            }
+
+            return (
+              <div key={f.key}>
+                <div className="muted" style={{
+                  fontSize: ".8rem", marginBottom: 5,
+                }}>
+                  {f.label}
+                </div>
+                <div style={{
+                  padding: "9px 12px", background: "var(--paper-2)",
+                  borderRadius: "var(--radius-sm)", fontWeight: 500,
+                  minHeight: 38, display: "flex", alignItems: "center",
+                }}>
+                  {display}
+                </div>
+              </div>
             );
-          } else if (f.kind === "select" && f.options) {
-            display = f.options.find((o) => o.value === String(v))?.label
-              || display;
-          }
-
-          return <Row key={f.key} label={f.label} value={display}
-            numeric={f.kind === "number" || f.kind === "date"} />;
-        })
+          })}
+        </div>
       ) : (
-        <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+          gap: 14,
+        }}>
           {fields.map((f) => (
-            <div key={f.key} className="field"
-              style={{ minWidth: 180, maxWidth: 240 }}>
+            <div key={f.key} className="field">
               <label className="label">{f.label}</label>
 
               {f.readOnly ? (
