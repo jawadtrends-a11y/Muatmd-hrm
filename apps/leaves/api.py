@@ -328,7 +328,7 @@ def my_approvals(request):
 
     pending = RequestApproval.objects.filter(
         approver_employment=emp,
-        decision=ApprovalDecision.PENDING,
+        decision="",   # "" = لم يُقرَّر بعد — كما في محرّك decide
         request__status=RequestStatus.PENDING,
     ).select_related("request__employment__person")
 
