@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import DateField from "@/components/DateField";
 import {
   IcAlert, IcCheck, IcClock, IcDoc, IcHome, IcLeave, IcWallet,
 } from "@/components/Icons";
@@ -218,12 +219,14 @@ function DynField({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      ) : kind === "date" ? (
+        <DateField value={value} onChange={onChange} />
       ) : (
         <input
           className="input"
-          type={kind === "date" ? "date" : kind === "time" ? "time"
-                : kind === "number" ? "number" : "text"}
-          dir={kind === "number" ? "ltr" : undefined}
+          type={kind === "time" ? "time" : kind === "number" ? "number" : "text"}
+          dir={kind === "number" || kind === "time" ? "ltr" : undefined}
+          step={kind === "time" ? 60 : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

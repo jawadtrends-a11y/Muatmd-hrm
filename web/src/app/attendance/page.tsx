@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { apiGet, qs, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import DateField from "@/components/DateField";
 import { IcAlert, IcClock } from "@/components/Icons";
 
 const T: Dict = {
@@ -169,8 +170,7 @@ export default function AttendancePage() {
         {mode === "daily" ? (
           <div className="field" style={{ maxWidth: 200 }}>
             <label className="label">{L("date")}</label>
-            <input type="date" className="input" value={day}
-              onChange={(e) => setDay(e.target.value)} />
+            <DateField value={day} onChange={setDay} />
           </div>
         ) : (
           <>

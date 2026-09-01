@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import DateField from "@/components/DateField";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 
 const T: Dict = {
@@ -351,12 +352,10 @@ export default function NewEmployeePage() {
               onChange={(e) => setEmployeeNo(e.target.value)} />
           </F>
           <F label={L("joinDate")} required>
-            <input className="input" type="date" value={joinDate}
-              onChange={(e) => setJoinDate(e.target.value)} />
+            <DateField value={joinDate} onChange={setJoinDate} />
           </F>
           <F label={L("serviceStart")} hint={L("serviceHint")}>
-            <input className="input" type="date" value={serviceStart}
-              onChange={(e) => setServiceStart(e.target.value)} />
+            <DateField value={serviceStart} onChange={setServiceStart} />
           </F>
           <F label={L("probation")} hint={L("probationHint")}>
             <input className="input" type="number" dir="ltr" value={probation}
