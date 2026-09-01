@@ -29,6 +29,22 @@ def _company_id(request):
     return getattr(ctx, "active_company_id", None)
 
 
+def _my_employment(request):
+    """
+    الارتباط الوظيفي للمستخدم الحالي — للخدمة الذاتية.
+
+    مقيّد بـperson المرتبط بالمستخدم، فلا حاجة لـGate: المستخدم
+    يبحث عن نفسه لا عن غيره.
+    """
+    from apps.employees.models import Employment, EmploymentStatus
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return None
+    return Employment.objects.filter(
+        person=person, company_id=_company_id(request),
+        status=EmploymentStatus.ACTIVE).first()
+
+
 def _get_employment(request, employment_id, permission):
     qs = Gate.filter_queryset(request.user, permission,
                               Employment.objects.all())
@@ -504,3 +520,224 @@ def my_attendance(request):
         },
         "days": rows,
     })
+
+
+# ══════════════════ مواقع العمل والبصمة (ق-62) ══════════════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def work_sites(request):
+    """مواقع العمل — قائمة وإضافة."""
+    from apps.attendance.models_sites import WorkSite
+
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "GET":
+        Gate.require(request.user, "attendance.view")
+        qs = Gate.filter_queryset(
+            request.user, "attendance.view", WorkSite.objects.all()
+        ).filter(company_id=company_id).select_related("site_manager__person")
+
+        return Response([{
+            "id": s.id, "code": s.code, "name_ar": s.name_ar,
+            "city": s.city, "address": s.address,
+            "latitude": str(s.latitude) if s.latitude else None,
+            "longitude": str(s.longitude) if s.longitude else None,
+            "radius_meters": s.radius_meters,
+            "tolerance_meters": s.tolerance_meters,
+            "effective_radius": s.effective_radius,
+            "enforce_geofence": s.enforce_geofence,
+            "has_coordinates": s.has_coordinates,
+            "manager": (s.site_manager.person.display_name
+                        if s.site_manager else ""),
+            "employees": s.assignments.count(),
+            "devices": s.devices.count(),
+            "is_active": s.is_active,
+        } for s in qs])
+
+    Gate.require(request.user, "attendance.shifts")
+    d = request.data
+
+    try:
+        site = WorkSite.objects.create(
+            account_id=request.user.person.account_id,
+            company_id=company_id,
+            code=(d.get("code") or "").strip()[:20],
+            name_ar=(d.get("name_ar") or "").strip()[:150],
+            name_en=(d.get("name_en") or "").strip()[:150],
+            city=(d.get("city") or "").strip()[:80],
+            address=(d.get("address") or "").strip()[:255],
+            latitude=d.get("latitude") or None,
+            longitude=d.get("longitude") or None,
+            radius_meters=int(d.get("radius_meters") or 100),
+            tolerance_meters=int(d.get("tolerance_meters") or 100),
+            enforce_geofence=bool(d.get("enforce_geofence", True)),
+            note=(d.get("note") or "")[:255])
+    except Exception as e:      # noqa: BLE001
+        return Response({"detail": f"بيانات غير صالحة: {e}"}, status=400)
+
+    return Response({"id": site.id, "code": site.code}, status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def work_site_detail(request, site_id):
+    """تعديل موقع أو تعطيله."""
+    from apps.attendance.models_sites import WorkSite
+
+    Gate.require(request.user, "attendance.shifts")
+    site = Gate.filter_queryset(
+        request.user, "attendance.shifts", WorkSite.objects.all()
+    ).filter(id=site_id).first()
+    if site is None:
+        return Response({"detail": "الموقع غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        site.is_active = False
+        site.save(update_fields=["is_active", "updated_at"])
+        return Response({"deactivated": True})
+
+    d = request.data
+    for field in ("name_ar", "name_en", "city", "address", "note"):
+        if field in d:
+            setattr(site, field, (d.get(field) or "")[:255])
+    for field in ("latitude", "longitude"):
+        if field in d:
+            setattr(site, field, d.get(field) or None)
+    for field in ("radius_meters", "tolerance_meters"):
+        if field in d:
+            setattr(site, field, int(d.get(field) or 100))
+    if "enforce_geofence" in d:
+        site.enforce_geofence = bool(d["enforce_geofence"])
+
+    try:
+        site.full_clean()
+        site.save()
+    except Exception as e:      # noqa: BLE001
+        return Response({"detail": f"قيمة غير صالحة: {e}"}, status=400)
+
+    return Response({"updated": True})
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def site_assignments(request, site_id):
+    """إسناد الموظفين لموقع."""
+    from apps.attendance.models_sites import SiteAssignment, WorkSite
+    from apps.employees.models import Employment
+
+    Gate.require(request.user, "attendance.view")
+    site = Gate.filter_queryset(
+        request.user, "attendance.view", WorkSite.objects.all()
+    ).filter(id=site_id).first()
+    if site is None:
+        return Response({"detail": "الموقع غير موجود"}, status=404)
+
+    if request.method == "GET":
+        return Response([{
+            "id": a.id,
+            "employment_id": a.employment_id,
+            "employee_no": a.employment.employee_no,
+            "name": a.employment.person.display_name,
+            "is_primary": a.is_primary,
+        } for a in site.assignments.select_related("employment__person")])
+
+    Gate.require(request.user, "attendance.shifts")
+
+    if request.method == "DELETE":
+        SiteAssignment.objects.filter(
+            site=site, employment_id=request.data.get("employment_id")
+        ).delete()
+        return Response({"removed": True})
+
+    ids = request.data.get("employment_ids") or []
+    if request.data.get("employment_id"):
+        ids.append(request.data["employment_id"])
+
+    # الإسناد يمسّ موظفين آخرين — فالبوابة تحدّ بنطاق المُسنِد
+    allowed = Gate.filter_queryset(
+        request.user, "attendance.shifts", Employment.objects.all()
+    ).filter(company_id=site.company_id)
+
+    made = 0
+    for eid in ids:
+        emp = allowed.filter(id=eid).first()
+        if emp is None:
+            continue
+        _obj, created = SiteAssignment.objects.get_or_create(
+            employment=emp, site=site,
+            defaults={"account_id": site.account_id,
+                      "company_id": site.company_id,
+                      "is_primary": bool(request.data.get("is_primary"))})
+        made += int(created)
+
+    return Response({"assigned": made}, status=201)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def my_punch(request):
+    """
+    بصمة الموظف بنفسه (ق-62).
+
+    GET يرجع مواقعه وحالة بصمته اليوم — فيعرف قبل أن يضغط.
+    POST يسجّل البصمة بعد التحقق من النطاق.
+    """
+    from apps.attendance.models import AttendancePunch
+    from apps.attendance.models_sites import PunchMethod
+    from apps.attendance.services.geofence import (
+        GeofenceError, record_punch, sites_for,
+    )
+    from django.utils import timezone
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    # الموظف يبحث عن ارتباطه هو — person مقيّد بالمستخدم نفسه
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ارتباط وظيفي نشط"}, status=404)
+
+    if request.method == "GET":
+        today = timezone.localdate()
+        punches = AttendancePunch.objects.filter(
+            employment=emp, punched_at__date=today).order_by("punched_at")
+
+        return Response({
+            "employee_no": emp.employee_no,
+            "today": str(today),
+            "punches": [{
+                "at": timezone.localtime(p.punched_at).strftime("%H:%M"),
+                "source": p.source,
+                "site": (p.raw_payload or {}).get("site_code", ""),
+            } for p in punches],
+            "sites": [{
+                "id": s.id, "name_ar": s.name_ar, "code": s.code,
+                "latitude": str(s.latitude) if s.latitude else None,
+                "longitude": str(s.longitude) if s.longitude else None,
+                "radius": s.effective_radius,
+                "enforced": s.enforce_geofence,
+            } for s in sites_for(emp)],
+        })
+
+    try:
+        punch, site, distance = record_punch(
+            employment=emp,
+            latitude=request.data.get("latitude"),
+            longitude=request.data.get("longitude"),
+            accuracy_m=request.data.get("accuracy"),
+            method=PunchMethod.MOBILE_GPS)
+    except GeofenceError as e:
+        return Response({"detail": str(e), "code": "outside_geofence"},
+                        status=400)
+
+    from django.utils import timezone as tz
+    return Response({
+        "recorded": True,
+        "at": tz.localtime(punch.punched_at).strftime("%H:%M"),
+        "site": site.name_ar if site else "",
+        "distance_m": distance,
+    }, status=201)

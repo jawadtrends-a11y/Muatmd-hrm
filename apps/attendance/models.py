@@ -234,3 +234,9 @@ class AttendanceMonthlySummary(CompanyScopedModel):
                 fields=["employment", "period_year", "period_month"],
                 name="uq_attendance_summary"),
         ]
+
+
+# مواقع العمل والبصمة بالنطاق (ق-62)
+from apps.attendance.models_sites import (  # noqa: E402,F401
+    PunchDevice, PunchMethod, SiteAssignment, WorkSite,
+)

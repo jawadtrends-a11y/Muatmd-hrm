@@ -143,6 +143,10 @@ urlpatterns = [
     path("api/me/password/", employees_api.change_my_password, name="my-password"),
     path("api/me/avatar/", employees_api.my_avatar, name="my-avatar"),
     path("api/files/<int:file_id>/", employees_api.serve_file, name="serve-file"),
+    path("api/sites/", attendance_api.work_sites, name="work-sites"),
+    path("api/sites/<int:site_id>/", attendance_api.work_site_detail, name="site-detail"),
+    path("api/sites/<int:site_id>/employees/", attendance_api.site_assignments, name="site-employees"),
+    path("api/me/punch/", attendance_api.my_punch, name="my-punch"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
