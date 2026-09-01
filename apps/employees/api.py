@@ -980,6 +980,33 @@ def update_employee_profile(request, employment_id):
     return Response({"updated": True, "fields": changed})
 
 
+
+
+def _resolve_employment(request, employment_id, write=False):
+    """
+    يجلب الارتباط الوظيفي — الموظف يصل لملفه هو بلا صلاحية (ق-65).
+
+    write=True يعني عملية كتابة: صاحب الملف مسموح له (فالنتيجة
+    طلب لا تعديل)، وغيره يحتاج employees.edit.
+    """
+    from apps.employees.models import Employment
+
+    person = getattr(request.user, "person", None)
+    own = person and Employment.objects.filter(
+        id=employment_id, person=person).exists()
+
+    if own:
+        return Employment.objects.filter(
+            id=employment_id, person=person).select_related("person").first(), True
+
+    Gate.require(request.user, "employees.edit" if write else "employees.view")
+    emp = Gate.filter_queryset(
+        request.user, "employees.edit" if write else "employees.view",
+        Employment.objects.all()
+    ).filter(id=employment_id).select_related("person").first()
+
+    return emp, False
+
 @api_view(["GET", "POST", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def employee_dependents(request, employment_id):
@@ -987,10 +1014,8 @@ def employee_dependents(request, employment_id):
     from apps.employees.models import Employment
     from apps.employees.models_profile import Dependent
 
-    Gate.require(request.user, "employees.view")
-    emp = Gate.filter_queryset(
-        request.user, "employees.view", Employment.objects.all()
-    ).filter(id=employment_id).select_related("person").first()
+    emp, own = _resolve_employment(request, employment_id,
+                                   write=request.method != "GET")
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
 
@@ -1006,7 +1031,6 @@ def employee_dependents(request, employment_id):
             "nationality_code": d.nationality_code,
         } for d in p.dependents.all()])
 
-    Gate.require(request.user, "employees.edit")
     d = request.data
 
     if request.method == "DELETE":
@@ -1044,10 +1068,8 @@ def employee_contacts(request, employment_id):
     from apps.employees.models import Employment
     from apps.employees.models_profile import EmergencyContact
 
-    Gate.require(request.user, "employees.view")
-    emp = Gate.filter_queryset(
-        request.user, "employees.view", Employment.objects.all()
-    ).filter(id=employment_id).select_related("person").first()
+    emp, own = _resolve_employment(request, employment_id,
+                                   write=request.method != "GET")
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
 
@@ -1059,8 +1081,6 @@ def employee_contacts(request, employment_id):
             "relation": c.relation, "mobile": c.mobile,
             "phone": c.phone, "is_primary": c.is_primary,
         } for c in p.emergency_contacts.all()])
-
-    Gate.require(request.user, "employees.edit")
 
     if request.method == "DELETE":
         EmergencyContact.objects.filter(

@@ -858,7 +858,15 @@ export default function EmployeeProfileView({
           </div>
 
           <div className="grow" />
-          <span className="badge">{data.status_label}</span>
+          {/* الحالة تُقرأ بلمحة لونية: أخضر على رأس العمل،
+              أحمر لمن انتهت علاقته، ونحاسي للحالات المؤقتة */}
+          <span className={
+            data.status === "active" ? "badge badge-ok"
+            : data.status === "terminated" ? "badge badge-danger"
+            : "badge badge-warn"
+          }>
+            {data.status_label}
+          </span>
         </div>
       </div>
 
