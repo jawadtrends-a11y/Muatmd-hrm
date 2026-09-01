@@ -43,8 +43,8 @@ const T: Dict = {
   days: { ar: "عدد الأيام", en: "Days" },
   work_date: { ar: "تاريخ اليوم", en: "Date" },
   reason: { ar: "السبب", en: "Reason" },
-  first_in: { ar: "وقت الحضور", en: "Check-in" },
-  last_out: { ar: "وقت الانصراف", en: "Check-out" },
+  first_in: { ar: "وقت الحضور الصحيح", en: "Correct check-in" },
+  last_out: { ar: "وقت الانصراف الصحيح", en: "Correct check-out" },
   from_time: { ar: "من الساعة", en: "From" },
   to_time: { ar: "إلى الساعة", en: "To" },
   amount: { ar: "المبلغ", en: "Amount" },
@@ -104,7 +104,9 @@ const ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
 // نوع الحقل يُستنتج من اسمه
 function fieldKind(name: string): string {
   if (name.endsWith("_date") || name === "work_date") return "date";
-  if (name.endsWith("_time")) return "time";
+  // first_in و last_out أوقات أيضًا — لا تنتهي بـ_time
+  if (name.endsWith("_time") || name === "first_in"
+      || name === "last_out") return "time";
   if (["days", "installments", "hours", "amount", "value",
        "estimated_cost", "family_members"].includes(name)) return "number";
   if (name === "include_salary") return "bool";
