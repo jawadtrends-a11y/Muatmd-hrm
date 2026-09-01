@@ -4,7 +4,9 @@ API الإجازات والطلبات.
 المدير يفتح النظام ليرى ما ينتظره لا ليبحث عنه — لذلك
 /me/approvals/ نقطة مستقلة.
 """
-from datetime import date
+from datetime import date, timedelta
+
+from django.utils import timezone
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -577,3 +579,169 @@ def my_letters(request):
         })
 
     return Response(rows)
+
+
+# ══════════════════ معاينة الطلبات (ق-59) ══════════════════
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def preview_request(request):
+    """
+    معاينة أثر الطلب قبل تقديمه.
+
+    ق-59: النظام يحتسب ما يستطيع احتسابه — الموظف يختار تاريخين
+    ويرى الأيام المخصومة ورصيده بعدها، لا يُدخل رقمًا يُشتق منهما.
+    """
+    from datetime import date, datetime
+
+    from apps.leaves.models import (
+        LeaveBalance, LeaveType, Request as Req, RequestStatus, RequestType,
+    )
+    from apps.leaves.services.balances import (
+        LeaveError, compute_days_between,
+    )
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    rtype = request.data.get("request_type", "")
+    p = request.data.get("payload") or {}
+
+    # ── إجازة: من/إلى → أيام مخصومة ──
+    if rtype == RequestType.LEAVE:
+        code = p.get("leave_type_code", "")
+        lt = LeaveType.objects.filter(
+            company_id=emp.company_id, code=code).first()
+        if lt is None:
+            return Response({"detail": "اختر نوع الإجازة"}, status=400)
+
+        try:
+            start = date.fromisoformat(str(p["start_date"]))
+            end = date.fromisoformat(str(p["end_date"]))
+        except (KeyError, ValueError):
+            return Response({"detail": "حدّد تاريخي البداية والنهاية"},
+                            status=400)
+
+        try:
+            calc = compute_days_between(
+                company=emp.company, leave_type=lt,
+                start_date=start, end_date=end)
+        except LeaveError as e:
+            return Response({"detail": str(e)}, status=400)
+
+        bal = LeaveBalance.objects.filter(
+            employment=emp, leave_type=lt, year=start.year).first()
+        available = float(bal.available) if bal else None
+        charged = float(calc.charged_days)
+
+        warnings = []
+        if available is not None and charged > available:
+            warnings.append(
+                f"الرصيد المتاح {available:.2f} يومًا "
+                f"والمطلوب {charged:.0f} — سيُخصم الفارق من الأجر")
+        if start < date.today():
+            warnings.append("تاريخ البداية في الماضي")
+
+        return Response({
+            "leave_type": lt.name_ar,
+            "calendar_days": calc.calendar_days,
+            "charged_days": f"{charged:.0f}",
+            "excluded_days": calc.extended_days,
+            "excluded": calc.excluded,
+            "start_date": str(start),
+            "end_date": str(end),
+            "return_date": str(end + timedelta(days=1)),
+            "available_before": (f"{available:.2f}" if available is not None
+                                 else None),
+            "available_after": (f"{available - charged:.2f}"
+                                if available is not None else None),
+            "is_paid": lt.is_paid,
+            "warnings": warnings,
+        })
+
+    # ── تصحيح البصمة: منع التكرار لنفس اليوم ──
+    if rtype == RequestType.ATTENDANCE_FIX:
+        try:
+            work_date = date.fromisoformat(str(p["work_date"]))
+        except (KeyError, ValueError):
+            return Response({"detail": "حدّد التاريخ"}, status=400)
+
+        existing = Req.objects.filter(
+            employment=emp, request_type=RequestType.ATTENDANCE_FIX,
+            status__in=[RequestStatus.PENDING, RequestStatus.APPROVED],
+            payload__work_date=str(work_date)).first()
+
+        from apps.attendance.models import AttendanceDay
+        day = AttendanceDay.objects.filter(
+            employment=emp, work_date=work_date).first()
+
+        return Response({
+            "work_date": str(work_date),
+            "duplicate": existing is not None,
+            "duplicate_no": existing.request_no if existing else "",
+            "current": {
+                "status": day.get_status_display() if day else "لا سجل",
+                "first_in": (timezone.localtime(day.first_in).strftime("%H:%M")
+                             if day and day.first_in else ""),
+                "last_out": (timezone.localtime(day.last_out).strftime("%H:%M")
+                             if day and day.last_out else ""),
+                "late_minutes": day.late_minutes if day else 0,
+            } if day else None,
+        })
+
+    # ── العمل الإضافي: من/إلى ساعة → دقائق ──
+    if rtype == RequestType.OVERTIME:
+        try:
+            h1, m1 = map(int, str(p["from_time"]).split(":")[:2])
+            h2, m2 = map(int, str(p["to_time"]).split(":")[:2])
+        except (KeyError, ValueError):
+            return Response({"detail": "حدّد وقتي البداية والنهاية"},
+                            status=400)
+
+        minutes = (h2 * 60 + m2) - (h1 * 60 + m1)
+        if minutes <= 0:
+            minutes += 24 * 60      # امتد بعد منتصف الليل
+
+        hours = minutes // 60
+        rem = minutes % 60
+        return Response({
+            "minutes": minutes,
+            "hours": hours,
+            "remaining_minutes": rem,
+            "label": (f"{hours} ساعة" + (f" و{rem} دقيقة" if rem else "")),
+            "warnings": (["أكثر من 10 ساعات — راجع الاحتساب"]
+                         if minutes > 600 else []),
+        })
+
+    # ── رحلة العمل: مغادرة/عودة → أيام ──
+    if rtype == RequestType.BUSINESS_TRIP:
+        try:
+            start = date.fromisoformat(str(p["start_date"]))
+            end = date.fromisoformat(str(p["end_date"]))
+        except (KeyError, ValueError):
+            return Response({"detail": "حدّد تاريخي المغادرة والعودة"},
+                            status=400)
+        if end < start:
+            return Response({"detail": "تاريخ العودة قبل المغادرة"},
+                            status=400)
+        days = (end - start).days + 1
+        return Response({
+            "days": days,
+            "start_date": str(start),
+            "end_date": str(end),
+            "note": "رحلة عمل — لا تُخصم من أي رصيد إجازات",
+        })
+
+    # ── إنهاء العقد: مدة الإشعار ──
+    if rtype == RequestType.RESIGNATION:
+        # م/75 بعد تعديل م/44: العامل 30 يومًا، صاحب العمل 60
+        notice_days = 30
+        return Response({
+            "notice_days": notice_days,
+            "note": (f"مدة الإشعار النظامية {notice_days} يومًا تبدأ من "
+                     "تاريخ الاعتماد النهائي لا من التقديم"),
+            "reference": "المادة 75 — تعديل م/44 لعام 1446هـ",
+        })
+
+    return Response({"detail": "لا معاينة لهذا النوع"}, status=400)

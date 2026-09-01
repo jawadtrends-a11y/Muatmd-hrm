@@ -132,6 +132,63 @@ def compute_leave_days(*, company, leave_type, start_date, requested_days,
         end_date=last, excluded=excluded)
 
 
+def compute_days_between(*, company, leave_type, start_date, end_date,
+                         shift=None):
+    """
+    عكس compute_leave_days: من تاريخين إلى عدد الأيام المخصومة (ق-59).
+
+    الموظف يختار «من» و«إلى»، والنظام يحتسب ما يُخصم من رصيده —
+    فلا يُدخل رقمًا يمكن اشتقاقه من تاريخين.
+
+    نفس قواعد ق-33: العطل تُمدّد افتراضًا، والراحة حسب النوع.
+    """
+    from apps.organization.models import Holiday
+
+    if end_date < start_date:
+        raise LeaveError("تاريخ النهاية قبل تاريخ البداية")
+
+    calendar_days = (end_date - start_date).days + 1
+    if calendar_days > 400:
+        raise LeaveError("المدة أطول من سنة")
+
+    working_days = set(shift.working_days) if shift and shift.working_days \
+        else {0, 1, 2, 3, 4}
+
+    holidays = set()
+    for h in Holiday.objects.filter(company=company,
+                                    start_date__lte=end_date,
+                                    end_date__gte=start_date):
+        cur = h.start_date
+        while cur <= h.end_date:
+            holidays.add(cur)
+            cur += timedelta(days=1)
+
+    charged = Decimal("0")
+    excluded = []
+    cur = start_date
+
+    while cur <= end_date:
+        weekday = (cur.weekday() + 1) % 7      # الأحد=0
+        is_weekend = weekday not in working_days
+        is_holiday = cur in holidays
+
+        if is_holiday and leave_type.holiday_treatment == HolidayTreatment.EXTENDS:
+            excluded.append({"date": str(cur), "reason": "عطلة رسمية"})
+        elif is_weekend and leave_type.weekend_treatment == HolidayTreatment.EXTENDS:
+            excluded.append({"date": str(cur), "reason": "راحة أسبوعية"})
+        else:
+            charged += 1
+
+        cur += timedelta(days=1)
+
+    return LeaveDaysComputation(
+        calendar_days=calendar_days,
+        charged_days=charged,
+        extended_days=len(excluded),
+        end_date=end_date,
+        excluded=excluded)
+
+
 # ══════════ الأرصدة ══════════
 
 @transaction.atomic
