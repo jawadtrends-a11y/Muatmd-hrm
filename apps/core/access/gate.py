@@ -18,6 +18,10 @@ class UnknownPermission(ValueError):
     """مفتاح غير مسجّل في الكتالوج — خطأ برمجي لا حالة تشغيل."""
 
 
+class AmbiguousScopePath(ValueError):
+    """أكثر من مسار محتمل للنطاق — خطأ برمجي يُكشف عند التطوير."""
+
+
 @dataclass(frozen=True)
 class Decision:
     allowed: bool
@@ -119,7 +123,13 @@ class Gate:
             # لا ارتباط وظيفي: النطاقات الضيّقة بلا معنى → لا شيء
             return qs.none()
 
-        prefix = f"{employment_field}__" if employment_field else ""
+        prefix = cls._scope_prefix(qs, employment_field)
+        if prefix is None:
+            # جدول تنظيمي لا يخص موظفًا (الأقسام، الفروع، الأدوار،
+            # قوالب البنوك...). النطاق الضيّق بلا معنى عليه،
+            # والصلاحية وحدها حارسه.
+            return qs
+
         if d.scope is Scope.BRANCH:
             return qs.filter(**{f"{prefix}branch_id": emp.branch_id})
         if d.scope is Scope.DEPARTMENT:
@@ -127,6 +137,52 @@ class Gate:
         if d.scope is Scope.TEAM:
             return qs.filter(**{f"{prefix}direct_manager_id": emp.id})
         return qs.filter(**{f"{prefix}id": emp.id})
+
+    # الحقول التي يُفلتر بها النطاق مباشرة على Employment
+    _SCOPE_FIELDS = ("branch", "department", "direct_manager")
+
+    @classmethod
+    def _scope_prefix(cls, qs, employment_field):
+        """
+        يحدد المسار الذي يُطبَّق عليه النطاق.
+
+        ثلاث حالات:
+          • مُرِّر employment_field صراحةً → يُستخدم كما هو
+          • الجدول هو Employment نفسه → بلا بادئة
+          • الجدول يرتبط بـEmployment → تُشتق البادئة منه
+
+        وما لا ينطبق عليه شيء من ذلك جدول تنظيمي، فيُرجَع None
+        ويمرّ بلا فلترة نطاق.
+
+        سبب الاشتقاق: مطالبة كل مستدعٍ بتمرير الحقل تعني أن نسيانه
+        يرفع FieldError غامضًا من أعماق Django عند العميل. والنظام
+        يحتسب ما يستطيع احتسابه.
+        """
+        if employment_field:
+            return f"{employment_field}__"
+
+        model = qs.model
+        names = {f.name for f in model._meta.get_fields()}
+
+        # الجدول نفسه يحمل حقول النطاق (Employment)
+        if all(n in names for n in cls._SCOPE_FIELDS):
+            return ""
+
+        # علاقة واحدة صريحة بـEmployment
+        from apps.employees.models import Employment
+        links = [
+            f.name for f in model._meta.get_fields()
+            if getattr(f, "many_to_one", False)
+            and getattr(f, "related_model", None) is Employment
+        ]
+        if len(links) == 1:
+            return f"{links[0]}__"
+        if len(links) > 1:
+            raise AmbiguousScopePath(
+                f"{model.__name__} يرتبط بـEmployment بأكثر من مسار "
+                f"({', '.join(links)}) — مرّر employment_field صراحةً"
+            )
+        return None
 
     @classmethod
     def accessible_permissions(cls, user) -> set:
