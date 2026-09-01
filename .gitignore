@@ -31,3 +31,4 @@ web/node_modules/
 web/.next/
 web-admin/node_modules/
 web-admin/.next/
+*.before-*
