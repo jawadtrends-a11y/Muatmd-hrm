@@ -36,6 +36,29 @@ class Gate:
         return getattr(user, "account_membership", None)
 
     @classmethod
+    def _employment(cls, user):
+        """
+        الارتباط الوظيفي الحاكم للنطاق — في الشركة النشطة تحديدًا.
+
+        العضوية تربط المستخدم بالحساب لا بملف موظف، فالارتباط
+        يُجلب عبر الشخص. والشخص قد يعمل في أكثر من شركة بالحساب
+        بمنصبين مختلفين — فنطاقه يتبع شركته النشطة لا أول ارتباط
+        يُصادَف، ولا أوسع نطاق بين شركتيه.
+        """
+        membership = cls._membership(user)
+        if membership is None or membership.active_company_id is None:
+            return None
+        person = getattr(user, "person", None)
+        if person is None:
+            return None
+        from apps.employees.models import Employment, EmploymentStatus
+        return Employment.objects.filter(
+            person=person,
+            company_id=membership.active_company_id,
+            status=EmploymentStatus.ACTIVE,
+        ).first()
+
+    @classmethod
     def check(cls, user, permission_key: str) -> Decision:
         if permission_key not in PERMISSION_KEYS:
             raise UnknownPermission(
@@ -91,8 +114,7 @@ class Gate:
             # RLS يتكفّل بالحدّين: الحساب مطلق، والشركة ضمن company_ids
             return qs
 
-        membership = cls._membership(user)
-        emp = getattr(membership, "employment", None) if membership else None
+        emp = cls._employment(user)
         if emp is None:
             # لا ارتباط وظيفي: النطاقات الضيّقة بلا معنى → لا شيء
             return qs.none()
@@ -103,7 +125,7 @@ class Gate:
         if d.scope is Scope.DEPARTMENT:
             return qs.filter(**{f"{prefix}department_id": emp.department_id})
         if d.scope is Scope.TEAM:
-            return qs.filter(**{f"{prefix}direct_manager_employment_id": emp.id})
+            return qs.filter(**{f"{prefix}direct_manager_id": emp.id})
         return qs.filter(**{f"{prefix}id": emp.id})
 
     @classmethod

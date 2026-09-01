@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from apps.core.access.gate import Gate
 from apps.leaves.models import (
     ApprovalDecision, LeaveBalance, LeaveType, Request, RequestApproval,
-    RequestStatus,
+    RequestStatus, RequestType,
 )
 
 
@@ -261,8 +261,11 @@ def decide_request(request, request_id):
     if emp is None:
         return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
 
+    # النطاق يُطبَّق عبر مقدّم الطلب — فالطلب لا يملك قسمًا
+    # ولا مديرًا مباشرًا، وإنما يرثهما من ارتباط مقدّمه
     r = Gate.filter_queryset(
-        request.user, "requests.approve", Request.objects.all()
+        request.user, "requests.approve", Request.objects.all(),
+        employment_field="employment",
     ).filter(id=request_id, company_id=_company_id(request)).first()
     if r is None:
         return Response({"detail": "الطلب غير موجود"}, status=404)
@@ -280,10 +283,26 @@ def decide_request(request, request_id):
         return Response({"detail": str(e), "code": "cannot_decide"},
                         status=409)
 
-    # الإجازة المعتمدة تُطبَّق على الرصيد والحضور
-    if updated.status == RequestStatus.APPROVED:
+    # الإجازة المعتمدة تُطبَّق على الرصيد والحضور.
+    #
+    # الإجازة وحدها هنا: أثرها ليس في EFFECTS التي يستدعيها المحرّك،
+    # فالأنواع التسعة الأخرى طُبِّق أثرها هناك. واستدعاؤها لغير
+    # الإجازة يرفع LeaveError صراحةً («ليس طلب إجازة») فينهار
+    # المسار بـ500 بعد أن يكون الطلب قد اعتُمد فعلًا — فيرى
+    # المعتمِد خطأً ويظن أن قراره لم يُحفظ.
+    #
+    # والفشل يُسجَّل ولا يلغي الاعتماد — كما في apply_effect:
+    # الموافقة قرار إداري تمّ، والأثر تقني يُعاد تنفيذه.
+    if (updated.status == RequestStatus.APPROVED
+            and updated.request_type == RequestType.LEAVE):
         from apps.leaves.services.leave_requests import apply_approved_leave
-        apply_approved_leave(updated)
+        try:
+            apply_approved_leave(updated)
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("muatmd.requests").error(
+                "leave_effect_failed",
+                extra={"request_no": updated.request_no, "error": str(e)})
 
     return Response({
         "id": updated.id,
