@@ -195,6 +195,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
   const nav = NAV.filter(can);
 
+  /**
+   * حارس المسارات (ق-58).
+   *
+   * إخفاء البند من القائمة ليس حماية — من يعرف الرابط يفتحه
+   * ويرى شاشة فارغة مربكة. فالمسار غير المصرّح يُعيد للرئيسية
+   * بلا تنبيه، كأنه لم يكن.
+   *
+   * والخادم يحمي البيانات أصلًا — هذا يمنع الارتباك لا التسرّب.
+   */
+  useEffect(() => {
+    if (!ready || isPublic || !ws) return;
+
+    const item = NAV.find((n) =>
+      n.href === "/" ? pathname === "/" : pathname.startsWith(n.href));
+
+    if (item && !can(item)) {
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, pathname, ws]);
+
   const sub = ws?.subscription;
   const readOnly = sub && !sub.is_writable;
 

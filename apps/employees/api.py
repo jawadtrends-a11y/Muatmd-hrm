@@ -600,3 +600,409 @@ def serve_file(request, file_id):
                             filename=obj.original_name)
     except FileNotFoundError:
         raise Http404
+
+
+# ══════════════════ ملف الموظف الكامل (ق-63) ══════════════════
+
+def _person_block(p):
+    """البيانات الأساسية — الاسم والهوية والجواز."""
+    return {
+        "id": p.id,
+        "first_name_ar": p.first_name_ar,
+        "father_name_ar": p.father_name_ar,
+        "grandfather_name_ar": p.grandfather_name_ar,
+        "family_name_ar": p.family_name_ar,
+        "full_name_ar": p.display_name,
+        "full_name_en": p.full_name_en,
+        "gender": p.gender,
+        "gender_label": p.get_gender_display(),
+        "birth_date": p.birth_date,
+        "birth_date_hijri": p.birth_date_hijri,
+        "marital_status": p.marital_status,
+        "marital_label": (p.get_marital_status_display()
+                          if p.marital_status else ""),
+        "nationality_code": p.nationality_code,
+        "id_type": p.id_type,
+        "id_type_label": p.get_id_type_display(),
+        "id_number": p.id_number,
+        "id_expiry_date": p.id_expiry_date,
+        "id_expiry_hijri": p.id_expiry_hijri,
+        "passport_number": p.passport_number,
+        "passport_expiry_date": p.passport_expiry_date,
+        "border_number": p.border_number,
+        "mobile": p.mobile_e164,
+        "email": p.email,
+        "preferred_locale": p.preferred_locale,
+        "gosi_scheme_code": p.gosi_scheme_code,
+        "gosi_first_subscription_date": p.gosi_first_subscription_date,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_profile(request, employment_id):
+    """
+    ملف الموظف الكامل — أحد عشر تبويبًا (ق-63).
+
+    يرجع كل الأقسام دفعةً واحدة: الواجهة تعرضها بتبويبات بلا
+    نداءات متتابعة.
+    """
+    from datetime import date
+
+    from apps.core.models_files import FileKind, StoredFile
+    from apps.employees.models import Employment, SalaryStructure
+    from apps.employees.models_assets import (
+        Advance, AdvanceStatus, Asset, AssetStatus, EmployeeDocument,
+    )
+    from apps.payroll.models_banks import label_for
+
+    Gate.require(request.user, "employees.view")
+    emp = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=employment_id).select_related(
+        "person", "department", "branch", "job_title",
+        "direct_manager__person", "job_grade", "job_step",
+        "primary_site", "company").first()
+
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    p = emp.person
+
+    # ── مدة الخدمة ──
+    start = emp.service_start_date or emp.join_date
+    days = (date.today() - start).days
+    years, rem = divmod(days, 365)
+
+    # ── الراتب ──
+    structure = SalaryStructure.objects.filter(
+        employment=emp, effective_to__isnull=True
+    ).prefetch_related("lines__component").first()
+
+    lines, gross = [], 0
+    if structure:
+        for ln in structure.lines.all():
+            lines.append({
+                "component": ln.component.name_ar,
+                "code": ln.component.code,
+                "amount": str(ln.amount),
+                "in_gosi": getattr(ln.component, "in_gosi_wage", False),
+                "in_eosb": getattr(ln.component, "in_eosb_wage", False),
+            })
+            gross += float(ln.amount)
+
+    # ── السجل التاريخي للراتب ──
+    history = [{
+        "effective_from": st.effective_from,
+        "effective_to": st.effective_to,
+        "gross": str(sum(l.amount for l in st.lines.all())),
+        "reason": getattr(st, "change_reason", ""),
+    } for st in SalaryStructure.objects.filter(
+        employment=emp).order_by("-effective_from")[:10]]
+
+    # ── التابعون وأرقام الطوارئ ──
+    dependents = [{
+        "id": d.id, "full_name_ar": d.full_name_ar,
+        "relation": d.relation, "relation_label": d.get_relation_display(),
+        "id_number": d.id_number, "id_expiry_date": d.id_expiry_date,
+        "birth_date": d.birth_date, "nationality_code": d.nationality_code,
+    } for d in p.dependents.all()]
+
+    contacts = [{
+        "id": c.id, "full_name_ar": c.full_name_ar,
+        "relation": c.relation, "mobile": c.mobile,
+        "phone": c.phone, "is_primary": c.is_primary,
+    } for c in p.emergency_contacts.all()]
+
+    # ── الوثائق ──
+    documents = [{
+        "id": d.id,
+        "document_type": d.document_type,
+        "type_label": d.get_document_type_display(),
+        "document_number": d.document_number,
+        "issue_date": d.issue_date,
+        "expiry_date": d.expiry_date,
+        "days_left": ((d.expiry_date - date.today()).days
+                      if d.expiry_date else None),
+    } for d in EmployeeDocument.objects.filter(employment=emp)]
+
+    # ── الملفات ──
+    files = [{
+        "id": f.id, "kind": f.kind, "kind_label": f.get_kind_display(),
+        "name": f.original_name, "size": f.size_label,
+        "url": f"/api/files/{f.id}/",
+        "uploaded_at": f.created_at,
+    } for f in StoredFile.objects.filter(person=p, is_deleted=False)]
+
+    avatar = next((f for f in files if f["kind"] == FileKind.AVATAR), None)
+
+    # ── السلف والعهد ──
+    advances = Advance.objects.filter(
+        employment=emp, status=AdvanceStatus.ACTIVE)
+    assets = Asset.objects.filter(
+        employment=emp, status=AssetStatus.ASSIGNED)
+
+    return Response({
+        "employment_id": emp.id,
+        "employee_no": emp.employee_no,
+        "status": emp.status,
+        "status_label": emp.get_status_display(),
+        "avatar_url": avatar["url"] if avatar else None,
+
+        "personal": _person_block(p),
+
+        "job": {
+            "job_title": emp.job_title.name_ar if emp.job_title else "",
+            "job_title_id": emp.job_title_id,
+            "department": emp.department.name_ar if emp.department else "",
+            "department_id": emp.department_id,
+            "branch": emp.branch.name_ar if emp.branch else "",
+            "branch_id": emp.branch_id,
+            "site": emp.primary_site.name_ar if emp.primary_site else "",
+            "site_id": emp.primary_site_id,
+            "manager": (emp.direct_manager.person.display_name
+                        if emp.direct_manager else ""),
+            "manager_id": emp.direct_manager_id,
+            "grade": emp.job_grade.name_ar if emp.job_grade else "",
+            "grade_id": emp.job_grade_id,
+            "step": emp.job_step.name_ar if emp.job_step else "",
+            "step_id": emp.job_step_id,
+            "employment_type": emp.employment_type,
+            "work_ratio": str(emp.work_ratio),
+        },
+
+        "contract": {
+            "contract_type": emp.contract_type,
+            "contract_start_date": emp.contract_start_date,
+            "contract_end_date": emp.contract_end_date,
+            "join_date": emp.join_date,
+            "service_start_date": start,
+            "probation_days": emp.probation_days,
+            "probation_end_date": emp.probation_end_date,
+            "in_probation": (emp.probation_end_date is not None
+                             and emp.probation_end_date >= date.today()),
+            "service_years": years,
+            "service_months": rem // 30,
+        },
+
+        "salary": {
+            "gross": f"{gross:.2f}",
+            "lines": lines,
+            "history": history,
+        },
+
+        "gosi": {
+            "is_registered": emp.is_gosi_registered,
+            "establishment_no": emp.gosi_establishment_no,
+            "registered_at": emp.gosi_registered_at,
+            "declared_wage": (str(emp.gosi_declared_wage)
+                              if emp.gosi_declared_wage else ""),
+            "borne_by_company": emp.gosi_borne_by_company,
+            "scheme_code": p.gosi_scheme_code,
+            "is_mol_registered": emp.is_mol_registered,
+            "mol_contract_no": emp.mol_contract_no,
+            "include_in_wps": emp.include_in_wps,
+        },
+
+        "bank": {
+            "iban": emp.iban,
+            "bank_name": label_for(emp.iban),
+            "bank_code": emp.bank_code,
+            "payment_method": emp.payment_method,
+        },
+
+        "dependents": dependents,
+        "emergency_contacts": contacts,
+        "documents": documents,
+        "files": files,
+
+        "obligations": {
+            "advances_count": advances.count(),
+            "advances_outstanding": f"{sum(float(a.amount) - float(a.repaid_amount) for a in advances):.2f}",
+            "assets_count": assets.count(),
+        },
+    })
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_employee_profile(request, employment_id):
+    """
+    تعديل ملف الموظف — قسمًا قسمًا (ق-63).
+
+    يقبل `section` ليحدّد ما يُعدَّل، فلا يُرسل الملف كاملًا
+    لتغيير حقل واحد.
+    """
+    from apps.employees.models import Employment
+
+    Gate.require(request.user, "employees.edit")
+    emp = Gate.filter_queryset(
+        request.user, "employees.edit", Employment.objects.all()
+    ).filter(id=employment_id).select_related("person").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    section = request.data.get("section", "")
+    d = request.data.get("data") or {}
+    p = emp.person
+
+    PERSON_FIELDS = {
+        "first_name_ar", "father_name_ar", "grandfather_name_ar",
+        "family_name_ar", "full_name_en", "gender", "birth_date",
+        "birth_date_hijri", "marital_status", "nationality_code",
+        "id_expiry_date", "id_expiry_hijri", "passport_number",
+        "passport_expiry_date", "border_number", "email",
+        "preferred_locale", "gosi_scheme_code",
+        "gosi_first_subscription_date",
+    }
+
+    EMPLOYMENT_FIELDS = {
+        "job_title_id", "department_id", "branch_id", "primary_site_id",
+        "direct_manager_id", "job_grade_id", "job_step_id",
+        "employment_type", "work_ratio",
+        "contract_type", "contract_start_date", "contract_end_date",
+        "probation_days",
+        "is_gosi_registered", "gosi_establishment_no", "gosi_declared_wage",
+        "gosi_borne_by_company", "is_mol_registered", "mol_contract_no",
+        "include_in_wps", "iban", "bank_code", "payment_method",
+    }
+
+    changed = []
+
+    for key, value in d.items():
+        if key in PERSON_FIELDS:
+            setattr(p, key, value if value != "" else None
+                    if key.endswith("_date") else value)
+            changed.append(key)
+        elif key in EMPLOYMENT_FIELDS:
+            setattr(emp, key, value if value != "" else None
+                    if (key.endswith("_date") or key.endswith("_id"))
+                    else value)
+            changed.append(key)
+
+    if not changed:
+        return Response({"detail": "لا حقول قابلة للتعديل"}, status=400)
+
+    # الآيبان يُتحقق منه — اشتراط البنك المركزي (ق-57)
+    if "iban" in changed and emp.iban:
+        from apps.employees.services.validators import validate_saudi_iban
+        ok, err = validate_saudi_iban(emp.iban)
+        if not ok:
+            return Response({"detail": err, "code": "invalid_iban"},
+                            status=400)
+
+    try:
+        p.save()
+        emp.save()
+    except Exception as e:      # noqa: BLE001
+        return Response({"detail": f"قيمة غير صالحة: {e}"}, status=400)
+
+    # سجل العمليات (ق-44)
+    from apps.core.services.audit import log_action
+    actor = getattr(request.user, "person", None)
+    log_action(
+        instance=emp, action="update", actor=actor,
+        label=emp.employee_no,
+        summary=f"تعديل {section or 'الملف'}: " + "، ".join(changed[:6]),
+        channel="web")
+
+    return Response({"updated": True, "fields": changed})
+
+
+@api_view(["GET", "POST", "PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def employee_dependents(request, employment_id):
+    """التابعون — توثيق فقط (ق-63)."""
+    from apps.employees.models import Employment
+    from apps.employees.models_profile import Dependent
+
+    Gate.require(request.user, "employees.view")
+    emp = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=employment_id).select_related("person").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    p = emp.person
+
+    if request.method == "GET":
+        return Response([{
+            "id": d.id, "full_name_ar": d.full_name_ar,
+            "full_name_en": d.full_name_en,
+            "relation": d.relation, "relation_label": d.get_relation_display(),
+            "id_number": d.id_number, "id_expiry_date": d.id_expiry_date,
+            "birth_date": d.birth_date,
+            "nationality_code": d.nationality_code,
+        } for d in p.dependents.all()])
+
+    Gate.require(request.user, "employees.edit")
+    d = request.data
+
+    if request.method == "DELETE":
+        Dependent.objects.filter(
+            person=p, id=request.GET.get("id") or d.get("id")).delete()
+        return Response({"deleted": True})
+
+    if request.method == "PUT":
+        obj = Dependent.objects.filter(person=p, id=d.get("id")).first()
+        if obj is None:
+            return Response({"detail": "التابع غير موجود"}, status=404)
+    else:
+        obj = Dependent(account_id=p.account_id, person=p)
+
+    for f in ("full_name_ar", "full_name_en", "relation", "id_number",
+              "nationality_code", "note"):
+        if f in d:
+            setattr(obj, f, (d.get(f) or "")[:180])
+    for f in ("id_expiry_date", "birth_date"):
+        if f in d:
+            setattr(obj, f, d.get(f) or None)
+
+    if not obj.full_name_ar or not obj.relation:
+        return Response({"detail": "الاسم وصلة القرابة مطلوبان"}, status=400)
+
+    obj.save()
+    return Response({"id": obj.id}, status=201 if request.method == "POST"
+                    else 200)
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def employee_contacts(request, employment_id):
+    """أرقام الطوارئ."""
+    from apps.employees.models import Employment
+    from apps.employees.models_profile import EmergencyContact
+
+    Gate.require(request.user, "employees.view")
+    emp = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=employment_id).select_related("person").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    p = emp.person
+
+    if request.method == "GET":
+        return Response([{
+            "id": c.id, "full_name_ar": c.full_name_ar,
+            "relation": c.relation, "mobile": c.mobile,
+            "phone": c.phone, "is_primary": c.is_primary,
+        } for c in p.emergency_contacts.all()])
+
+    Gate.require(request.user, "employees.edit")
+
+    if request.method == "DELETE":
+        EmergencyContact.objects.filter(
+            person=p, id=request.GET.get("id")).delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    obj = EmergencyContact.objects.create(
+        account_id=p.account_id, person=p,
+        full_name_ar=(d.get("full_name_ar") or "")[:180],
+        relation=(d.get("relation") or "")[:60],
+        mobile=(d.get("mobile") or "")[:20],
+        phone=(d.get("phone") or "")[:20],
+        is_primary=bool(d.get("is_primary")))
+
+    return Response({"id": obj.id}, status=201)

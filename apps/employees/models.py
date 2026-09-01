@@ -241,6 +241,22 @@ class Employment(CompanyScopedModel):
         _("نمط النقل"), max_length=20, choices=TransferMode.choices, blank=True)
 
     # ── أعلام التسجيل النظامي: مستقلة تمامًا (ق-15) ──
+    # ق-63: المرتبة والدرجة اختياريتان — للشركات ذات السلّم الوظيفي
+    job_grade = models.ForeignKey(
+        "employees.JobGrade", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="employments",
+        verbose_name=_("المرتبة الوظيفية"))
+    job_step = models.ForeignKey(
+        "employees.JobStep", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="employments",
+        verbose_name=_("الدرجة الوظيفية"))
+
+    # موقع العمل الأساسي (ق-62) — الإسناد التفصيلي في SiteAssignment
+    primary_site = models.ForeignKey(
+        "attendance.WorkSite", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="primary_employments",
+        verbose_name=_("موقع العمل"))
+
     is_gosi_registered = models.BooleanField(
         _("مسجّل في التأمينات"), default=False, db_index=True)
     gosi_establishment_no = models.CharField(
@@ -402,4 +418,10 @@ class SalaryLine(models.Model):
 from apps.employees.models_assets import (  # noqa: E402,F401
     Advance, AdvanceInstallment, AdvanceStatus, Asset, AssetCategory,
     AssetStatus, DocumentType, EmployeeDocument, RepaymentMethod,
+)
+
+
+# توسعة ملف الموظف (ق-63)
+from apps.employees.models_profile import (  # noqa: E402,F401
+    Dependent, EmergencyContact, JobGrade, JobStep, RelationKind,
 )

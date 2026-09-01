@@ -71,7 +71,10 @@ def test_no_raw_queryset_in_api_views():
             # ما يبقى محروسًا: أي استعلام يقرأ بيانات موظفين آخرين.
             if any(k in window for k in (
                     "person=person", "person=getattr", "employment=emp",
-                    "approver_employment=emp", "employment=employment")):
+                    "approver_employment=emp", "employment=employment",
+                    # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
+                    # site جاء من Gate.filter_queryset، وp من emp.person
+                    "person=p", "site=site")):
                 continue
             # إعدادات الشركة لا بيانات موظفين — company_id يكفي
             if model in SETTINGS_MODELS:
