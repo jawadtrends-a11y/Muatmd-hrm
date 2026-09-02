@@ -142,6 +142,7 @@ urlpatterns = [
     path("api/me/account/", employees_api.my_account, name="my-account"),
     path("api/me/password/", employees_api.change_my_password, name="my-password"),
     path("api/me/avatar/", employees_api.my_avatar, name="my-avatar"),
+    path("api/files/", employees_api.upload_attachment, name="upload-attachment"),
     path("api/files/<int:file_id>/", employees_api.serve_file, name="serve-file"),
     path("api/sites/", attendance_api.work_sites, name="work-sites"),
     path("api/sites/<int:site_id>/", attendance_api.work_site_detail, name="site-detail"),

@@ -37,17 +37,20 @@ DEFAULT_LEAVE_TYPES = [
     ("MARRIAGE", "إجازة زواج", "Marriage Leave", "شادی کی چھٹی", {
         "is_paid": True, "accrual": AccrualMethod.PER_EVENT,
         "days_per_event": D("5"), "statutory_min": D("5"),
+        "requires_attachment": True,   # عقد النكاح (ق-70)
         "carry": CarryForwardPolicy.EXPIRE, "order": 30,
     }),
     ("NEWBORN", "إجازة مولود", "Newborn Leave", "بچے کی پیدائش کی چھٹی", {
         "is_paid": True, "accrual": AccrualMethod.PER_EVENT,
         "days_per_event": D("3"), "statutory_min": D("3"),
         "gender": GenderRestriction.MALE,
+        "requires_attachment": True,   # شهادة الميلاد (ق-70)
         "carry": CarryForwardPolicy.EXPIRE, "order": 40,
     }),
     ("BEREAVEMENT", "إجازة وفاة", "Bereavement Leave", "سوگ کی چھٹی", {
         "is_paid": True, "accrual": AccrualMethod.PER_EVENT,
         "days_per_event": D("5"), "statutory_min": D("5"),
+        "requires_attachment": True,   # شهادة الوفاة (ق-70)
         "carry": CarryForwardPolicy.EXPIRE, "order": 50,
     }),
     ("HAJJ", "إجازة حج", "Hajj Leave", "حج کی چھٹی", {
@@ -55,12 +58,14 @@ DEFAULT_LEAVE_TYPES = [
         "days_per_event": D("10"), "statutory_min": D("10"),
         "muslim_only": True, "min_service_months": 24,
         "once_per_service": True,
+        "requires_attachment": True,   # تصريح الحج (ق-70)
         "carry": CarryForwardPolicy.EXPIRE, "order": 60,
     }),
     ("IDDAH", "إجازة عدّة", "Iddah Leave", "عدت کی چھٹی", {
         "is_paid": True, "accrual": AccrualMethod.PER_EVENT,
         "days_per_event": D("130"), "gender": GenderRestriction.FEMALE,
-        "muslim_only": True, "carry": CarryForwardPolicy.EXPIRE,
+        "muslim_only": True, "requires_attachment": True,
+        "carry": CarryForwardPolicy.EXPIRE,   # شهادة وفاة الزوج (ق-70)
         "order": 70,
     }),
     ("MATERNITY", "إجازة وضع", "Maternity Leave", "زچگی کی چھٹی", {
@@ -123,11 +128,48 @@ def provision_leave_types(company):
 
 # ── سلاسل الاعتماد الافتراضية (ق-9: تعدّلها الشركة) ──
 DEFAULT_CHAINS = [
-    (RequestType.LEAVE, "اعتماد الإجازات — درجة واحدة", {}, 0,
-     [(1, ApproverType.DIRECT_MANAGER, "", True, 48)]),
-    (RequestType.LEAVE, "إجازة طويلة — درجتان", {"days_gt": 5}, 10,
+    # ── سلاسل الإجازات بحسب موقع مقدّم الطلب (ق-71) ──
+    #
+    # السلسلة تُختار بدور المُقدِّم لا بنوع الطلب وحده: فمن يعتمد
+    # طلب الموظف لا يعتمد طلب مدير الإدارة. والأولوية الأعلى تُفحص
+    # أولًا، فتلتقط السلسلة العامة (أولوية 0) الموظف وحده.
+    #
+    # والدرجة بلا شاغل تُتخطى (ق-35): من لا مدير إدارة له يمضي
+    # طلبه للموارد مباشرة بلا تعليق.
+
+    # المدير العام: مدير الموارد يعتمد
+    (RequestType.LEAVE, "إجازة المدير العام", {"requester_role": "owner"}, 60,
+     [(1, ApproverType.ROLE, "hr_manager", True, 72)]),
+
+    # مدير الموارد: المدير العام يعتمد
+    (RequestType.LEAVE, "إجازة مدير الموارد",
+     {"requester_role": "hr_manager"}, 50,
+     [(1, ApproverType.ROLE, "owner", True, 72)]),
+
+    # موظف الموارد: مدير الموارد يعتمد
+    (RequestType.LEAVE, "إجازة موظف الموارد",
+     {"requester_role": "hr_staff"}, 40,
+     [(1, ApproverType.ROLE, "hr_manager", True, 72)]),
+
+    # مدير الإدارة: المشرف ثم موظف الموارد ثم مدير الموارد
+    (RequestType.LEAVE, "إجازة مدير الإدارة",
+     {"requester_role": "dept_manager"}, 30,
+     [(1, ApproverType.ROLE, "supervisor", True, 48),
+      (2, ApproverType.ROLE, "hr_staff", True, 72),
+      (3, ApproverType.ROLE, "hr_manager", True, 72)]),
+
+    # المشرف: مدير الإدارة ثم موظف الموارد ثم مدير الموارد
+    (RequestType.LEAVE, "إجازة المشرف",
+     {"requester_role": "supervisor"}, 20,
+     [(1, ApproverType.DEPARTMENT_HEAD, "", True, 48),
+      (2, ApproverType.ROLE, "hr_staff", True, 72),
+      (3, ApproverType.ROLE, "hr_manager", True, 72)]),
+
+    # الموظف: المشرف ثم مدير الإدارة ثم موظف الموارد
+    (RequestType.LEAVE, "اعتماد الإجازات", {}, 0,
      [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
-      (2, ApproverType.ROLE, "hr_manager", True, 72)]),
+      (2, ApproverType.DEPARTMENT_HEAD, "", True, 48),
+      (3, ApproverType.ROLE, "hr_staff", True, 72)]),
     (RequestType.ADVANCE, "اعتماد السلف", {}, 0,
      [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
       (2, ApproverType.ROLE, "hr_manager", True, 72)]),

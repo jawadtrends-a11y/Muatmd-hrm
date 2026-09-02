@@ -130,6 +130,48 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * رفع ملف (ق-70).
+ *
+ * لا يمر بـrequest لأن FormData يحتاج ألا يُضبط Content-Type —
+ * المتصفح يضعه بنفسه مع الحدّ الفاصل، وضبطه يدويًا يفسد الطلب.
+ */
+export async function apiUpload<T = unknown>(
+  path: string,
+  file: File,
+  field = "file",
+): Promise<T> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const form = new FormData();
+  form.append(field, file);
+
+  const h: Record<string, string> = {};
+  const t = getToken();
+  if (t) h["Authorization"] = `Bearer ${t}`;
+  if (typeof document !== "undefined") {
+    h["Accept-Language"] = document.documentElement.lang || "ar";
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST", headers: h, body: form, credentials: "include",
+    });
+  } catch (e) {
+    throw new ApiError(0, "تعذّر الاتصال بالخادم — تحقق من الشبكة",
+      "network", e);
+  }
+
+  const data = await parse(res);
+  if (!res.ok) {
+    const d = data as { detail?: string; code?: string } | null;
+    throw new ApiError(res.status, d?.detail || `خطأ ${res.status}`,
+      d?.code || "", data);
+  }
+  return data as T;
+}
+
+
 export const apiGet = <T = unknown>(path: string) => request<T>("GET", path);
 export const apiPost = <T = unknown>(path: string, body?: unknown,
   headers?: Record<string, string>) => request<T>("POST", path, body, headers);

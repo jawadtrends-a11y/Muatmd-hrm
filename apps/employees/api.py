@@ -572,6 +572,46 @@ def my_avatar(request):
     }, status=201)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def upload_attachment(request):
+    """
+    رفع مرفق طلب (ق-70).
+
+    متاح لكل من يقدّم طلبًا — الموظف لنفسه أو المسنِد نيابةً عنه.
+    والحدود من KIND_RULES: PDF وصور، مليونا بايت، وتصغير تلقائي.
+
+    ولا يُربط بطلب هنا: الملف يُرفع أولًا ويُرسل معرّفه مع الطلب،
+    فالمستخدم يرى ما رفعه قبل أن يُرسل.
+    """
+    from apps.core.models_files import FileKind
+    from apps.core.services.files import UploadError, store
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    uploaded = request.FILES.get("file")
+    if uploaded is None:
+        return Response({"detail": "لم يُرفع ملف"}, status=400)
+
+    try:
+        obj, dup = store(
+            uploaded=uploaded, kind=FileKind.ATTACHMENT,
+            account=person.account, person=person, uploaded_by=person)
+    except UploadError as e:
+        return Response({"detail": str(e), "code": "upload_error"},
+                        status=400)
+
+    return Response({
+        "id": obj.id,
+        "url": f"/api/files/{obj.id}/",
+        "name": obj.original_name,
+        "size": obj.size_label,
+        "was_duplicate": dup,
+    }, status=201)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def serve_file(request, file_id):

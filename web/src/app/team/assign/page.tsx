@@ -51,8 +51,9 @@ export default function AssignRequestPage() {
   const [types, setTypes] = useState<ReqType[]>([]);
   const [typeCode, setTypeCode] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
-  const [leaveTypes, setLeaveTypes] =
-    useState<{ code: string; name_ar: string }[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<
+    { code: string; name_ar: string; requires_attachment?: boolean }[]
+  >([]);
   const [busy, setBusy] = useState(true);
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState("");
@@ -63,7 +64,8 @@ export default function AssignRequestPage() {
     apiGet<Emp[]>("/employees/")
       .then((r) => { setEmps(r); setBusy(false); })
       .catch((e: ApiError) => { setError(e.message); setBusy(false); });
-    apiGet<{ code: string; name_ar: string }[]>("/leaves/types/")
+    apiGet<{ code: string; name_ar: string;
+             requires_attachment?: boolean }[]>("/leaves/types/")
       .then(setLeaveTypes)
       .catch(() => setLeaveTypes([]));
   }, []);
@@ -83,10 +85,19 @@ export default function AssignRequestPage() {
   }, []);
 
   const active = types.find((t) => t.code === typeCode);
-  // المرفق والملاحظة مخفيان كما في شاشة «خدماتي» — رفع الملفات
-  // ميزة مستقلة تُبنى في الشاشتين معًا
+  // ق-70: المرفق إلزامي حين يطلبه نوع الإجازة المختار — المرضية
+  // والخاصة (وفاة، ولادة). والعلم من الخادم لا شرط مكتوب هنا،
+  // فالشركة تعدّله لأي نوع بلا تعديل كود.
+  const pickedLeave = leaveTypes.find(
+    (t) => t.code === values.leave_type_code);
+  const attachmentRequired = active?.code === "leave"
+    && !!pickedLeave?.requires_attachment;
+
   const fields = active
     ? [...active.required_fields.map((f) => ({ name: f, required: true })),
+       ...(active.code === "leave"
+         ? [{ name: "attachment_url", required: attachmentRequired }]
+         : []),
        ...active.optional_fields
          .filter((f) => f !== "note" && f !== "attachment_url")
          .filter((f) => {
@@ -102,17 +113,21 @@ export default function AssignRequestPage() {
     : [];
 
   const ready = active
-    && active.required_fields.every((f) => (values[f] || "").trim() !== "");
+    && active.required_fields.every((f) => (values[f] || "").trim() !== "")
+    && (!attachmentRequired || (values.attachment_url || "") !== "");
 
   async function send() {
     if (!empId || !active) return;
     setSending(true);
     setToast("");
     try {
+      // attachment_url حقل مستقل في Request لا داخل payload
+      const { attachment_url: att, ...payload } = values;
       await apiPost("/requests/", {
         employment_id: empId,
         request_type: active.code,
-        payload: values,
+        payload,
+        attachment_url: att || "",
       });
       setToast(L("done"));
       setValues({});

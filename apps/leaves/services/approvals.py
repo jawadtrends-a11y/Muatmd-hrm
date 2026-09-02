@@ -77,19 +77,54 @@ def _condition_matches(condition: dict, payload: dict) -> bool:
     return True
 
 
-def select_chain(*, company, request_type, payload):
+# ترتيب الأدوار من الأعلى — لاختيار دور واحد لمن يحمل أكثر من دور
+ROLE_RANK = ["owner", "hr_manager", "hr_staff", "dept_manager",
+             "supervisor", "employee"]
+
+
+def requester_role(employment):
+    """
+    دور مقدّم الطلب — الأعلى إن حمل أكثر من دور (ق-71).
+
+    السلسلة تُختار بموقع المُقدِّم لا بنوع الطلب وحده: فطلب مدير
+    الإدارة لا يمر بمن يمر به طلب الموظف.
+    """
+    if employment is None:
+        return "employee"
+    user = getattr(getattr(employment, "person", None), "user", None)
+    membership = getattr(user, "account_membership", None)
+    if membership is None:
+        return "employee"
+    if membership.is_account_owner:
+        return "owner"
+
+    codes = {a.role.code for a in
+             membership.role_assignments.select_related("role")}
+    for code in ROLE_RANK:
+        if code in codes:
+            return code
+    return "employee"
+
+
+def select_chain(*, company, request_type, payload, requester_employment=None):
     """
     يختار السلسلة المنطبقة — الأعلى أولوية أولًا.
 
     السلاسل المشروطة تُفحص قبل العامة، فسلسلة «إجازة تتجاوز 5 أيام»
     بأولوية 10 تسبق السلسلة العامة بأولوية 0.
+
+    ودور المُقدِّم يُحقن في بيانات الفحص (ق-71) فتصير سلسلة مشروطة
+    بـ{"requester_role": "supervisor"} ممكنة بلا تغيير المحرّك.
     """
     chains = ApprovalChain.objects.filter(
         company=company, request_type=request_type, is_active=True
     ).order_by("-priority").prefetch_related("steps")
 
+    facts = dict(payload or {})
+    facts["requester_role"] = requester_role(requester_employment)
+
     for chain in chains:
-        if _condition_matches(chain.condition_json or {}, payload or {}):
+        if _condition_matches(chain.condition_json or {}, facts):
             return chain
     return None
 
@@ -151,7 +186,8 @@ def resolve_approvers(*, request_obj=None, request_type=None, company=None,
         return []
 
     chain = select_chain(company=company, request_type=request_type,
-                         payload=payload or {})
+                         payload=payload or {},
+                         requester_employment=requester_employment)
     if chain is None:
         return []
 
