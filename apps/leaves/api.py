@@ -412,12 +412,28 @@ def request_types(request):
     """
     from apps.leaves.services.requests import eligible_types
 
-    emp = _my_employment(request)
-    if emp is None:
-        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+    # الإسناد بالنيابة (ق-68): الأنواع تُحسب للموظف المقصود لا
+    # للمُسنِد — فالاستحقاق يختلف بالجنسية والمدة والعقد. ومن
+    # يُسنِد لغير نطاقه لا يجد الموظف أصلًا.
+    emp_id = request.GET.get("employment_id")
+    if emp_id:
+        Gate.require(request.user, "requests.manage")
+        from apps.employees.models import Employment
+        emp = Gate.filter_queryset(
+            request.user, "requests.manage", Employment.objects.all()
+        ).filter(id=emp_id, company_id=_company_id(request)).first()
+        if emp is None:
+            return Response({"detail": "الموظف غير موجود"}, status=404)
+    else:
+        emp = _my_employment(request)
+        if emp is None:
+            return Response({"detail": "لا ملف موظف مرتبط بحسابك"},
+                            status=404)
 
     return Response({
         "employee_no": emp.employee_no,
+        "employment_id": emp.id,
+        "name_ar": emp.person.display_name,
         "is_saudi": emp.person.nationality_code == "SA",
         "types": eligible_types(emp),
     })

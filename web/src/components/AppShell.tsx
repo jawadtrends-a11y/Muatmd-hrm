@@ -28,6 +28,11 @@ const T: Dict = {
   employees: { ar: "الموظفون", en: "Employees" },
   attendance: { ar: "الحضور والانصراف", en: "Attendance" },
   leaves: { ar: "الإجازات والطلبات", en: "Leaves & Requests" },
+  team: { ar: "إدارة الفريق", en: "Team management" },
+  teamMembers: { ar: "قائمة المرؤوسين", en: "Team members" },
+  teamAttendance: { ar: "حضور المرؤوسين", en: "Team attendance" },
+  teamRequests: { ar: "طلبات المرؤوسين", en: "Team requests" },
+  teamAssign: { ar: "إسناد طلب", en: "Assign request" },
   payroll: { ar: "الرواتب", en: "Payroll" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
@@ -74,6 +79,8 @@ type NavItem = {
   href: string;
   key: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  /** بنود فرعية تنطوي تحت هذا البند — قائمة قابلة للطيّ */
+  children?: NavItem[];
   /** يظهر لمن يملك إحدى هذه الصلاحيات — فارغ يعني للجميع */
   perms?: string[];
   /**
@@ -94,6 +101,21 @@ const NAV: NavItem[] = [
     perms: ["attendance.view"], needsScope: true },
   { href: "/leaves", key: "leaves", icon: IcLeave,
     perms: ["leaves.view"], needsScope: true },
+  // ق-68: إدارة الفريق — بنود المشرف مجموعة تحت عنوان واحد
+  {
+    href: "/team", key: "team", icon: IcUsers,
+    perms: ["employees.view"], needsScope: true,
+    children: [
+      { href: "/team/members", key: "teamMembers", icon: IcDoc,
+        perms: ["employees.view"] },
+      { href: "/team/attendance", key: "teamAttendance", icon: IcClock,
+        perms: ["attendance.view"] },
+      { href: "/team/requests", key: "teamRequests", icon: IcLeave,
+        perms: ["requests.approve"] },
+      { href: "/team/assign", key: "teamAssign", icon: IcDoc,
+        perms: ["requests.manage"] },
+    ],
+  },
   { href: "/payroll", key: "payroll", icon: IcPayroll,
     perms: ["payroll.view"], needsScope: true },
   { href: "/reports", key: "reports", icon: IcChart,
@@ -130,6 +152,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [ws, setWs] = useState<Workspace | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  /** أي المجموعات مفتوحة — والافتراضي مفتوحة إن كنا داخلها */
+  const [openGroups, setOpenGroups] =
+    useState<Record<string, boolean>>({});
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
@@ -293,8 +318,75 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav style={{ padding: 12, flex: 1, overflowY: "auto" }}>
           {nav.map((item) => {
-            const active = item.href === activeHref;
             const Icon = item.icon;
+            const kids = (item.children ?? []).filter(can);
+
+            // البند ذو الأبناء عنوان قابل للطيّ لا رابطًا:
+            // النقر يفتح القائمة الفرعية بدل الانتقال لصفحة فارغة
+            if (kids.length > 0) {
+              const inside = pathname.startsWith(item.href);
+              const open = openGroups[item.key] ?? inside;
+              return (
+                <div key={item.href} style={{ marginBottom: 2 }}>
+                  <button
+                    onClick={() => setOpenGroups((g) => ({
+                      ...g, [item.key]: !open,
+                    }))}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center",
+                      gap: 11, padding: "9px 12px",
+                      borderRadius: "var(--radius-sm)",
+                      fontWeight: 500, font: "inherit", cursor: "pointer",
+                      border: "none", textAlign: "start",
+                      color: inside ? "var(--teal)" : "var(--ink-2)",
+                      background: "transparent",
+                    }}
+                  >
+                    <Icon size={19} />
+                    <span style={{ flex: 1 }}>{L(item.key)}</span>
+                    <svg
+                      width="15" height="15" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="2.2"
+                      strokeLinecap="round" strokeLinejoin="round"
+                      style={{
+                        opacity: .55, flexShrink: 0,
+                        transform: open ? "rotate(180deg)" : "none",
+                        transition: "transform .18s",
+                      }}
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+
+                  {open && kids.map((kid) => {
+                    const kidActive = kid.href === activeHref;
+                    const KidIcon = kid.icon;
+                    return (
+                      <Link
+                        key={kid.href}
+                        href={kid.href}
+                        onClick={() => setMenuOpen(false)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 9,
+                          padding: "8px 12px",
+                          marginInlineStart: 14, marginBottom: 2,
+                          borderRadius: "var(--radius-sm)",
+                          fontWeight: 500, fontSize: ".93rem",
+                          color: kidActive ? "var(--teal)" : "var(--ink-3)",
+                          background: kidActive
+                            ? "var(--teal-soft)" : "transparent",
+                        }}
+                      >
+                        <KidIcon size={16} />
+                        {L(kid.key)}
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            const active = item.href === activeHref;
             return (
               <Link
                 key={item.href}
