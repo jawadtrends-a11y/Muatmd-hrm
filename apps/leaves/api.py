@@ -300,12 +300,29 @@ def decide_request(request, request_id):
     if emp is None:
         return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
 
-    # النطاق يُطبَّق عبر مقدّم الطلب — فالطلب لا يملك قسمًا
-    # ولا مديرًا مباشرًا، وإنما يرثهما من ارتباط مقدّمه
-    r = Gate.filter_queryset(
+    from django.db.models import Q
+
+    # النطاق يُطبَّق عبر مقدّم الطلب — فالطلب لا يملك قسمًا ولا
+    # مديرًا مباشرًا، وإنما يرثهما من ارتباط مقدّمه.
+    scoped = Gate.filter_queryset(
         request.user, "requests.approve", Request.objects.all(),
         employment_field="employment",
-    ).filter(id=request_id, company_id=_company_id(request)).first()
+    ).filter(company_id=_company_id(request))
+
+    # ومن كان معتمِدًا مسجَّلًا للدرجة يقرّر ولو خرج الطلب من نطاقه:
+    # المشرف نطاقه team ومديره ليس مرؤوسه، فطلب مديره كان يُردّ
+    # عليه «غير موجود» وهو معتمِده المكلَّف. والنطاق يحكم القوائم،
+    # والتكليف يحكم القرار — وأهليته يتحقق منها المحرّك decide.
+    #
+    # معزول ذاتيًا: مقيَّد بـapprover_employment=emp.
+    assigned = Request.objects.filter(
+        company_id=_company_id(request),
+        approvals__approver_employment=emp,
+    )
+
+    r = Request.objects.filter(
+        Q(id__in=scoped.values("id")) | Q(id__in=assigned.values("id"))
+    ).filter(id=request_id).first()
     if r is None:
         return Response({"detail": "الطلب غير موجود"}, status=404)
 
@@ -398,10 +415,14 @@ def my_approvals(request):
             continue
         # السلسلة مع البطاقة (ق-71): المعتمِد يرى من قرّر قبله ومن
         # ينتظره بعده قبل أن يقرّر — لا بعد أن يفتح تفصيلًا منفصلًا
+        # ق-74: درجة العلم تعرض «اطّلعت» وحدها بلا رفض — فالمعنى
+        # إحاطة لا موافقة، وزر الرفض يناقضه
+        from apps.leaves.services.approvals import _step_is_acknowledgement
         rows.append({
             **_serialize_request(r, include_chain=True),
             "my_step": a.step_order,
             "waiting_since": r.created_at,
+            "is_acknowledgement": _step_is_acknowledgement(r, a.step_order),
         })
 
     return Response(rows)

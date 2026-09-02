@@ -46,8 +46,10 @@ DEFAULT_ROLES = {
     RoleCode.HR_STAFF: {
         "name_ar": "موظف موارد بشرية",
         "scope": Scope.COMPANY,
-        # ينشئ المسير ويرفعه للاعتماد ويصدّره — ولا يعتمده.
-        # مَن يعتمد وبكم درجة تحدده سلسلة الاعتماد لا هذا الدور.
+        # ينشئ المسير ويرفعه للاعتماد ويصدّره — ولا يعتمد المسير.
+        # أما الطلبات فهو معتمِد فيها: سلاسل ق-71 كلها تمر به،
+        # فيحتاج requests.approve وleaves.approve. ومَن يعتمد وبكم
+        # درجة تحدده السلسلة لا هذا الدور.
         "permissions": [
             "company.view", "company.edit", "org.view",
             "employees.view", "employees.create", "employees.edit",
@@ -55,8 +57,9 @@ DEFAULT_ROLES = {
             "audit.view",
             "persons.view_cross_company",
             "attendance.view", "attendance.edit",
-            "leaves.view", "leaves.create",
-            "requests.view", "requests.create",
+            "leaves.view", "leaves.create", "leaves.approve",
+            "requests.view", "requests.create", "requests.approve",
+            "requests.manage",
             "payroll.view", "payroll.create", "payroll.submit",
             "payroll.export",
             "payslips.view_own", "payslips.view_all",

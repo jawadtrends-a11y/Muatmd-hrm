@@ -49,6 +49,11 @@ const T: Dict = {
   closedAt: { ar: "وقت الإغلاق", en: "Closed" },
   attachment: { ar: "المرفق", en: "Attachment" },
   openAttachment: { ar: "فتح المرفق", en: "Open" },
+  acknowledge: { ar: "اطّلعت", en: "Acknowledge" },
+  ackHint: {
+    ar: "إحاطة بغياب مديرك — لا موافقة",
+    en: "Notice of your manager's absence — not an approval",
+  },
   failed: { ar: "تعذّر تنفيذ القرار", en: "Could not save decision" },
 };
 
@@ -71,6 +76,8 @@ type Req = {
   closed_at?: string | null;
   attachment_url?: string;
   approvals?: ChainRow[];
+  /** ق-74: درجة علم — «اطّلعت» وحدها بلا رفض */
+  is_acknowledgement?: boolean;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -201,6 +208,20 @@ function ApprovalCard({
               {L("cancel")}
             </button>
           </div>
+        </div>
+      ) : req.is_acknowledgement ? (
+        /* ق-74: درجة علم — إحاطة لا موافقة، فزر واحد بلا رفض.
+           والقرار يُرسل approved لأن السلسلة تمضي به، والمعنى
+           «اطّلعت» لا «وافقت». */
+        <div className="row">
+          <button className="btn btn-sm btn-primary" disabled={busy}
+            onClick={() => onDecide(req.id, "approved", "")}>
+            <IcCheck size={16} />
+            {L("acknowledge")}
+          </button>
+          <span className="muted" style={{ fontSize: ".8rem" }}>
+            {L("ackHint")}
+          </span>
         </div>
       ) : (
         <div className="row">
