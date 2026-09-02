@@ -546,6 +546,34 @@ def submit_request(request):
         return Response({"detail": str(e), "code": "invalid_request"},
                         status=400)
 
+    # ق-75: النائب أثناء الغياب — اختياري، ولا يُفشل الطلب.
+    #
+    # فالإجازة حق مستقل عن الإنابة: لو تعذّر تسجيل النائب، يمضي
+    # الطلب وتصعد المهام لمدير الإدارة كأن نائبًا لم يُختر.
+    delegation = None
+    deputy_id = request.data.get("deputy_employment_id")
+    if deputy_id and rtype == RequestType.LEAVE:
+        from apps.leaves.services.delegation import (DelegationError,
+                                                     create_delegation,
+                                                     eligible_deputies)
+        try:
+            # النائب من قائمة المرشحين — زملاء مقدّم الطلب في إدارته.
+            # فجلبه بمعرّفه المجرّد يفتح الإنابة لأي موظف في الشركة.
+            deputy = eligible_deputies(emp).filter(id=deputy_id).first()
+            if deputy is None:
+                raise DelegationError(
+                    "النائب ليس من زملائك في الإدارة")
+            d = create_delegation(
+                request_obj=res.request, deputy_employment=deputy,
+                starts_on=date.fromisoformat(str(payload["start_date"])),
+                ends_on=date.fromisoformat(
+                    str(res.request.payload.get("end_date")
+                        or payload["start_date"])))
+            delegation = {"id": d.id, "deputy": d.deputy.person.display_name,
+                          "status": d.status}
+        except (DelegationError, KeyError, ValueError) as e:
+            delegation = {"error": str(e)}
+
     return Response({
         "id": res.request.id,
         "request_no": res.request.request_no,
@@ -553,6 +581,7 @@ def submit_request(request):
         "status_label": res.request.get_status_display(),
         "warnings": res.warnings,
         "effect": res.effect,
+        "delegation": delegation,
     }, status=201)
 
 
@@ -899,3 +928,107 @@ def my_editable_fields(request):
         } for key, label in EDITABLE_BY_EMPLOYEE.items()],
         "note": "الراتب والعقد لا يُعدَّلان بطلب — راجع الموارد البشرية",
     })
+
+
+# ══════════ الإنابة أثناء الغياب (ق-75) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def eligible_deputies_view(request):
+    """
+    من يصلح نائبًا للموظف — زملاؤه في إدارته.
+
+    يُستدعى عند تعبئة طلب الإجازة، فالموظف يختار نائبه بنفسه.
+    """
+    from apps.leaves.services.delegation import eligible_deputies
+
+    emp_id = request.GET.get("employment_id")
+    if emp_id:
+        # الإسناد بالنيابة (ق-68): النائب يُختار لمن أُسند له الطلب
+        Gate.require(request.user, "requests.manage")
+        from apps.employees.models import Employment
+        emp = Gate.filter_queryset(
+            request.user, "requests.manage", Employment.objects.all()
+        ).filter(id=emp_id, company_id=_company_id(request)).first()
+        if emp is None:
+            return Response({"detail": "الموظف غير موجود"}, status=404)
+    else:
+        emp = _my_employment(request)
+        if emp is None:
+            return Response({"detail": "لا ملف موظف مرتبط بحسابك"},
+                            status=404)
+
+    return Response([
+        {"employment_id": d.id, "employee_no": d.employee_no,
+         "name_ar": d.person.display_name}
+        for d in eligible_deputies(emp)
+    ])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_delegations(request):
+    """
+    الإنابات التي تخصّني — ما أُسند إليّ وما أسندته.
+
+    فالنائب يرى ما ينتظر قراره، والغائب يرى إن قبِل نائبه.
+    """
+    from apps.leaves.models import Delegation
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"incoming": [], "outgoing": []})
+
+    def row(d):
+        return {
+            "id": d.id,
+            "request_no": d.request.request_no,
+            "absentee": d.absentee.person.display_name,
+            "deputy": d.deputy.person.display_name,
+            "starts_on": d.starts_on,
+            "ends_on": d.ends_on,
+            "status": d.status,
+            "status_label": d.get_status_display(),
+            "note": d.note,
+        }
+
+    # معزول ذاتيًا: مقيَّد بارتباط المستخدم نفسه
+    base = Delegation.objects.select_related(
+        "request", "absentee__person", "deputy__person")
+    return Response({
+        "incoming": [row(d) for d in base.filter(deputy=emp)],
+        "outgoing": [row(d) for d in base.filter(absentee=emp)],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def decide_delegation_view(request, delegation_id):
+    """
+    النائب يقبل الإنابة أو يرفضها.
+
+    وبالرفض تمضي إجازة الغائب كما هي — فرفض زميل لا يمنع حقه فيها.
+    """
+    from apps.leaves.models import Delegation
+    from apps.leaves.services.delegation import (DelegationError,
+                                                 decide_delegation)
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    # معزول ذاتيًا: مقيَّد بـdeputy=emp — لا يقرّر إلا النائب نفسه
+    d = Delegation.objects.filter(id=delegation_id, deputy=emp).first()
+    if d is None:
+        return Response({"detail": "الإنابة غير موجودة"}, status=404)
+
+    accept = bool(request.data.get("accept"))
+    try:
+        d = decide_delegation(delegation=d, deputy_employment=emp,
+                              accept=accept)
+    except DelegationError as e:
+        return Response({"detail": str(e), "code": "cannot_decide"},
+                        status=409)
+
+    return Response({"id": d.id, "status": d.status,
+                     "status_label": d.get_status_display()})

@@ -32,6 +32,20 @@ class Decision:
         return self.allowed
 
 
+def _delegated_manager_ids(employment):
+    """
+    من ينوب عنهم هذا الموظف اليوم (ق-75).
+
+    تُقرأ عند كل فلترة نطاق team، فالإنابة تبدأ وتنتهي بتاريخها
+    بلا تفعيل يدوي — والقراءة رخيصة (فهرس على deputy وstatus).
+    """
+    try:
+        from apps.leaves.services.delegation import active_delegations_for
+    except Exception:      # noqa: BLE001 — أثناء الهجرات قد لا يتوفر
+        return []
+    return [d.absentee_id for d in active_delegations_for(employment)]
+
+
 class Gate:
     """نقطة الفحص الوحيدة. لا يُفحص أي صلاحية خارجها."""
 
@@ -163,7 +177,12 @@ class Gate:
         if d.scope is Scope.DEPARTMENT:
             return qs.filter(**{f"{prefix}department_id": emp.department_id})
         if d.scope is Scope.TEAM:
-            return qs.filter(**{f"{prefix}direct_manager_id": emp.id})
+            # ق-75: النائب يرى مرؤوسي من ينوب عنه — طوال المدة
+            # المقبولة لا قبلها ولا بعدها. فالإنابة تنقل المهام
+            # فعلًا، ولا معنى لقبولها إن بقي الفريق محجوبًا.
+            managers = [emp.id] + _delegated_manager_ids(emp)
+            return qs.filter(
+                **{f"{prefix}direct_manager_id__in": managers})
         return qs.filter(**{f"{prefix}id": emp.id})
 
     # الحقول التي يُفلتر بها النطاق مباشرة على Employment

@@ -81,6 +81,12 @@ type NavItem = {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   /** بنود فرعية تنطوي تحت هذا البند — قائمة قابلة للطيّ */
   children?: NavItem[];
+  /**
+   * أدنى نطاق يُظهر البند (ق-68).
+   * "team" لإدارة الفريق — فالمشرف يصل لفريقه منها.
+   * والافتراضي "department": البنود العامة لمدير الإدارة فما فوق.
+   */
+  minScope?: "team" | "department";
   /** يظهر لمن يملك إحدى هذه الصلاحيات — فارغ يعني للجميع */
   perms?: string[];
   /**
@@ -104,7 +110,7 @@ const NAV: NavItem[] = [
   // ق-68: إدارة الفريق — بنود المشرف مجموعة تحت عنوان واحد
   {
     href: "/team", key: "team", icon: IcUsers,
-    perms: ["employees.view"], needsScope: true,
+    perms: ["employees.view"], needsScope: true, minScope: "team",
     children: [
       { href: "/team/members", key: "teamMembers", icon: IcDoc,
         perms: ["employees.view"] },
@@ -207,15 +213,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
    */
   const scopes: Record<string, string> = ws?.permission_scopes ?? {};
 
-  const wideEnough = (perm: string) =>
-    (SCOPE_RANK[scopes[perm]] ?? 0) >= 1;
+  /**
+   * ق-68: البند الإداري لمن نطاقه أوسع من «فريقي».
+   *
+   * فالمشرف نطاقه team ويصل لفريقه من «إدارة الفريق» — وإظهار
+   * «الموظفون» و«الحضور» له تكرار يشتّت. ومدير الإدارة فما فوق
+   * (department وbranch وcompany وaccount) يرى البنود العامة.
+   */
+  const wideEnough = (perm: string, min: number) =>
+    (SCOPE_RANK[scopes[perm]] ?? 0) >= min;
 
   const can = (item: NavItem) => {
     if (!item.perms) return true;
     const held = item.perms.filter((p) => perms.has(p));
     if (held.length === 0) return false;
-    // البند الإداري يحتاج صلاحية واحدة على الأقل بنطاق أوسع من «نفسي»
-    if (item.needsScope) return held.some(wideEnough);
+    if (item.needsScope) {
+      const min = item.minScope === "team" ? 1 : 2;
+      return held.some((p) => wideEnough(p, min));
+    }
     return true;
   };
   const nav = NAV.filter(can);

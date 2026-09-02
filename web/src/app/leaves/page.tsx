@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { apiGet, apiPost, qs, API_BASE, ApiError } from "@/lib/api";
+import { apiGet, apiPost, qs, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcLeave, IcX } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -167,11 +167,17 @@ function ApprovalCard({
             <div className="muted" style={{ fontSize: ".76rem" }}>
               {L("attachment")}
             </div>
-            <a href={`${API_BASE}${req.attachment_url}`} target="_blank"
-              rel="noreferrer"
-              style={{ color: "var(--teal)", fontWeight: 500 }}>
+            {/* الرابط المباشر يُردّ 401: التبويب الجديد لا يحمل
+                رمز المصادقة. فالملف يُجلب بالرمز ثم يُفتح. */}
+            <button
+              onClick={() => openForView(req.attachment_url!)}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "var(--teal)", fontWeight: 500, font: "inherit",
+                cursor: "pointer",
+              }}>
               {L("openAttachment")}
-            </a>
+            </button>
           </div>
         )}
       </div>
@@ -357,11 +363,15 @@ function RequestsTable({
                             <div className="muted" style={{ fontSize: ".76rem" }}>
                               {L("attachment")}
                             </div>
-                            <a href={`${API_BASE}${detail.attachment_url}`} target="_blank"
-                              rel="noreferrer"
-                              style={{ color: "var(--teal)", fontWeight: 500 }}>
+                            <button
+                              onClick={() => openForView(detail.attachment_url!)}
+                              style={{
+                                background: "none", border: "none", padding: 0,
+                                color: "var(--teal)", fontWeight: 500,
+                                font: "inherit", cursor: "pointer",
+                              }}>
                               {L("openAttachment")}
-                            </a>
+                            </button>
                           </div>
                         )}
                       </div>

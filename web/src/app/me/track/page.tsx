@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { apiGet, API_BASE } from "@/lib/api";
+import { apiGet, openForView } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc, IcPlus } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -245,11 +245,16 @@ export default function TrackRequestsPage() {
                                   <div className="muted" style={{ fontSize: ".76rem" }}>
                                     {L("attachment")}
                                   </div>
-                                  <a href={`${API_BASE}${detail.attachment_url}`}
-                                    target="_blank" rel="noreferrer"
-                                    style={{ color: "var(--teal)", fontWeight: 500 }}>
+                                  <button
+                                    onClick={() => openForView(detail.attachment_url!)}
+                                    style={{
+                                      background: "none", border: "none",
+                                      padding: 0, color: "var(--teal)",
+                                      fontWeight: 500, font: "inherit",
+                                      cursor: "pointer",
+                                    }}>
                                     {L("openAttachment")}
-                                  </a>
+                                  </button>
                                 </div>
                               )}
                             </div>

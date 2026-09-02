@@ -13,6 +13,7 @@ import { apiGet, apiPost, apiPut, apiDelete, API_BASE, ApiError } from "@/lib/ap
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
 import NationalityField, { nationalityLabel } from "@/components/NationalityField";
+import AuthImage from "@/components/AuthImage";
 import {
   IcAlert, IcCheck, IcClock, IcDoc, IcLeave, IcOrg, IcPayroll,
   IcPlus, IcUser, IcUsers, IcWallet, IcX,
@@ -874,8 +875,7 @@ export default function EmployeeProfileView({
             border: "2px solid var(--line)",
           }}>
             {data.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={`${API_BASE}${data.avatar_url}`} alt=""
+              <AuthImage src={data.avatar_url} alt=""
                 style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             ) : (
               <span style={{ color: "var(--ink-3)" }}><IcUser size={30} /></span>

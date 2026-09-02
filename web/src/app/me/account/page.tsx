@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiPut, API_BASE, ApiError, getToken } from "@/lib/api";
 import { useT, usePrefs, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
+import AuthImage from "@/components/AuthImage";
 
 const T: Dict = {
   title: { ar: "حسابي", en: "My account" },
@@ -194,8 +195,10 @@ export default function MyAccountPage() {
     );
   }
 
+  // المسار كما يرسله الخادم — AuthImage يضيف البادئة والرمز.
+  // وbump يجبر إعادة الجلب بعد رفع صورة جديدة.
   const avatarSrc = data.avatar_url
-    ? `${API_BASE}${data.avatar_url}?v=${bump}`
+    ? `${data.avatar_url}?v=${bump}`
     : null;
 
   return (
@@ -222,8 +225,7 @@ export default function MyAccountPage() {
             border: "2px solid var(--line)",
           }}>
             {avatarSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarSrc} alt="" style={{
+              <AuthImage src={avatarSrc} alt="" style={{
                 width: "100%", height: "100%", objectFit: "cover",
               }} />
             ) : (

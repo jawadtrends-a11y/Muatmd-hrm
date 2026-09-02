@@ -72,6 +72,7 @@ def test_no_raw_queryset_in_api_views():
             if any(k in window for k in (
                     "person=person", "person=getattr", "employment=emp",
                     "approver_employment=emp", "employment=employment",
+                    "deputy=emp",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
                     # site جاء من Gate.filter_queryset، وp من emp.person
                     "person=p", "site=site")):

@@ -336,6 +336,63 @@ class Request(CompanyScopedModel):
         return f"{self.request_no} — {self.get_request_type_display()}"
 
 
+class DelegationStatus(models.TextChoices):
+    PENDING = "pending", _("بانتظار قبول النائب")
+    ACCEPTED = "accepted", _("مقبولة")
+    DECLINED = "declined", _("مرفوضة")
+
+
+class Delegation(CompanyScopedModel):
+    """
+    إنابة أثناء الغياب (ق-75).
+
+    الموظف يختار نائبه بنفسه عند طلب إجازته — فهو أعرف بمن يقوم
+    بعمله، والمدير يعنيه ألا ينقطع سير العمل لا من يسدّ المكان.
+
+    والإنابة تُقبل لا تُفرض: النائب يوافق أو يرفض. وبالرفض تمضي
+    الإجازة والمهام تصعد لمدير الإدارة — فرفض زميل لا يمنع حق
+    الموظف في إجازته.
+    """
+
+    request = models.OneToOneField(
+        "leaves.Request", on_delete=models.CASCADE,
+        related_name="delegation", verbose_name=_("الطلب"))
+    absentee = models.ForeignKey(
+        "employees.Employment", on_delete=models.CASCADE,
+        related_name="delegations_given", verbose_name=_("الغائب"))
+    deputy = models.ForeignKey(
+        "employees.Employment", on_delete=models.CASCADE,
+        related_name="delegations_received", verbose_name=_("النائب"))
+
+    starts_on = models.DateField(_("من"))
+    ends_on = models.DateField(_("إلى"))
+
+    status = models.CharField(
+        _("الحالة"), max_length=20, choices=DelegationStatus.choices,
+        default=DelegationStatus.PENDING, db_index=True)
+    decided_at = models.DateTimeField(_("وقت القرار"), null=True, blank=True)
+    note = models.CharField(_("ملاحظة"), max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = _("إنابة")
+        verbose_name_plural = _("الإنابات")
+        indexes = [
+            models.Index(fields=["deputy", "status"]),
+            models.Index(fields=["absentee", "starts_on", "ends_on"]),
+        ]
+
+    def __str__(self):
+        return f"{self.absentee.employee_no} → {self.deputy.employee_no}"
+
+    @property
+    def is_active_now(self):
+        """مقبولة وسارية اليوم — فالتفويض يبدأ وينتهي تلقائيًا."""
+        from django.utils import timezone
+        today = timezone.localdate()
+        return (self.status == DelegationStatus.ACCEPTED
+                and self.starts_on <= today <= self.ends_on)
+
+
 class ApproverType(models.TextChoices):
     DIRECT_MANAGER = "direct_manager", _("المدير المباشر")
     DEPARTMENT_HEAD = "department_head", _("مدير الإدارة")

@@ -11,7 +11,7 @@
  */
 import { useRef, useState } from "react";
 
-import { apiUpload, API_BASE, ApiError } from "@/lib/api";
+import { apiUpload, openForView, ApiError } from "@/lib/api";
 import DateField from "@/components/DateField";
 
 /**
@@ -134,10 +134,14 @@ function AttachmentField({
   if (value) {
     return (
       <div className="row" style={{ gap: 8, alignItems: "center" }}>
-        <a href={`${API_BASE}${value}`} target="_blank" rel="noreferrer"
-          style={{ color: "var(--teal)", fontWeight: 500 }}>
+        <button onClick={() => openForView(value)}
+          style={{
+            background: "none", border: "none", padding: 0,
+            color: "var(--teal)", fontWeight: 500, font: "inherit",
+            cursor: "pointer",
+          }}>
           {name || L("attached", "المرفق")}
-        </a>
+        </button>
         <button className="btn btn-sm btn-ghost"
           onClick={() => { onChange(""); setName(""); }}>
           {L("remove", "إزالة")}

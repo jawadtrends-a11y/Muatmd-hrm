@@ -153,6 +153,10 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/dependents/", employees_api.employee_dependents, name="employee-dependents"),
     path("api/employees/<int:employment_id>/contacts/", employees_api.employee_contacts, name="employee-contacts"),
     path("api/me/editable-fields/", leaves_api.my_editable_fields, name="my-editable-fields"),
+    # الإنابة أثناء الغياب (ق-75)
+    path("api/me/deputies/", leaves_api.eligible_deputies_view, name="eligible-deputies"),
+    path("api/me/delegations/", leaves_api.my_delegations, name="my-delegations"),
+    path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
