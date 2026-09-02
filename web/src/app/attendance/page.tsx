@@ -99,6 +99,9 @@ export default function AttendancePage() {
 
   const [daily, setDaily] = useState<{ rows: DailyRow[]; counts: Record<string, number> } | null>(null);
   const [monthly, setMonthly] = useState<MonthlyRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
@@ -109,10 +112,14 @@ export default function AttendancePage() {
 
     const url =
       mode === "daily"
-        ? `/attendance/daily/${qs({ date: day })}`
-        : `/attendance/monthly/${qs({ year, month })}`;
+        ? `/attendance/daily/${qs({ date: day, page })}`
+        : `/attendance/monthly/${qs({ year, month, page })}`;
 
-    apiGet<{ rows: DailyRow[] | MonthlyRow[]; counts?: Record<string, number> }>(url)
+    apiGet<{
+      rows: DailyRow[] | MonthlyRow[];
+      counts?: Record<string, number>;
+      total?: number; pages?: number; page?: number;
+    }>(url)
       .then((res) => {
         if (!alive) return;
         if (mode === "daily") {
@@ -120,6 +127,9 @@ export default function AttendancePage() {
         } else {
           setMonthly((res.rows as MonthlyRow[]) || []);
         }
+        setTotal(res.total ?? 0);
+        setPages(res.pages ?? 1);
+        if (res.page && res.page !== page) setPage(res.page);
         setBusy(false);
       })
       .catch((e: ApiError) => {
@@ -131,7 +141,11 @@ export default function AttendancePage() {
     return () => { alive = false; };
     // L مستثناة: تتغيّر مرجعيًا في كل رسم فتعيد إطلاق الطلب
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, day, year, month]);
+  }, [mode, day, year, month, page]);
+
+  // تغيير الفلتر يعيدنا للصفحة الأولى — وإلا بقينا على صفحة 7
+  // لتاريخ فيه ثلاث صفحات فقط
+  useEffect(() => { setPage(1); }, [mode, day, year, month]);
 
   const counts = daily?.counts ?? {};
   const cards = useMemo(
@@ -224,9 +238,21 @@ export default function AttendancePage() {
             <div style={{ marginTop: 6 }}>{error}</div>
           </div>
         ) : mode === "daily" ? (
-          <DailyTable rows={daily?.rows ?? []} L={L} lang={lang} />
+          <>
+            <DailyTable rows={daily?.rows ?? []} L={L} lang={lang} />
+            <div style={{ borderTop: "1px solid var(--line)" }}>
+              <Pager page={page} pages={pages} total={total}
+                onGo={setPage} L={L} />
+            </div>
+          </>
         ) : (
-          <MonthlyTable rows={monthly} L={L} />
+          <>
+            <MonthlyTable rows={monthly} L={L} />
+            <div style={{ borderTop: "1px solid var(--line)" }}>
+              <Pager page={page} pages={pages} total={total}
+                onGo={setPage} L={L} />
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -241,6 +267,54 @@ type TableProps<R> = {
   L: (key: string, fallback?: string) => string;
   lang?: string;
 };
+
+/* ══ مرقّم الصفحات ══ */
+
+function Pager({
+  page, pages, total, onGo, L,
+}: {
+  page: number; pages: number; total: number;
+  onGo: (p: number) => void;
+  L: (k: string, f?: string) => string;
+}) {
+  if (pages <= 1) return null;
+
+  // نافذة من خمس صفحات حول الحالية، مع الأولى والأخيرة دائمًا
+  const nums: number[] = [];
+  const from = Math.max(1, Math.min(page - 2, pages - 4));
+  const to = Math.min(pages, from + 4);
+  for (let i = from; i <= to; i++) nums.push(i);
+
+  const btn = (p: number, label?: string, active = false) => (
+    <button
+      key={label ?? p}
+      className={`btn btn-sm ${active ? "btn-primary" : ""}`}
+      disabled={active}
+      onClick={() => onGo(p)}
+      style={{ minWidth: 36 }}
+    >
+      <span className="num">{label ?? p}</span>
+    </button>
+  );
+
+  return (
+    <div className="spread" style={{ padding: "12px 14px", flexWrap: "wrap", gap: 8 }}>
+      <div className="muted" style={{ fontSize: ".85rem" }}>
+        {L("total")}: <span className="num">{total}</span>
+      </div>
+      <div className="row" style={{ gap: 5, flexWrap: "wrap" }}>
+        {page > 1 && btn(page - 1, "‹")}
+        {from > 1 && btn(1)}
+        {from > 2 && <span className="muted" style={{ padding: "0 4px" }}>…</span>}
+        {nums.map((p) => btn(p, undefined, p === page))}
+        {to < pages - 1 && <span className="muted" style={{ padding: "0 4px" }}>…</span>}
+        {to < pages && btn(pages)}
+        {page < pages && btn(page + 1, "›")}
+      </div>
+    </div>
+  );
+}
+
 
 function DailyTable({ rows, L }: TableProps<DailyRow>) {
   if (rows.length === 0) {

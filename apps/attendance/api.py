@@ -209,7 +209,16 @@ def attendance_days(request, employment_id):
     if request.GET.get("to"):
         qs = qs.filter(work_date__lte=request.GET["to"])
 
-    return Response([
+    # السجل متاح كاملًا من تاريخ الالتحاق ولو كان قبل عشرين سنة —
+    # لكن لا يُجلب كاملًا في رد واحد: سبعة آلاف يوم تخنق المتصفح.
+    # فالأحدث أولًا (وهو المطلوب غالبًا) بصفحات.
+    qs = qs.order_by("-work_date")
+    page, page_size = _page_params(request)
+    total = qs.count()
+    pages = max(1, -(-total // page_size))
+    page = min(page, pages)
+
+    rows = [
         {"id": d.id, "work_date": d.work_date, "status": d.status,
          "status_label": d.get_status_display(),
          "first_in": d.first_in, "last_out": d.last_out,
@@ -221,8 +230,20 @@ def attendance_days(request, employment_id):
          "punch_count": d.punch_count,
          "is_manually_adjusted": d.is_manually_adjusted,
          "adjustment_note": d.adjustment_note}
-        for d in qs.order_by("work_date")
-    ])
+        for d in qs[(page - 1) * page_size: page * page_size]
+    ]
+
+    return Response({
+        "employment_id": emp.id,
+        "employee_no": emp.employee_no,
+        "name_ar": emp.person.display_name,
+        "join_date": emp.join_date,
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "page_size": page_size,
+        "rows": rows,
+    })
 
 
 @api_view(["PUT"])
@@ -327,6 +348,25 @@ def monthly_summary(request, employment_id):
 
 # ══════════════════ العرض الجماعي ══════════════════
 
+def _page_params(request, default_size=20, max_size=200):
+    """
+    معاملات التقسيم — page وpage_size.
+
+    عشرون سجلًا في الصفحة (عشرة موظفين بدخولهم وخروجهم). والقراءة
+    تبقى ثابتة الكلفة مهما بلغ عدد الموظفين، فلا يثقل النظام عند
+    التوسّع.
+    """
+    try:
+        page = max(1, int(request.GET.get("page") or 1))
+    except ValueError:
+        page = 1
+    try:
+        size = int(request.GET.get("page_size") or default_size)
+    except ValueError:
+        size = default_size
+    return page, max(1, min(size, max_size))
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def daily_board(request):
@@ -360,14 +400,32 @@ def daily_board(request):
         request.user, "attendance.view", Employment.objects.all()
     ).filter(company_id=company_id,
              status=EmploymentStatus.ACTIVE).select_related(
-        "person", "department")
+        "person", "department").order_by("employee_no")
+
+    page, page_size = _page_params(request)
+    total = employments.count()
+    pages = max(1, -(-total // page_size))
+    page = min(page, pages)
+
+    # العدّاد يشمل كل موظفي الشركة لا الصفحة المعروضة — «حاضر 40»
+    # تعني الشركة كلها، وإلا كان الرقم مضلّلًا
+    from django.db.models import Count as _Count
+    counts = {
+        r["status"]: r["n"]
+        for r in Gate.filter_queryset(
+            request.user, "attendance.view", AttendanceDay.objects.all()
+        ).filter(
+            id__in=[d.id for d in days.values()]
+        ).values("status").annotate(n=_Count("id"))
+    }
+    no_record = total - sum(counts.values())
+    if no_record > 0:
+        counts["no_record"] = no_record
 
     rows = []
-    counts = {}
-    for emp in employments.order_by("employee_no"):
+    for emp in employments[(page - 1) * page_size: page * page_size]:
         d = days.get(emp.id)
         status = d.status if d else "no_record"
-        counts[status] = counts.get(status, 0) + 1
         rows.append({
             "employment_id": emp.id,
             "employee_no": emp.employee_no,
@@ -388,7 +446,10 @@ def daily_board(request):
 
     return Response({
         "date": str(day),
-        "total": len(rows),
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "page_size": page_size,
         "counts": counts,
         "rows": rows,
     })
@@ -398,9 +459,22 @@ def daily_board(request):
 @permission_classes([IsAuthenticated])
 def monthly_board(request):
     """
-    ملخص الحضور الشهري لكل الموظفين — الأساس الذي يقرؤه المسير.
+    ملخص الحضور الشهري — يُحتسب لحظيًا من سجلات الأيام.
+
+    لا يُقرأ من جدول ملخّص مُخزَّن: المدير يدخل في منتصف يوم العمل
+    فيجب أن يرى بصمة اليوم فورًا لا بعد مهمة ليلية. والجمع يتم في
+    القاعدة على صفحة واحدة، فتبقى الكلفة ثابتة مهما كبر الحساب.
+
+    والاستثناء: الشهر الذي اعتُمد مسيره له صف نهائي في
+    AttendanceMonthlySummary فيُقرأ منه — فلا تتغيّر أرقام مسير
+    معتمد بأثر رجعي لو صُحّحت بصمة بعده (ق-69).
     """
-    from apps.attendance.models import AttendanceMonthlySummary
+    from calendar import monthrange
+
+    from django.db.models import Count, Q, Sum
+
+    from apps.attendance.models import AttendanceDay, AttendanceMonthlySummary
+    from apps.employees.models import Employment, EmploymentStatus
 
     Gate.require(request.user, "attendance.view")
     company_id = _company_id(request)
@@ -412,34 +486,87 @@ def monthly_board(request):
         month = int(request.GET.get("month") or date.today().month)
     except ValueError:
         return Response({"detail": "سنة أو شهر غير صالح"}, status=400)
+    if not 1 <= month <= 12:
+        return Response({"detail": "الشهر بين 1 و12"}, status=400)
 
-    qs = Gate.filter_queryset(
-        request.user, "attendance.view",
-        AttendanceMonthlySummary.objects.all()
-    ).filter(company_id=company_id, period_year=year,
-             period_month=month).select_related(
-        "employment__person", "employment__department")
+    employments = Gate.filter_queryset(
+        request.user, "attendance.view", Employment.objects.all()
+    ).filter(company_id=company_id,
+             status=EmploymentStatus.ACTIVE).select_related(
+        "person", "department").order_by("employee_no")
 
-    rows = [
-        {
-            "employment_id": s.employment_id,
-            "employee_no": s.employment.employee_no,
-            "name_ar": s.employment.person.display_name,
-            "department": (s.employment.department.name_ar
-                           if s.employment.department else ""),
-            "worked_days": str(s.worked_days),
-            "absent_days": str(s.unpaid_absent_days),
-            "leave_days": str(s.paid_leave_days),
-            "late_minutes": s.late_minutes,
-            "overtime_minutes": s.approved_overtime_minutes,
-            "overtime_hours": f"{s.approved_overtime_minutes / 60:.2f}",
-        }
-        for s in qs.order_by("employment__employee_no")
-    ]
+    page, page_size = _page_params(request)
+    total = employments.count()
+    pages = max(1, -(-total // page_size))
+    page = min(page, pages)
+    window = list(employments[(page - 1) * page_size: page * page_size])
+    emp_ids = [e.id for e in window]
+
+    first = date(year, month, 1)
+    last = date(year, month, monthrange(year, month)[1])
+
+    frozen = {
+        f.employment_id: f
+        for f in Gate.filter_queryset(
+            request.user, "attendance.view",
+            AttendanceMonthlySummary.objects.all()
+        ).filter(
+            company_id=company_id, period_year=year, period_month=month,
+            employment_id__in=emp_ids, is_final=True)
+    }
+
+    live = {
+        r["employment_id"]: r
+        for r in Gate.filter_queryset(
+            request.user, "attendance.view", AttendanceDay.objects.all()
+        ).filter(
+            company_id=company_id, employment_id__in=emp_ids,
+            work_date__gte=first, work_date__lte=last,
+        ).values("employment_id").annotate(
+            worked=Count("id", filter=Q(status__in=["present", "partial"])),
+            absent=Count("id", filter=Q(status="absent")),
+            leave=Count("id", filter=Q(status="leave")),
+            late=Sum("late_minutes"),
+            overtime=Sum("approved_overtime_minutes"),
+        )
+    }
+
+    rows = []
+    for emp in window:
+        f = frozen.get(emp.id)
+        if f is not None:
+            worked, absent, leave = (str(f.worked_days),
+                                     str(f.unpaid_absent_days),
+                                     str(f.paid_leave_days))
+            late, overtime = f.late_minutes, f.approved_overtime_minutes
+        else:
+            d = live.get(emp.id, {})
+            worked = str(d.get("worked", 0))
+            absent = str(d.get("absent", 0))
+            leave = str(d.get("leave", 0))
+            late = d.get("late") or 0
+            overtime = d.get("overtime") or 0
+
+        rows.append({
+            "employment_id": emp.id,
+            "employee_no": emp.employee_no,
+            "name_ar": emp.person.display_name,
+            "department": emp.department.name_ar if emp.department else "",
+            "worked_days": worked,
+            "absent_days": absent,
+            "leave_days": leave,
+            "late_minutes": late,
+            "overtime_minutes": overtime,
+            "overtime_hours": f"{overtime / 60:.2f}",
+            "is_final": f is not None,
+        })
 
     return Response({
         "year": year, "month": month,
-        "total": len(rows),
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "page_size": page_size,
         "rows": rows,
     })
 

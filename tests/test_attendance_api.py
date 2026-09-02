@@ -82,7 +82,7 @@ def test_punch_and_process(env):
     assert r.json()["punches_read"] == 2
 
     days = c.get(f"/api/attendance/{emp_id}/days/"
-                 "?from=2026-03-02&to=2026-03-02").json()
+                 "?from=2026-03-02&to=2026-03-02").json()["rows"]
     assert days[0]["status"] == "present"
     assert days[0]["worked_minutes"] == 420
 
@@ -111,7 +111,7 @@ def test_overtime_needs_approval(env):
           {"from": "2026-03-05", "to": "2026-03-05"})
 
     day = c.get(f"/api/attendance/{emp_id}/days/"
-                "?from=2026-03-05&to=2026-03-05").json()[0]
+                "?from=2026-03-05&to=2026-03-05").json()["rows"][0]
     assert day["overtime_minutes"] == 180
     assert day["approved_overtime_minutes"] == 0
 
@@ -131,7 +131,7 @@ def test_manual_adjustment_requires_note_and_survives(env):
     _post(c, f"/api/attendance/{emp_id}/days/",
           {"from": "2026-03-09", "to": "2026-03-09"})
     day = c.get(f"/api/attendance/{emp_id}/days/"
-                "?from=2026-03-09&to=2026-03-09").json()[0]
+                "?from=2026-03-09&to=2026-03-09").json()["rows"][0]
     assert day["status"] == "absent"
 
     assert _put(c, f"/api/attendance/days/{day['id']}/adjust/",
@@ -169,7 +169,7 @@ def test_employee_cannot_approve_overtime(env):
     _post(hr, f"/api/attendance/{emp_id}/days/",
           {"from": "2026-03-02", "to": "2026-03-02"})
     day = hr.get(f"/api/attendance/{emp_id}/days/"
-                 "?from=2026-03-02&to=2026-03-02").json()[0]
+                 "?from=2026-03-02&to=2026-03-02").json()["rows"][0]
 
     emp_user = _client(env, "employee", Scope.OWN, username="emp1")
     r = _put(emp_user, f"/api/attendance/days/{day['id']}/overtime/",
