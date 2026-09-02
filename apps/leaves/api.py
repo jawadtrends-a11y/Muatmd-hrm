@@ -251,15 +251,32 @@ def leave_requests(request):
 @permission_classes([IsAuthenticated])
 def request_detail(request, request_id):
     """تفاصيل طلب بسلسلة اعتماده."""
-    qs = Request.objects.filter(company_id=_company_id(request))
+    from django.db.models import Q
 
-    if not Gate.check(request.user, "leaves.view").allowed:
-        emp = _my_employment(request)
-        if emp is None:
-            return Response({"detail": "غير مصرّح"}, status=403)
-        qs = qs.filter(employment=emp)
+    emp = _my_employment(request)
+    company_id = _company_id(request)
+
+    # طلبه هو مرئي له دائمًا — إضافةً لما يراه بصلاحيته الإدارية.
+    #
+    # فالمشرف يملك leaves.view بنطاق team، ولا يشرف على نفسه: كان
+    # طلبه هو يسقط من نطاقه فيُردّ عليه «الطلب غير موجود» وهو
+    # صاحبه. والمشرف موظف أيضًا (ق-71: مقدّم الطلب يرى مراحله).
+    scoped = Gate.filter_queryset(
+        request.user, "leaves.view", Request.objects.all()
+    ).filter(company_id=company_id)
+
+    if emp is not None:
+        # معزول ذاتيًا: الاستعلام مقيَّد بارتباط المستخدم نفسه
+        # (employment=emp)، فالبوابة لا تضيف عزلًا — بل تنزع، لأن
+        # نطاق team لا يشمل صاحبه.
+        own = Request.objects.filter(
+            company_id=company_id, employment=emp)
+        qs = Request.objects.filter(
+            Q(id__in=scoped.values("id")) | Q(id__in=own.values("id")))
+    elif Gate.check(request.user, "leaves.view").allowed:
+        qs = scoped
     else:
-        qs = Gate.filter_queryset(request.user, "leaves.view", qs)
+        return Response({"detail": "غير مصرّح"}, status=403)
 
     r = qs.filter(id=request_id).select_related("employment__person").first()
     if r is None:
@@ -494,12 +511,17 @@ def submit_request(request):
     rtype = request.data.get("request_type", "")
     payload = request.data.get("payload") or {}
 
+    # LeaveError يُلتقط مع RequestError: التحقق النظامي للإجازات
+    # (المرفق الإلزامي، الرصيد، الشرائح) يرفعه — وخروجه خامًا يعني
+    # صفحة خطأ حمراء بدل رسالة تخبر بما يُفعل
+    from apps.leaves.services.balances import LeaveError
+
     try:
         res = create_request(
             employment=emp, request_type=rtype, payload=payload,
             note=request.data.get("note", ""),
             attachment_url=request.data.get("attachment_url", ""))
-    except RequestError as e:
+    except (RequestError, LeaveError) as e:
         return Response({"detail": str(e), "code": "invalid_request"},
                         status=400)
 

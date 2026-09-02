@@ -11,7 +11,7 @@
  */
 import { useRef, useState } from "react";
 
-import { apiUpload, ApiError } from "@/lib/api";
+import { apiUpload, API_BASE, ApiError } from "@/lib/api";
 import DateField from "@/components/DateField";
 
 /**
@@ -134,7 +134,7 @@ function AttachmentField({
   if (value) {
     return (
       <div className="row" style={{ gap: 8, alignItems: "center" }}>
-        <a href={value} target="_blank" rel="noreferrer"
+        <a href={`${API_BASE}${value}`} target="_blank" rel="noreferrer"
           style={{ color: "var(--teal)", fontWeight: 500 }}>
           {name || L("attached", "المرفق")}
         </a>

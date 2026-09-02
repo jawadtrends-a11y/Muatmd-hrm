@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { apiGet, apiPost, qs, ApiError } from "@/lib/api";
+import { apiGet, apiPost, qs, API_BASE, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcLeave, IcX } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -160,7 +160,8 @@ function ApprovalCard({
             <div className="muted" style={{ fontSize: ".76rem" }}>
               {L("attachment")}
             </div>
-            <a href={req.attachment_url} target="_blank" rel="noreferrer"
+            <a href={`${API_BASE}${req.attachment_url}`} target="_blank"
+              rel="noreferrer"
               style={{ color: "var(--teal)", fontWeight: 500 }}>
               {L("openAttachment")}
             </a>
@@ -335,7 +336,7 @@ function RequestsTable({
                             <div className="muted" style={{ fontSize: ".76rem" }}>
                               {L("attachment")}
                             </div>
-                            <a href={detail.attachment_url} target="_blank"
+                            <a href={`${API_BASE}${detail.attachment_url}`} target="_blank"
                               rel="noreferrer"
                               style={{ color: "var(--teal)", fontWeight: 500 }}>
                               {L("openAttachment")}

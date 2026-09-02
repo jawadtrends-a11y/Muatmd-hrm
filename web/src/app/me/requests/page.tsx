@@ -128,7 +128,9 @@ export default function MyRequestsPage() {
   const { L } = useT(T);
 
   const [types, setTypes] = useState<ReqType[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<{ code: string; name_ar: string }[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<
+    { code: string; name_ar: string; requires_attachment?: boolean }[]
+  >([]);
   const [selected, setSelected] = useState<ReqType | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
@@ -247,11 +249,18 @@ export default function MyRequestsPage() {
         payload[f] = fieldKind(f) === "bool" ? v === "1" : v;
       }
 
+      // attachment_url حقل مستقل في Request لا داخل payload —
+      // وإرساله داخله يعني أن الخادم لا يراه، فيرفض الطلب طالبًا
+      // مرفقًا وهو مرفوع أمام المستخدم
+      const attachment = String(payload.attachment_url ?? "");
+      delete payload.attachment_url;
+
       const res = await apiPost<{ request_no: string; warnings: string[] }>(
         "/requests/", {
           request_type: selected.code,
           payload,
           note: note.trim(),
+          attachment_url: attachment,
         });
 
       setDone({ no: res.request_no, warnings: res.warnings || [] });
@@ -361,6 +370,18 @@ export default function MyRequestsPage() {
                 onChange={(v) => setValues({ ...values, [f]: v })}
                 leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
             ))}
+            {/* ق-70: المرفق في الإجازات — إلزامي حين يطلبه نوعها
+                (المرضية والوضع والخاصة)، اختياري في غيرها.
+                والعلم من الخادم لا شرط مكتوب هنا. */}
+            {selected.code === "leave" && (
+              <DynField name="attachment_url"
+                required={!!leaveTypes.find(
+                  (t) => t.code === values.leave_type_code,
+                )?.requires_attachment}
+                value={values.attachment_url ?? ""}
+                onChange={(v) => setValues({ ...values, attachment_url: v })}
+                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
+            )}
             {selected.optional_fields.filter((f) => {
               if (f === "note" || f === "attachment_url") return false;
               // ق-59: حقل الوقت يظهر حسب البصمة المختارة

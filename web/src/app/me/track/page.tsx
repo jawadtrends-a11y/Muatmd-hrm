@@ -4,9 +4,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { apiGet } from "@/lib/api";
+import { apiGet, API_BASE } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc, IcPlus } from "@/components/Icons";
+import ApprovalChain, { type ChainRow, stamp }
+  from "@/components/ApprovalChain";
 
 const T: Dict = {
   title: { ar: "طلباتي", en: "My requests" },
@@ -26,6 +28,11 @@ const T: Dict = {
   approved: { ar: "معتمدة", en: "Approved" },
   rejected: { ar: "مرفوضة", en: "Rejected" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
+  submittedAt: { ar: "وقت التقديم", en: "Submitted" },
+  closedAt: { ar: "وقت الإغلاق", en: "Closed" },
+  attachment: { ar: "المرفق", en: "Attachment" },
+  openAttachment: { ar: "فتح المرفق", en: "Open" },
+  loadFailed: { ar: "تعذّر تحميل التفاصيل", en: "Could not load details" },
   empty: { ar: "لم تقدّم أي طلب بعد", en: "No requests yet" },
   emptyHint: {
     ar: "ابدأ من «خدماتي»",
@@ -37,6 +44,10 @@ const T: Dict = {
 type Req = {
   id: number; request_no: string; type: string; type_label: string;
   status: string; status_label: string; current_step: number;
+  submitted_at?: string | null;
+  closed_at?: string | null;
+  attachment_url?: string;
+  approvals?: ChainRow[];
   created_at: string; note: string;
   payload: Record<string, unknown>;
 };
@@ -74,6 +85,24 @@ export default function TrackRequestsPage() {
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
+  /**
+   * ق-71: الموظف يرى أين وصل طلبه — الصف يتمدّد بالنقر.
+   * والتفاصيل تُجلب عند الفتح لا مع القائمة.
+   */
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<Req | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  function toggle(id: number) {
+    if (openId === id) { setOpenId(null); setDetail(null); return; }
+    setOpenId(id);
+    setDetail(null);
+    setLoadingDetail(true);
+    apiGet<Req>(`/leaves/requests/${id}/`)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+      .finally(() => setLoadingDetail(false));
+  }
 
   useEffect(() => {
     apiGet<Req[]>("/me/requests/")
@@ -155,9 +184,13 @@ export default function TrackRequestsPage() {
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.id}>
+                  <>
+                  <tr key={r.id} onClick={() => toggle(r.id)}
+                    style={{ cursor: "pointer" }}>
                     <td style={{ textAlign: "end" }}>
-                      <span className="num">{r.request_no}</span>
+                      <span className="num" style={{ color: "var(--teal)" }}>
+                        {r.request_no}
+                      </span>
                     </td>
                     <td>{r.type_label}</td>
                     <td className="muted truncate">{summarize(r)}</td>
@@ -176,6 +209,59 @@ export default function TrackRequestsPage() {
                       </span>
                     </td>
                   </tr>
+
+                  {openId === r.id && (
+                    <tr key={`${r.id}-detail`}>
+                      <td colSpan={6} style={{
+                        background: "var(--paper-2)", padding: "14px 18px",
+                      }}>
+                        {loadingDetail ? (
+                          <span className="muted">{L("loading")}</span>
+                        ) : detail ? (
+                          <div className="stack" style={{ gap: 12 }}>
+                            <div className="row" style={{
+                              gap: 20, flexWrap: "wrap", fontSize: ".85rem",
+                            }}>
+                              <div>
+                                <div className="muted" style={{ fontSize: ".76rem" }}>
+                                  {L("submittedAt")}
+                                </div>
+                                <span className="num">
+                                  {stamp(detail.submitted_at || detail.created_at)}
+                                </span>
+                              </div>
+                              {detail.closed_at && (
+                                <div>
+                                  <div className="muted" style={{ fontSize: ".76rem" }}>
+                                    {L("closedAt")}
+                                  </div>
+                                  <span className="num">
+                                    {stamp(detail.closed_at)}
+                                  </span>
+                                </div>
+                              )}
+                              {detail.attachment_url && (
+                                <div>
+                                  <div className="muted" style={{ fontSize: ".76rem" }}>
+                                    {L("attachment")}
+                                  </div>
+                                  <a href={`${API_BASE}${detail.attachment_url}`}
+                                    target="_blank" rel="noreferrer"
+                                    style={{ color: "var(--teal)", fontWeight: 500 }}>
+                                    {L("openAttachment")}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                            <ApprovalChain rows={detail.approvals ?? []} />
+                          </div>
+                        ) : (
+                          <span className="muted">{L("loadFailed")}</span>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 ))}
               </tbody>
             </table>

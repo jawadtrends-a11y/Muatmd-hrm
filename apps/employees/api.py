@@ -483,7 +483,9 @@ def my_account(request):
         "mobile": person.mobile_e164,
         "preferred_locale": person.preferred_locale,
         "avatar_id": avatar.id if avatar else None,
-        "avatar_url": f"/api/files/{avatar.id}/" if avatar else None,
+        # المسار بلا بادئة /api — الواجهة تضيف API_BASE بنفسها،
+        # وإضافتها هنا تُنتج /api/api/files/3/ فتنكسر الصورة
+        "avatar_url": f"/files/{avatar.id}/" if avatar else None,
     })
 
 
@@ -566,7 +568,7 @@ def my_avatar(request):
 
     return Response({
         "id": obj.id,
-        "url": f"/api/files/{obj.id}/",
+        "url": f"/files/{obj.id}/",
         "size": obj.size_label,
         "was_duplicate": dup,
     }, status=201)
@@ -605,7 +607,7 @@ def upload_attachment(request):
 
     return Response({
         "id": obj.id,
-        "url": f"/api/files/{obj.id}/",
+        "url": f"/files/{obj.id}/",
         "name": obj.original_name,
         "size": obj.size_label,
         "was_duplicate": dup,
@@ -831,7 +833,7 @@ def employee_profile(request, employment_id):
     files = [{
         "id": f.id, "kind": f.kind, "kind_label": f.get_kind_display(),
         "name": f.original_name, "size": f.size_label,
-        "url": f"/api/files/{f.id}/",
+        "url": f"/files/{f.id}/",
         "uploaded_at": f.created_at,
     } for f in StoredFile.objects.filter(person=p, is_deleted=False)]
 
