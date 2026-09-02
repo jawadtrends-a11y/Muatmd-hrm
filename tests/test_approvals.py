@@ -60,35 +60,49 @@ def test_engine_is_ready():
 # ══════════ اختيار السلسلة بالشرط ══════════
 
 @pytest.mark.django_db(transaction=True)
-def test_short_leave_uses_single_step_chain(env):
+def test_leave_chain_is_three_steps(env):
+    """
+    ق-71: سلسلة الإجازات ثلاث درجات — المدير المباشر ثم مدير
+    الإدارة ثم موظف الموارد.
+    """
     with account_scope(env["account_id"]):
         chain = select_chain(company=env["comp"],
                              request_type=RequestType.LEAVE,
                              payload={"days": 3})
-        assert chain.steps.count() == 1
+        assert chain.steps.count() == 3
+        kinds = [st.approver_type
+                 for st in chain.steps.order_by("step_order")]
+        assert kinds == ["direct_manager", "department_head", "role"]
 
 
 @pytest.mark.django_db(transaction=True)
-def test_long_leave_uses_conditional_chain(env):
-    """السلسلة المشروطة تسبق العامة بالأولوية — بلا كود."""
+def test_leave_length_does_not_change_chain(env):
+    """
+    ق-71: الإجازة لا تُقسم قصيرة وطويلة — سلسلة واحدة مهما طالت.
+
+    كانت سلسلة مشروطة بـdays_gt تضيف درجة للطويلة، وأُلغيت:
+    السلسلة تُختار بموقع المُقدِّم لا بمدة إجازته.
+    """
+    with account_scope(env["account_id"]):
+        for days in (1, 5, 6, 30):
+            chain = select_chain(company=env["comp"],
+                                 request_type=RequestType.LEAVE,
+                                 payload={"days": days})
+            assert chain.steps.count() == 3, f"اختلفت عند {days} يومًا"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_chain_follows_requester_role(env):
+    """
+    ق-71: السلسلة تُختار بدور المُقدِّم — فطلب الموظف لا يمر بمن
+    يمر به طلب مدير الإدارة.
+    """
     with account_scope(env["account_id"]):
         chain = select_chain(company=env["comp"],
                              request_type=RequestType.LEAVE,
-                             payload={"days": 10})
-        assert chain.steps.count() == 2
-        assert chain.condition_json == {"days_gt": 5}
-
-
-@pytest.mark.django_db(transaction=True)
-def test_boundary_five_days_uses_general_chain(env):
-    """days_gt: 5 تعني أكثر من 5 — الخمسة نفسها في العامة."""
-    with account_scope(env["account_id"]):
-        assert select_chain(company=env["comp"],
-                            request_type=RequestType.LEAVE,
-                            payload={"days": 5}).steps.count() == 1
-        assert select_chain(company=env["comp"],
-                            request_type=RequestType.LEAVE,
-                            payload={"days": 6}).steps.count() == 2
+                             payload={"days": 3},
+                             requester_employment=env["emp"])
+        assert chain.condition_json == {}
 
 
 # ══════════ دورة الطلب ══════════
@@ -161,13 +175,14 @@ def test_unfilled_step_is_skipped_chain_continues(env):
         chain = select_chain(company=env["comp"],
                              request_type=RequestType.LEAVE,
                              payload={"days": 10})
-        # الدرجة 2 بدور بلا شاغل → تسقط
+        # الدرجة 2 مدير الإدارة، والقسم بلا مدير معيَّن → تسقط
         step2 = chain.steps.get(step_order=2)
-        assert step2.approver_role_code == "hr_manager"
+        assert step2.approver_type == "department_head"
 
         req, approvers = submit_request(_req(env, "R-SKIP", {"days": 10}))
         # الدرجة 1 وحدها حُلّت، والطلب قيد الاعتماد لا معتمد تلقائيًا
-        assert {a.step_order for a in approvers} == {1}
+        assert 2 not in {a.step_order for a in approvers}
+        assert 1 in {a.step_order for a in approvers}
         assert req.status == RequestStatus.PENDING
         assert req.current_step == 1
 
@@ -245,8 +260,8 @@ def test_company_can_add_step(env):
                              request_type=RequestType.LEAVE,
                              payload={"days": 3})
         ApprovalStep.objects.create(
-            chain=chain, step_order=2, approver_type=ApproverType.ROLE,
-            approver_role_code="hr_manager", is_mandatory=True)
+            chain=chain, step_order=4, approver_type=ApproverType.ROLE,
+            approver_role_code="owner", is_mandatory=True)
         req, approvers = submit_request(_req(env, "R-8", {"days": 3}))
         assert 2 in {a.step_order for a in approvers} or len(approvers) >= 1
 
