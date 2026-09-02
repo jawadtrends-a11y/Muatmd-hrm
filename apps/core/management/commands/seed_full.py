@@ -768,7 +768,9 @@ class Command(BaseCommand):
 
     def _seed_leaves(self, account, company, employments):
         """طلبات بكل الحالات — معتمدة ومعلّقة ومرفوضة."""
-        from apps.leaves.models import RequestStatus
+        from apps.leaves.models import (ApprovalDecision, RequestApproval,
+                                        RequestStatus)
+        from apps.leaves.services.approvals import decide
         from apps.leaves.services.balances import LeaveError
         from apps.leaves.services.leave_requests import create_leave_request
 
@@ -795,13 +797,56 @@ class Command(BaseCommand):
                     start_date=date.today() + timedelta(days=offset),
                     requested_days=days,
                     note="طلب تجريبي")
+                # الحالة تُبلغ بالمحرّك لا بالكتابة في القاعدة.
+                #
+                # فكتابة status=REJECTED مباشرة تُنتج طلبًا مرفوضًا
+                # بلا من رفضه ولا متى — حالة مستحيلة في الاستخدام
+                # الحقيقي، تضلّل من يجرّب وتخفي أعطالًا فعلية.
+                # وبيانات التجربة حسابات عادية في النظام، لا بيئة
+                # موازية: تُنشأ بمسارات المستخدم وتُحذف كما يُحذف
+                # حساب أي عميل يغادر.
                 if status != RequestStatus.PENDING:
-                    res.request.status = status
-                    res.request.save()
+                    self._settle_request(
+                        res.request,
+                        approve=(status == RequestStatus.APPROVED))
                 made += 1
             except Exception:
                 continue
         return made
+
+    def _settle_request(self, request_obj, *, approve):
+        """
+        يمرّر الطلب بسلسلته حتى يُغلق — اعتمادًا أو رفضًا.
+
+        الرفض يقع في أول درجة (فهو يقطع السلسلة)، والاعتماد يمضي
+        بكل الدرجات حتى تنتهي. ويُستخدم المحرّك نفسه الذي يستخدمه
+        المعتمِد من الشاشة، فتصير البيانات كما ينتجها الاستخدام:
+        لكل قرار صاحبه ووقته وتعليقه.
+        """
+        from apps.leaves.models import (ApprovalDecision, RequestApproval,
+                                        RequestStatus)
+        from apps.leaves.services.approvals import ApprovalError, decide
+
+        guard = 0
+        while request_obj.status == RequestStatus.PENDING and guard < 10:
+            guard += 1
+            pending = RequestApproval.objects.filter(
+                request=request_obj, step_order=request_obj.current_step,
+                decision="").select_related("approver_employment").first()
+            if pending is None:
+                break
+            try:
+                request_obj = decide(
+                    request_obj=request_obj,
+                    approver_employment=pending.approver_employment,
+                    decision=(ApprovalDecision.APPROVED if approve
+                              else ApprovalDecision.REJECTED),
+                    comment=("" if approve else "لا يتوافق مع خطة العمل"),
+                )
+            except ApprovalError:
+                break
+            if not approve:
+                break      # الرفض يقطع السلسلة
 
     # ══════════ المسيرات ══════════
 

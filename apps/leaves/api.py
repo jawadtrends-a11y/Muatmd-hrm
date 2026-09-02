@@ -138,23 +138,45 @@ def _serialize_request(r, include_chain=False):
         "status_label": r.get_status_display(),
         "current_step": r.current_step,
         "note": r.note,
+        # التاريخ والوقت معًا (ق-71): من يراجع يحتاج معرفة متى
+        # قُدّم الطلب بالضبط ومتى أُغلق، لا اليوم وحده
         "created_at": r.created_at,
+        "submitted_at": r.submitted_at,
+        "closed_at": r.closed_at,
         "payload": r.payload,
     }
     if include_chain:
-        data["approvals"] = [
-            {
+        # ق-71: مقدّم الطلب وكل المعتمِدين يرون المراحل — ما قبلهم
+        # وما بعدهم. فحالة كل درجة تُحسب هنا لا في كل شاشة، ويظهر
+        # معها موقع المعتمِد لا اسمه وحده.
+        rows = []
+        for a in r.approvals.select_related(
+                "approver_employment__person").order_by("step_order"):
+            if a.decision:
+                state = a.decision          # approved · rejected · delegated
+            elif r.status in ("approved", "rejected", "cancelled",
+                              "withdrawn"):
+                # الطلب أُغلق قبل أن يصله — والواجهة لا تعرض ما بعد
+                # الرافض أصلًا (ق-71)
+                state = "closed"
+            elif a.step_order == r.current_step:
+                state = "current"           # بانتظار إجراء
+            elif a.step_order < r.current_step:
+                state = "passed"            # مضت بلا قرار مسجّل
+            else:
+                state = "upcoming"          # لم يصله بعد
+            rows.append({
                 "step": a.step_order,
                 "approver": (a.approver_employment.person.display_name
                              if a.approver_employment else "—"),
                 "decision": a.decision,
                 "decision_label": a.get_decision_display(),
+                "state": state,
                 "comment": a.comment,
                 "decided_at": a.decided_at,
-            }
-            for a in r.approvals.select_related(
-                "approver_employment__person").order_by("step_order")
-        ]
+            })
+        data["approvals"] = rows
+        data["attachment_url"] = r.attachment_url
     return data
 
 
@@ -357,8 +379,10 @@ def my_approvals(request):
         # الدرجة الحالية فقط — لا يُعرض ما لم يصل دوره
         if a.step_order != r.current_step:
             continue
+        # السلسلة مع البطاقة (ق-71): المعتمِد يرى من قرّر قبله ومن
+        # ينتظره بعده قبل أن يقرّر — لا بعد أن يفتح تفصيلًا منفصلًا
         rows.append({
-            **_serialize_request(r),
+            **_serialize_request(r, include_chain=True),
             "my_step": a.step_order,
             "waiting_since": r.created_at,
         })

@@ -13,6 +13,8 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, qs, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcLeave, IcX } from "@/components/Icons";
+import ApprovalChain, { type ChainRow, stamp }
+  from "@/components/ApprovalChain";
 
 const T: Dict = {
   title: { ar: "الإجازات والطلبات", en: "Leaves & Requests" },
@@ -43,6 +45,10 @@ const T: Dict = {
   filterApproved: { ar: "معتمدة", en: "Approved" },
   filterRejected: { ar: "مرفوضة", en: "Rejected" },
   done: { ar: "تم", en: "Done" },
+  submittedAt: { ar: "وقت التقديم", en: "Submitted" },
+  closedAt: { ar: "وقت الإغلاق", en: "Closed" },
+  attachment: { ar: "المرفق", en: "Attachment" },
+  openAttachment: { ar: "فتح المرفق", en: "Open" },
   failed: { ar: "تعذّر تنفيذ القرار", en: "Could not save decision" },
 };
 
@@ -61,6 +67,10 @@ type Req = {
   payload: Record<string, unknown>;
   my_step?: number;
   waiting_since?: string;
+  submitted_at?: string | null;
+  closed_at?: string | null;
+  attachment_url?: string;
+  approvals?: ChainRow[];
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -134,6 +144,40 @@ function ApprovalCard({
         </div>
       )}
 
+      <div className="row" style={{
+        gap: 14, flexWrap: "wrap", marginBottom: 12, fontSize: ".82rem",
+      }}>
+        <div>
+          <div className="muted" style={{ fontSize: ".76rem" }}>
+            {L("submittedAt")}
+          </div>
+          <span className="num">
+            {stamp(req.submitted_at || req.created_at)}
+          </span>
+        </div>
+        {req.attachment_url && (
+          <div>
+            <div className="muted" style={{ fontSize: ".76rem" }}>
+              {L("attachment")}
+            </div>
+            <a href={req.attachment_url} target="_blank" rel="noreferrer"
+              style={{ color: "var(--teal)", fontWeight: 500 }}>
+              {L("openAttachment")}
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* ق-71: المعتمِد يرى المراحل قبل أن يقرّر */}
+      {req.approvals && req.approvals.length > 0 && (
+        <div style={{
+          marginBottom: 12, paddingTop: 10,
+          borderTop: "1px solid var(--line)",
+        }}>
+          <ApprovalChain rows={req.approvals} />
+        </div>
+      )}
+
       {open ? (
         <div className="stack" style={{ gap: 8 }}>
           <input
@@ -184,6 +228,27 @@ function RequestsTable({
   L: (k: string, f?: string) => string;
   showEmployee: boolean;
 }) {
+  /**
+   * ق-71: الصف يتمدّد بالنقر فيُظهر مراحل الاعتماد.
+   *
+   * والتفاصيل تُجلب عند الفتح لا مع القائمة — فجلب سلسلة كل طلب
+   * مقدّمًا يعني عشرات الاستعلامات لجدول قد لا يُفتح منه صف واحد.
+   */
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<Req | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  function toggle(id: number) {
+    if (openId === id) { setOpenId(null); setDetail(null); return; }
+    setOpenId(id);
+    setDetail(null);
+    setLoadingDetail(true);
+    apiGet<Req>(`/leaves/requests/${id}/`)
+      .then((d) => setDetail(d))
+      .catch(() => setDetail(null))
+      .finally(() => setLoadingDetail(false));
+  }
+
   if (rows.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
@@ -215,9 +280,13 @@ function RequestsTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
+            <>
+            <tr key={r.id} onClick={() => toggle(r.id)}
+              style={{ cursor: "pointer" }}>
               <td style={{ textAlign: "end" }}>
-                <span className="num">{r.request_no}</span>
+                <span className="num" style={{ color: "var(--teal)" }}>
+                  {r.request_no}
+                </span>
               </td>
               {showEmployee && <td className="truncate">{r.employee_name}</td>}
               <td>{r.type_label}</td>
@@ -233,6 +302,61 @@ function RequestsTable({
                 </span>
               </td>
             </tr>
+
+            {openId === r.id && (
+              <tr key={`${r.id}-detail`}>
+                <td colSpan={showEmployee ? 6 : 5}
+                  style={{ background: "var(--paper-2)", padding: "14px 18px" }}>
+                  {loadingDetail ? (
+                    <span className="muted">{L("loading")}</span>
+                  ) : detail ? (
+                    <div className="stack" style={{ gap: 12 }}>
+                      <div className="row" style={{
+                        gap: 20, flexWrap: "wrap", fontSize: ".85rem",
+                      }}>
+                        <div>
+                          <div className="muted" style={{ fontSize: ".76rem" }}>
+                            {L("submittedAt")}
+                          </div>
+                          <span className="num">
+                            {stamp(detail.submitted_at || detail.created_at)}
+                          </span>
+                        </div>
+                        {detail.closed_at && (
+                          <div>
+                            <div className="muted" style={{ fontSize: ".76rem" }}>
+                              {L("closedAt")}
+                            </div>
+                            <span className="num">{stamp(detail.closed_at)}</span>
+                          </div>
+                        )}
+                        {detail.attachment_url && (
+                          <div>
+                            <div className="muted" style={{ fontSize: ".76rem" }}>
+                              {L("attachment")}
+                            </div>
+                            <a href={detail.attachment_url} target="_blank"
+                              rel="noreferrer"
+                              style={{ color: "var(--teal)", fontWeight: 500 }}>
+                              {L("openAttachment")}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                      {detail.note && (
+                        <div className="muted" style={{ fontSize: ".85rem" }}>
+                          {detail.note}
+                        </div>
+                      )}
+                      <ApprovalChain rows={detail.approvals ?? []} />
+                    </div>
+                  ) : (
+                    <span className="muted">{L("failed")}</span>
+                  )}
+                </td>
+              </tr>
+            )}
+            </>
           ))}
         </tbody>
       </table>
