@@ -42,6 +42,16 @@ const T: Dict = {
   weekend: { ar: "راحة", en: "Weekend" },
   no_record: { ar: "لا سجل", en: "No record" },
   total: { ar: "الإجمالي", en: "Total" },
+  record: { ar: "سجل الحضور", en: "Attendance record" },
+  joined: { ar: "تاريخ الالتحاق", en: "Joined" },
+  from: { ar: "من", en: "From" },
+  to: { ar: "إلى", en: "To" },
+  thisMonth: { ar: "هذا الشهر", en: "This month" },
+  lastMonth: { ar: "الشهر السابق", en: "Last month" },
+  last3: { ar: "آخر 3 أشهر", en: "Last 3 months" },
+  thisYear: { ar: "هذه السنة", en: "This year" },
+  allTime: { ar: "منذ الالتحاق", en: "Since joining" },
+  close: { ar: "إغلاق", en: "Close" },
   hint: {
     ar: "الإضافي لا يدخل المسير إلا بعد اعتماد صريح",
     en: "Overtime enters payroll only after explicit approval",
@@ -102,6 +112,7 @@ export default function AttendancePage() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [picked, setPicked] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
@@ -239,7 +250,8 @@ export default function AttendancePage() {
           </div>
         ) : mode === "daily" ? (
           <>
-            <DailyTable rows={daily?.rows ?? []} L={L} lang={lang} />
+            <DailyTable rows={daily?.rows ?? []} L={L} lang={lang}
+              onPick={setPicked} />
             <div style={{ borderTop: "1px solid var(--line)" }}>
               <Pager page={page} pages={pages} total={total}
                 onGo={setPage} L={L} />
@@ -247,7 +259,7 @@ export default function AttendancePage() {
           </>
         ) : (
           <>
-            <MonthlyTable rows={monthly} L={L} />
+            <MonthlyTable rows={monthly} L={L} onPick={setPicked} />
             <div style={{ borderTop: "1px solid var(--line)" }}>
               <Pager page={page} pages={pages} total={total}
                 onGo={setPage} L={L} />
@@ -255,6 +267,19 @@ export default function AttendancePage() {
           </>
         )}
       </div>
+
+      {/* سجل الموظف — يفتح بالنقر على اسمه في أي من الجدولين */}
+      {picked !== null && (
+        <EmployeeRecord
+          employmentId={picked}
+          initialFrom={mode === "daily"
+            ? day.slice(0, 8) + "01"
+            : `${year}-${String(month).padStart(2, "0")}-01`}
+          initialTo={mode === "daily" ? day : ""}
+          onClose={() => setPicked(null)}
+          L={L}
+        />
+      )}
     </div>
   );
 }
@@ -266,7 +291,237 @@ type TableProps<R> = {
   rows: R[];
   L: (key: string, fallback?: string) => string;
   lang?: string;
+  /** فتح سجل الموظف الكامل — الاسم قابل للنقر */
+  onPick?: (employmentId: number) => void;
 };
+
+/* ══ سجل حضور موظف واحد (لوحة جانبية) ══ */
+
+type DayRow = {
+  id: number;
+  work_date: string;
+  status: string;
+  status_label: string;
+  first_in: string | null;
+  last_out: string | null;
+  late_minutes: number;
+  overtime_minutes: number;
+  approved_overtime_minutes: number;
+};
+
+function hhmm(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function iso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function EmployeeRecord({
+  employmentId, initialFrom, initialTo, onClose, L,
+}: {
+  employmentId: number;
+  initialFrom: string;
+  initialTo: string;
+  onClose: () => void;
+  L: (k: string, f?: string) => string;
+}) {
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<{
+    name_ar: string; employee_no: string; join_date: string;
+    rows: DayRow[]; total: number; pages: number;
+  } | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setBusy(true);
+    setError("");
+    apiGet<{
+      name_ar: string; employee_no: string; join_date: string;
+      rows: DayRow[]; total: number; pages: number; page: number;
+    }>(`/attendance/${employmentId}/days/${qs({ from, to, page })}`)
+      .then((res) => {
+        if (!alive) return;
+        setData(res);
+        if (res.page && res.page !== page) setPage(res.page);
+        setBusy(false);
+      })
+      .catch((e: ApiError) => {
+        if (!alive) return;
+        setError(e.message || L("error"));
+        setBusy(false);
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employmentId, from, to, page]);
+
+  // تغيير الفترة يعيدنا للصفحة الأولى
+  useEffect(() => { setPage(1); }, [from, to]);
+
+  /** الأزرار السريعة تملأ الحقلين — ويبقيان قابلين للتعديل يدويًا */
+  function quick(kind: string) {
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = n.getMonth();
+    if (kind === "thisMonth") {
+      setFrom(iso(new Date(y, m, 1)));
+      setTo(iso(new Date(y, m + 1, 0)));
+    } else if (kind === "lastMonth") {
+      setFrom(iso(new Date(y, m - 1, 1)));
+      setTo(iso(new Date(y, m, 0)));
+    } else if (kind === "last3") {
+      setFrom(iso(new Date(y, m - 2, 1)));
+      setTo(iso(new Date(y, m + 1, 0)));
+    } else if (kind === "thisYear") {
+      setFrom(iso(new Date(y, 0, 1)));
+      setTo(iso(new Date(y, 11, 31)));
+    } else {
+      setFrom(data?.join_date ?? "");
+      setTo(iso(n));
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+        zIndex: 60, display: "flex", justifyContent: "flex-start",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{
+          width: "100%", maxWidth: 760, height: "100%", borderRadius: 0,
+          overflowY: "auto", padding: 0,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* الرأس */}
+        <div className="spread" style={{
+          padding: "16px 20px", borderBottom: "1px solid var(--line)",
+          position: "sticky", top: 0, background: "var(--paper)", zIndex: 1,
+        }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>
+              {data?.name_ar ?? "…"}
+            </div>
+            <div className="muted" style={{ fontSize: ".85rem", marginTop: 2 }}>
+              <span className="num">{data?.employee_no}</span>
+              {data?.join_date && (
+                <> · {L("joined")}: <span className="num">{data.join_date}</span></>
+              )}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>
+            {L("close")}
+          </button>
+        </div>
+
+        {/* الفلتر */}
+        <div className="stack" style={{
+          padding: "14px 20px", gap: 10,
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {["thisMonth", "lastMonth", "last3", "thisYear", "allTime"].map((k) => (
+              <button key={k} className="btn btn-sm" onClick={() => quick(k)}>
+                {L(k)}
+              </button>
+            ))}
+          </div>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <div className="field" style={{ minWidth: 150 }}>
+              <label className="label">{L("from")}</label>
+              <input type="date" className="input" value={from}
+                onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div className="field" style={{ minWidth: 150 }}>
+              <label className="label">{L("to")}</label>
+              <input type="date" className="input" value={to}
+                onChange={(e) => setTo(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        {/* الجدول */}
+        {busy ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
+            {L("loading")}
+          </div>
+        ) : error ? (
+          <div style={{ padding: 32, textAlign: "center", color: "var(--danger)" }}>
+            {error}
+          </div>
+        ) : (data?.rows.length ?? 0) === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
+            {L("empty")}
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "end" }}>{L("date")}</th>
+                    <th>{L("status")}</th>
+                    <th style={{ textAlign: "end" }}>{L("checkIn")}</th>
+                    <th style={{ textAlign: "end" }}>{L("checkOut")}</th>
+                    <th style={{ textAlign: "end" }}>{L("late")}</th>
+                    <th style={{ textAlign: "end" }}>{L("approvedOt")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data!.rows.map((d) => (
+                    <tr key={d.id}>
+                      <td style={{ textAlign: "end" }}>
+                        <span className="num">{d.work_date}</span>
+                      </td>
+                      <td>
+                        <span className={`badge ${TONE[d.status] || "badge"}`}>
+                          {d.status_label}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "end" }}>
+                        <span className="num">{hhmm(d.first_in)}</span>
+                      </td>
+                      <td style={{ textAlign: "end" }}>
+                        <span className="num">{hhmm(d.last_out)}</span>
+                      </td>
+                      <td style={{ textAlign: "end" }}>
+                        <span className="num" style={
+                          d.late_minutes > 0 ? { color: "var(--copper)" } : undefined
+                        }>
+                          {d.late_minutes || "—"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "end" }}>
+                        <span className="num">
+                          {d.approved_overtime_minutes || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ borderTop: "1px solid var(--line)" }}>
+              <Pager page={page} pages={data!.pages} total={data!.total}
+                onGo={setPage} L={L} />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 /* ══ مرقّم الصفحات ══ */
 
@@ -316,7 +571,7 @@ function Pager({
 }
 
 
-function DailyTable({ rows, L }: TableProps<DailyRow>) {
+function DailyTable({ rows, L, onPick }: TableProps<DailyRow>) {
   if (rows.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
@@ -358,7 +613,20 @@ function DailyTable({ rows, L }: TableProps<DailyRow>) {
               <td style={{ textAlign: "end" }}>
                 <span className="num">{r.employee_no}</span>
               </td>
-              <td className="truncate">{r.name_ar}</td>
+              <td className="truncate">
+                {onPick ? (
+                  <button
+                    onClick={() => onPick(r.employment_id)}
+                    style={{
+                      background: "none", border: "none", padding: 0,
+                      color: "var(--teal)", fontWeight: 500,
+                      cursor: "pointer", font: "inherit",
+                    }}
+                  >
+                    {r.name_ar}
+                  </button>
+                ) : r.name_ar}
+              </td>
               <td className="truncate muted">{r.department || "—"}</td>
               <td>
                 <span className={`badge ${TONE[r.status] || "badge"}`}>
@@ -397,7 +665,7 @@ function DailyTable({ rows, L }: TableProps<DailyRow>) {
   );
 }
 
-function MonthlyTable({ rows, L }: TableProps<MonthlyRow>) {
+function MonthlyTable({ rows, L, onPick }: TableProps<MonthlyRow>) {
   if (rows.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
@@ -437,7 +705,20 @@ function MonthlyTable({ rows, L }: TableProps<MonthlyRow>) {
               <td style={{ textAlign: "end" }}>
                 <span className="num">{r.employee_no}</span>
               </td>
-              <td className="truncate">{r.name_ar}</td>
+              <td className="truncate">
+                {onPick ? (
+                  <button
+                    onClick={() => onPick(r.employment_id)}
+                    style={{
+                      background: "none", border: "none", padding: 0,
+                      color: "var(--teal)", fontWeight: 500,
+                      cursor: "pointer", font: "inherit",
+                    }}
+                  >
+                    {r.name_ar}
+                  </button>
+                ) : r.name_ar}
+              </td>
               <td className="truncate muted">{r.department || "—"}</td>
               <td style={{ textAlign: "end" }}>
                 <span className="num">{r.worked_days}</span>
