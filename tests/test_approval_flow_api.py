@@ -168,3 +168,51 @@ def test_rejection_closes_request(env):
         req.refresh_from_db()
         assert req.status == RequestStatus.REJECTED
         assert req.closed_at is not None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_assigns_request_to_subordinate(env):
+    """
+    ق-68: المشرف يقدّم طلبًا نيابةً عن مرؤوسه — الموظف ينسى فيسنده
+    مشرفه، وهو أحد بنود شاشة المرؤوسين الأربعة.
+    """
+    r = _client(env).post("/api/requests/", data=json.dumps({
+        "employment_id": env["emp"].id,
+        "request_type": "permission",
+        "payload": {"work_date": "2026-09-10", "from_time": "10:00",
+                    "to_time": "12:00", "reason": "إسناد"},
+    }), content_type="application/json")
+
+    assert r.status_code == 201, (
+        f"المشرف لا يستطيع الإسناد ({r.status_code}): "
+        f"{r.content.decode()[:200]}")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_cannot_assign_outside_team(env):
+    """
+    ⚠️ الحارس المقابل: الإسناد محصور في الفريق.
+
+    النطاق team هو ما يحمي — لا اسم الدور. فمن ليس مرؤوسًا للمشرف
+    لا يستطيع الإسناد له ولو ملك requests.manage.
+    """
+    with account_scope(env["account_id"]):
+        po, _ = create_person(
+            account=env["acc"], first_name_ar="نايف",
+            family_name_ar="الشمري", gender="male", nationality_code="SA",
+            id_type="national_id", id_number="1088899900",
+            mobile="0508889990")
+        outsider, _, _ = create_employment(
+            person=po, company=env["comp"], employee_no="E-9",
+            join_date=date(2022, 1, 1))
+
+    r = _client(env).post("/api/requests/", data=json.dumps({
+        "employment_id": outsider.id,
+        "request_type": "permission",
+        "payload": {"work_date": "2026-09-10", "from_time": "10:00",
+                    "to_time": "12:00", "reason": "إسناد"},
+    }), content_type="application/json")
+
+    assert r.status_code == 404, (
+        f"المشرف أسند طلبًا لمن ليس مرؤوسه ({r.status_code}) — "
+        f"النطاق team مخترق")

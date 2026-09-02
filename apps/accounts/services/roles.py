@@ -71,6 +71,7 @@ DEFAULT_ROLES = {
             "attendance.view", "attendance.approve",
             "leaves.view", "leaves.create", "leaves.approve",
             "requests.view", "requests.create", "requests.approve",
+            "requests.manage",
             "payslips.view_own", "payslips.view_team",
         ],
     },
@@ -78,10 +79,13 @@ DEFAULT_ROLES = {
         "name_ar": "مشرف",
         "scope": Scope.TEAM,
         # يرى قسائم مرؤوسيه بعد صدور المسير واعتماده فقط.
+        # وrequests.manage (ق-68): يقدّم طلبًا نيابةً عن مرؤوسه —
+        # الموظف ينسى فيسنده مشرفه. والنطاق team يحصره في فريقه.
         "permissions": [
             "employees.view", "attendance.view",
             "leaves.view", "leaves.create", "leaves.approve",
             "requests.view", "requests.create", "requests.approve",
+            "requests.manage",
             "payslips.view_own", "payslips.view_team",
         ],
     },

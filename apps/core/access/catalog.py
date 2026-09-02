@@ -77,7 +77,7 @@ PERMISSIONS = [
     _p("requests.view",       "requests", "عرض الطلبات"),
     _p("requests.create",     "requests", "تقديم طلب"),
     _p("requests.approve",    "requests", "اعتماد الطلبات"),
-    _p("requests.manage",     "requests", "إدارة أنواع الطلبات"),
+    _p("requests.manage",     "requests", "تقديم طلب نيابةً عن موظف"),
 
     # الرواتب
     _p("payroll.view",        "payroll", "عرض المسيرات"),
