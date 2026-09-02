@@ -158,11 +158,16 @@ def _resolve_step(step, requester_employment):
             status=EmploymentStatus.ACTIVE))
 
     if step.approver_type == ApproverType.ROLE:
-        return list(Employment.objects.filter(
+        qs = Employment.objects.filter(
             company=company, status=EmploymentStatus.ACTIVE,
             person__user__account_membership__role_assignments__role__code
             =step.approver_role_code,
-        ).distinct())
+        )
+        # مربع «ضمن نفس الإدارة»: مشرفو إدارة أخرى لا شأن لهم
+        # بغياب مدير هذه الإدارة
+        if step.same_department:
+            qs = qs.filter(department_id=requester_employment.department_id)
+        return list(qs.distinct())
 
     return []
 
@@ -309,12 +314,24 @@ def decide(*, request_obj, approver_employment, decision, comment="",
              company_id=request_obj.company_id, context=ctx, recipients=[])
         return request_obj
 
-    # هل بقي معتمِد إلزامي في هذه الدرجة؟
-    pending_same_step = RequestApproval.objects.filter(
-        request=request_obj, step_order=request_obj.current_step,
-        decision="").exists()
-    if pending_same_step:
-        return request_obj      # ننتظر بقية معتمِدي الدرجة
+    # ق-74: درجة الاعتماد يكفيها أول قرار — فالدرجة موقع لا أشخاص،
+    # وشركة فيها خمسة موظفي موارد لا تنتظر خمس موافقات على إجازة.
+    # ودرجة العلم وحدها تنتظر الجميع، فمقصدها أن يعلم كل واحد
+    # منهم — وتأكيد واحد لا يحقّق علم البقية.
+    if _step_is_acknowledgement(request_obj, request_obj.current_step):
+        pending_same_step = RequestApproval.objects.filter(
+            request=request_obj, step_order=request_obj.current_step,
+            decision="").exists()
+        if pending_same_step:
+            return request_obj      # ننتظر بقية من يجب أن يعلموا
+
+    # وفي درجة الاعتماد: من لم يقرّر تُغلق درجته بأثر أول قرار،
+    # فلا تبقى معلّقة في صندوقه بعد أن مضى الطلب
+    else:
+        RequestApproval.objects.filter(
+            request=request_obj, step_order=request_obj.current_step,
+            decision="").update(decision=ApprovalDecision.DELEGATED,
+                                decided_at=timezone.now())
 
     next_step = (RequestApproval.objects
                  .filter(request=request_obj,
@@ -343,6 +360,23 @@ def decide(*, request_obj, approver_employment, decision, comment="",
              company_id=request_obj.company_id, context=ctx, recipients=[])
 
     return request_obj
+
+
+def _step_is_acknowledgement(request_obj, step_order):
+    """
+    هل هذه الدرجة درجة علم؟ (ق-74)
+
+    تُقرأ من السلسلة لا من سجل الاعتماد — فالسجل لا يحمل الوصف،
+    والسلسلة هي مصدر التعريف.
+    """
+    chain = select_chain(
+        company=request_obj.company, request_type=request_obj.request_type,
+        payload=request_obj.payload or {},
+        requester_employment=request_obj.employment)
+    if chain is None:
+        return False
+    step = chain.steps.filter(step_order=step_order).first()
+    return bool(step and step.is_acknowledgement)
 
 
 def pending_for(employment):

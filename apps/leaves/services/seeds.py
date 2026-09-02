@@ -152,9 +152,11 @@ DEFAULT_CHAINS = [
      [(1, ApproverType.ROLE, "hr_manager", True, 72)]),
 
     # مدير الإدارة: المشرف ثم موظف الموارد ثم مدير الموارد
+    # مشرفو إدارته يُعلَمون بغيابه — علم لا موافقة (ق-74)، ومحصور
+    # في إدارته فمشرفو إدارة أخرى لا شأن لهم (ق-71)
     (RequestType.LEAVE, "إجازة مدير الإدارة",
      {"requester_role": "dept_manager"}, 30,
-     [(1, ApproverType.ROLE, "supervisor", True, 48),
+     [(1, ApproverType.ROLE, "supervisor", True, 48, True, True),
       (2, ApproverType.ROLE, "hr_staff", True, 72),
       (3, ApproverType.ROLE, "hr_manager", True, 72)]),
 
@@ -234,9 +236,15 @@ def provision_approval_chains(company):
                       "condition_json": cond, "priority": prio})
         if is_new:
             created.append(name)
-            for order, atype, role, mandatory, sla in steps:
+            for step in steps:
+                # الدرجة خمسة عناصر، وقد تحمل علمين إضافيين:
+                # same_department (ق-71) وis_acknowledgement (ق-74)
+                order, atype, role, mandatory, sla = step[:5]
+                same_dept = step[5] if len(step) > 5 else False
+                is_ack = step[6] if len(step) > 6 else False
                 ApprovalStep.objects.create(
                     chain=chain, step_order=order, approver_type=atype,
                     approver_role_code=role, is_mandatory=mandatory,
-                    sla_hours=sla)
+                    sla_hours=sla, same_department=same_dept,
+                    is_acknowledgement=is_ack)
     return created

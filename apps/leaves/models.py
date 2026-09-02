@@ -386,6 +386,14 @@ class ApprovalStep(models.Model):
         "employees.Person", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="+", help_text=_("عند approver_type=specific_person"))
     is_mandatory = models.BooleanField(_("إلزامية"), default=True)
+    same_department = models.BooleanField(
+        _("ضمن نفس الإدارة"), default=False,
+        help_text=_("يحصر المعتمِدين في إدارة مقدّم الطلب — فمشرفو "
+                    "إدارة أخرى لا شأن لهم بغيابه"))
+    is_acknowledgement = models.BooleanField(
+        _("درجة علم"), default=False,
+        help_text=_("علم لا موافقة: زر «اطّلعت» وحده، والجميع يؤكّد "
+                    "قبل أن تمضي السلسلة (ق-74)"))
     sla_hours = models.PositiveSmallIntegerField(
         _("مهلة الاعتماد (ساعات)"), null=True, blank=True,
         help_text=_("التجاوز يُطلق حدث تصعيد"))
