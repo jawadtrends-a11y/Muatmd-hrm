@@ -32,6 +32,17 @@ class Decision:
         return self.allowed
 
 
+# الصلاحية ونظيرتها الشاملة — من ملك الثانية تجاوز نطاق دوره
+_WIDE_TWIN = {
+    "employees.view": "employees.view_all",
+    "attendance.view": "attendance.view_all",
+    "leaves.view": "leaves.view_all",
+    "leaves.approve": "leaves.approve_all",
+    "requests.view": "requests.view_all",
+    "requests.approve": "requests.approve_all",
+}
+
+
 def _delegated_manager_ids(employment):
     """
     من ينوب عنهم هذا الموظف اليوم (ق-75).
@@ -153,6 +164,14 @@ class Gate:
         employment_field: مسار حقل الارتباط الوظيفي للتضييق حسب النطاق.
         """
         d = cls.check(user, permission_key)
+
+        # المدى في اسم الصلاحية لا في نطاق خفيّ (ق-78):
+        # من يملك «عرض كل موظفي المنشأة» يراهم كلهم مهما كان دوره،
+        # فالمدير يقرأ الجملة ويعرف ما يمنحه بلا خطوة ثانية.
+        wide = _WIDE_TWIN.get(permission_key)
+        if wide and cls.check(user, wide).allowed:
+            return qs
+
         if not d.allowed:
             return qs.none()
 

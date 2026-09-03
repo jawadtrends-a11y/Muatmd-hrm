@@ -52,7 +52,8 @@ PERMISSIONS = [
     _p("org.manage",          "org", "إدارة الفروع والأقسام والمسميات"),
 
     # الموظفون
-    _p("employees.view",      "employees", "عرض الموظفين"),
+    _p("employees.view",      "employees", "عرض موظفيه"),
+    _p("employees.view_all",  "employees", "عرض كل موظفي المنشأة"),
     _p("employees.create",    "employees", "إضافة موظف"),
     _p("employees.edit",      "employees", "تعديل بيانات موظف"),
     _p("employees.terminate", "employees", "إنهاء خدمة موظف"),
@@ -62,21 +63,26 @@ PERMISSIONS = [
        "رؤية ارتباطات الشخص في شركات أخرى (بلا بيانات مالية)"),
 
     # الحضور
-    _p("attendance.view",     "attendance", "عرض الحضور"),
+    _p("attendance.view",     "attendance", "عرض حضور موظفيه"),
+    _p("attendance.view_all", "attendance", "عرض حضور كل المنشأة"),
     _p("attendance.edit",     "attendance", "تعديل سجلات الحضور"),
     _p("attendance.approve",  "attendance", "اعتماد تعديلات الحضور"),
     _p("attendance.shifts",   "attendance", "إدارة الورديات"),
 
     # الإجازات
-    _p("leaves.view",         "leaves", "عرض الإجازات"),
+    _p("leaves.view",         "leaves", "عرض إجازات موظفيه"),
+    _p("leaves.view_all",     "leaves", "عرض إجازات كل المنشأة"),
     _p("leaves.create",       "leaves", "تقديم طلب إجازة"),
-    _p("leaves.approve",      "leaves", "اعتماد الإجازات"),
+    _p("leaves.approve",      "leaves", "اعتماد إجازات موظفيه"),
+    _p("leaves.approve_all",  "leaves", "اعتماد إجازات كل المنشأة"),
     _p("leaves.manage",       "leaves", "إدارة أنواع الإجازات والأرصدة"),
 
     # الطلبات
-    _p("requests.view",       "requests", "عرض الطلبات"),
+    _p("requests.view",       "requests", "عرض طلبات موظفيه"),
+    _p("requests.view_all",   "requests", "عرض طلبات كل المنشأة"),
     _p("requests.create",     "requests", "تقديم طلب"),
-    _p("requests.approve",    "requests", "اعتماد الطلبات"),
+    _p("requests.approve",    "requests", "اعتماد طلبات موظفيه"),
+    _p("requests.approve_all", "requests", "اعتماد طلبات كل المنشأة"),
     _p("requests.manage",     "requests", "تقديم طلب نيابةً عن موظف"),
 
     # الرواتب
