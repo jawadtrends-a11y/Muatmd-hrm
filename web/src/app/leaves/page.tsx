@@ -50,6 +50,13 @@ const T: Dict = {
   attachment: { ar: "المرفق", en: "Attachment" },
   openAttachment: { ar: "فتح المرفق", en: "Open" },
   acknowledge: { ar: "اطّلعت", en: "Acknowledge" },
+  delegations: { ar: "إنابات تنتظر قرارك", en: "Delegation requests" },
+  delegHint: {
+    ar: "طلب منك أن تنوب عنه أثناء غيابه",
+    en: "Asked you to cover for them while away",
+  },
+  acceptDeleg: { ar: "أقبل الإنابة", en: "Accept" },
+  declineDeleg: { ar: "أعتذر", en: "Decline" },
   ackHint: {
     ar: "إحاطة بغياب مديرك — لا موافقة",
     en: "Notice of your manager's absence — not an approval",
@@ -397,6 +404,18 @@ function RequestsTable({
 }
 
 
+type Deleg = {
+  id: number;
+  request_no: string;
+  absentee: string;
+  deputy: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+  status_label: string;
+};
+
+
 /* ══ الشاشة ══ */
 
 export default function LeavesPage() {
@@ -405,6 +424,8 @@ export default function LeavesPage() {
   const [approvals, setApprovals] = useState<Req[]>([]);
   const [all, setAll] = useState<Req[]>([]);
   const [mine, setMine] = useState<Req[]>([]);
+  /** ق-75: إنابات تنتظر قراري — أقبل أو أعتذر */
+  const [delegations, setDelegations] = useState<Deleg[]>([]);
   const [canApprove, setCanApprove] = useState(false);
   const [canViewAll, setCanViewAll] = useState(false);
   const [status, setStatus] = useState("");
@@ -433,12 +454,33 @@ export default function LeavesPage() {
         .then(setMine)
         .catch(() => setMine([])),
     );
+    // ق-75: إنابات تنتظر قراري
+    jobs.push(
+      apiGet<{ incoming: Deleg[] }>("/me/delegations/")
+        .then((d) => setDelegations(
+          (d.incoming || []).filter((x) => x.status === "pending")))
+        .catch(() => setDelegations([])),
+    );
 
     await Promise.all(jobs);
     setBusy(false);
   }, [status]);
 
   useEffect(() => { load(); }, [load]);
+
+  /** ق-75: النائب يقبل الإنابة أو يعتذر — وبالاعتذار تمضي الإجازة */
+  async function decideDelegation(id: number, accept: boolean) {
+    setActing(true);
+    try {
+      await apiPost(`/delegations/${id}/decide/`, { accept });
+      await load();
+    } catch (e) {
+      setToast((e as ApiError).message);
+      setTimeout(() => setToast(""), 4000);
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function decide(
     id: number,
@@ -475,6 +517,58 @@ export default function LeavesPage() {
         </div>
       ) : (
         <>
+          {/* ══ إنابات تنتظر قراري (ق-75) ══ */}
+          {delegations.length > 0 && (
+            <section className="stack" style={{ gap: 10 }}>
+              <div className="row">
+                <IcAlert size={18} className="" />
+                <h2 style={{ fontSize: "1.05rem" }}>
+                  {L("delegations")}
+                  <span className="badge badge-warn"
+                    style={{ marginInlineStart: 8 }}>
+                    <span className="num">{delegations.length}</span>
+                  </span>
+                </h2>
+              </div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))",
+                gap: 12,
+              }}>
+                {delegations.map((d) => (
+                  <div key={d.id} className="card" style={{ padding: 18 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                      {d.absentee}
+                    </div>
+                    <div className="muted" style={{
+                      fontSize: ".86rem", marginBottom: 12,
+                    }}>
+                      {L("delegHint")}
+                      <div style={{ marginTop: 4 }}>
+                        <span className="num">{d.starts_on}</span>
+                        {" — "}
+                        <span className="num">{d.ends_on}</span>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <button className="btn btn-sm btn-primary"
+                        disabled={acting}
+                        onClick={() => decideDelegation(d.id, true)}>
+                        <IcCheck size={16} />
+                        {L("acceptDeleg")}
+                      </button>
+                      <button className="btn btn-sm btn-ghost"
+                        disabled={acting}
+                        onClick={() => decideDelegation(d.id, false)}>
+                        {L("declineDeleg")}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ══ بانتظار اعتمادي ══ */}
           {canApprove && (
             <section className="stack" style={{ gap: 10 }}>

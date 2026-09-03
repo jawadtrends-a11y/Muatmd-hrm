@@ -103,6 +103,37 @@ TEMPLATES = {
         "درخواست آپ کی منظوری کی منتظر",
         "{{employee_name}} کی {{request_type}} درخواست آپ کی منظوری کی منتظر ہے۔",
     ),
+    # الإنابة أثناء الغياب (ق-75)
+    "delegation.requested": (
+        "طلب إنابة",
+        "طلب منك {{absentee}} أن تنوب عنه من {{starts_on}} إلى "
+        "{{ends_on}} — بانتظار قبولك.",
+        "Delegation request",
+        "{{absentee}} asked you to cover from {{starts_on}} to "
+        "{{ends_on}} — awaiting your acceptance.",
+        "نیابت کی درخواست",
+        "{{absentee}} نے آپ سے {{starts_on}} سے {{ends_on}} تک نیابت "
+        "کی درخواست کی ہے۔",
+    ),
+    "delegation.accepted": (
+        "قُبلت الإنابة",
+        "قبِل {{deputy}} أن ينوب عنك من {{starts_on}} إلى {{ends_on}}.",
+        "Delegation accepted",
+        "{{deputy}} accepted to cover for you from {{starts_on}} to "
+        "{{ends_on}}.",
+        "نیابت قبول کر لی گئی",
+        "{{deputy}} نے {{starts_on}} سے {{ends_on}} تک نیابت قبول کر لی۔",
+    ),
+    "delegation.declined": (
+        "اعتذر النائب",
+        "اعتذر {{deputy}} عن الإنابة — وإجازتك ماضية، وتصعد مهامك "
+        "لمدير إدارتك.",
+        "Delegation declined",
+        "{{deputy}} declined the delegation — your leave stands, and "
+        "your tasks go to your department manager.",
+        "نیابت سے معذرت",
+        "{{deputy}} نے نیابت سے معذرت کی — آپ کی چھٹی برقرار ہے۔",
+    ),
     "request.approved": (
         "اعتُمد طلبك",
         "اعتُمد طلب {{request_type}} رقم {{request_no}}.",

@@ -58,10 +58,21 @@ def create_delegation(*, request_obj, deputy_employment,
     if existing is not None:
         raise DelegationError("لهذا الطلب نائب مسجَّل — احذفه أولًا")
 
-    return Delegation.objects.create(
+    d = Delegation.objects.create(
         account_id=absentee.account_id, company_id=absentee.company_id,
         request=request_obj, absentee=absentee, deputy=deputy_employment,
         starts_on=starts_on, ends_on=ends_on, note=note)
+
+    # النائب يُعلَم فورًا — وإلا لم يعرف أن إنابة تنتظره
+    from apps.notifications.bus import emit
+    emit("delegation.requested", account_id=absentee.account_id,
+         company_id=absentee.company_id,
+         context={"absentee": absentee.person.display_name,
+                  "starts_on": str(starts_on), "ends_on": str(ends_on),
+                  "request_no": request_obj.request_no},
+         actor_person_id=absentee.person_id,
+         recipients=[deputy_employment.person_id])
+    return d
 
 
 @transaction.atomic
@@ -93,6 +104,18 @@ def decide_delegation(*, delegation, deputy_employment, accept):
         summary=("قبل الإنابة" if accept else "رفض الإنابة")
                 + f" من {delegation.starts_on} إلى {delegation.ends_on}",
         channel="web")
+
+    # الغائب يُعلَم بقرار نائبه — وإلا بقي لا يدري من يغطّيه
+    from apps.notifications.bus import emit
+    emit("delegation.accepted" if accept else "delegation.declined",
+         account_id=delegation.account_id,
+         company_id=delegation.company_id,
+         context={"deputy": delegation.deputy.person.display_name,
+                  "starts_on": str(delegation.starts_on),
+                  "ends_on": str(delegation.ends_on),
+                  "request_no": delegation.request.request_no},
+         actor_person_id=delegation.deputy.person_id,
+         recipients=[delegation.absentee.person_id])
 
     return delegation
 

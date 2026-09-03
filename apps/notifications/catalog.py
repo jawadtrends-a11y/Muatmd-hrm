@@ -48,6 +48,13 @@ EVENTS = [
     _e("request.sla_breached", "requests", "تأخر اعتماد عن المدة المحددة",
        ("in_app", "email")),
 
+    # الإنابة أثناء الغياب (ق-75)
+    _e("delegation.requested", "requests", "طلب إنابة عنك أثناء غيابه",
+       ("in_app", "email")),
+    _e("delegation.accepted", "requests", "قبول الإنابة", ("in_app",)),
+    _e("delegation.declined", "requests", "الاعتذار عن الإنابة",
+       ("in_app",)),
+
     # ══ الرواتب ══
     _e("payroll.calculation_started", "payroll", "بدء احتساب المسير", ("in_app",)),
     _e("payroll.calculation_completed", "payroll", "اكتمال احتساب المسير",

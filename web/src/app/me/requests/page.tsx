@@ -70,6 +70,9 @@ const T: Dict = {
   fixBoth: { ar: "كلاهما", en: "Both" },
   termination_reason: { ar: "سبب الإنهاء", en: "Termination reason" },
   request_date: { ar: "تاريخ الطلب", en: "Request date" },
+  deputy: { ar: "النائب أثناء غيابك", en: "Deputy while away" },
+  noDeputy: { ar: "بلا نائب", en: "No deputy" },
+  optional: { ar: "اختياري", en: "optional" },
   // المعاينة
   preview: { ar: "المعاينة", en: "Preview" },
   chargedDays: { ar: "الأيام المخصومة", en: "Days charged" },
@@ -128,6 +131,10 @@ export default function MyRequestsPage() {
   const { L } = useT(T);
 
   const [types, setTypes] = useState<ReqType[]>([]);
+  /** ق-75: زملاء الإدارة — يختار الموظف منهم نائبه أثناء غيابه */
+  const [deputies, setDeputies] = useState<
+    { employment_id: number; employee_no: string; name_ar: string }[]>([]);
+  const [deputyId, setDeputyId] = useState("");
   const [leaveTypes, setLeaveTypes] = useState<
     { code: string; name_ar: string; requires_attachment?: boolean }[]
   >([]);
@@ -147,17 +154,23 @@ export default function MyRequestsPage() {
     Promise.all([
       apiGet<{ types: ReqType[] }>("/me/request-types/")
         .catch(() => { setDenied(true); return { types: [] }; }),
-      apiGet<{ code: string; name_ar: string }[]>("/leaves/types/")
+      apiGet<{ code: string; name_ar: string;
+               requires_attachment?: boolean }[]>("/leaves/types/")
         .catch(() => []),
       // ق-60: الموظف يرى ما يبادر به هو فقط
       apiGet<{ reasons: { code: string; name_ar: string }[] }>(
         "/payroll/termination-reasons/?initiator=employee")
         .then((d) => d.reasons || [])
         .catch(() => []),
-    ]).then(([t, lt, rs]) => {
+      // ق-75: زملاء الإدارة — يختار منهم نائبه أثناء غيابه
+      apiGet<{ employment_id: number; employee_no: string;
+               name_ar: string }[]>("/me/deputies/")
+        .catch(() => []),
+    ]).then(([t, lt, rs, dp]) => {
       setTypes(t.types || []);
       setLeaveTypes(lt);
       setReasons(rs);
+      setDeputies(dp);
       setBusy(false);
 
       // فتح نوع محدد من الرابط (?type=leave)
@@ -261,6 +274,7 @@ export default function MyRequestsPage() {
           payload,
           note: note.trim(),
           attachment_url: attachment,
+          deputy_employment_id: deputyId || null,
         });
 
       setDone({ no: res.request_no, warnings: res.warnings || [] });
@@ -373,6 +387,28 @@ export default function MyRequestsPage() {
             {/* ق-70: المرفق في الإجازات — إلزامي حين يطلبه نوعها
                 (المرضية والوضع والخاصة)، اختياري في غيرها.
                 والعلم من الخادم لا شرط مكتوب هنا. */}
+            {/* ق-75: النائب أثناء الغياب — اختياري.
+                الموظف أعرف بمن يقوم بعمله، والنائب يقبل أو يرفض. */}
+            {selected.code === "leave" && deputies.length > 0 && (
+              <div className="field" style={{ minWidth: 200, maxWidth: 260 }}>
+                <label className="label">
+                  {L("deputy")}
+                  <span className="muted" style={{ fontSize: ".78rem" }}>
+                    {" "}({L("optional")})
+                  </span>
+                </label>
+                <select className="select" value={deputyId}
+                  onChange={(e) => setDeputyId(e.target.value)}>
+                  <option value="">{L("noDeputy")}</option>
+                  {deputies.map((d) => (
+                    <option key={d.employment_id} value={d.employment_id}>
+                      {d.employee_no} — {d.name_ar}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {selected.code === "leave" && (
               <DynField name="attachment_url"
                 required={!!leaveTypes.find(

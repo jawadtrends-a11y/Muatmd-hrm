@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { apiGet, openForView } from "@/lib/api";
+import { apiGet, apiPost, openForView } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc, IcPlus } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -33,6 +33,13 @@ const T: Dict = {
   attachment: { ar: "المرفق", en: "Attachment" },
   openAttachment: { ar: "فتح المرفق", en: "Open" },
   loadFailed: { ar: "تعذّر تحميل التفاصيل", en: "Could not load details" },
+  delegations: { ar: "إنابات تنتظر قرارك", en: "Delegation requests" },
+  delegHint: {
+    ar: "طلب منك أن تنوب عنه أثناء غيابه",
+    en: "Asked you to cover while away",
+  },
+  acceptDeleg: { ar: "أقبل الإنابة", en: "Accept" },
+  declineDeleg: { ar: "أعتذر", en: "Decline" },
   empty: { ar: "لم تقدّم أي طلب بعد", en: "No requests yet" },
   emptyHint: {
     ar: "ابدأ من «خدماتي»",
@@ -79,6 +86,15 @@ function summarize(r: Req): string {
   return bits.join(" · ") || "—";
 }
 
+type Deleg = {
+  id: number;
+  absentee: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+};
+
+
 export default function TrackRequestsPage() {
   const { L } = useT(T);
   const [rows, setRows] = useState<Req[]>([]);
@@ -89,6 +105,9 @@ export default function TrackRequestsPage() {
    * ق-71: الموظف يرى أين وصل طلبه — الصف يتمدّد بالنقر.
    * والتفاصيل تُجلب عند الفتح لا مع القائمة.
    */
+  /** ق-75: إنابات تنتظر قراري — أقبل أو أعتذر */
+  const [delegs, setDelegs] = useState<Deleg[]>([]);
+  const [acting, setActing] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Req | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -104,11 +123,32 @@ export default function TrackRequestsPage() {
       .finally(() => setLoadingDetail(false));
   }
 
+  function loadDelegs() {
+    apiGet<{ incoming: Deleg[] }>("/me/delegations/")
+      .then((d) => setDelegs(
+        (d.incoming || []).filter((x) => x.status === "pending")))
+      .catch(() => setDelegs([]));
+  }
+
   useEffect(() => {
     apiGet<Req[]>("/me/requests/")
       .then((d) => { setRows(d); setBusy(false); })
       .catch(() => { setDenied(true); setBusy(false); });
+    loadDelegs();
   }, []);
+
+  /** ق-75: النائب يقبل الإنابة أو يعتذر — وبالاعتذار تمضي الإجازة */
+  async function decideDeleg(id: number, accept: boolean) {
+    setActing(true);
+    try {
+      await apiPost(`/delegations/${id}/decide/`, { accept });
+      loadDelegs();
+    } catch {
+      /* الرسالة تظهر في الشاشة التالية */
+    } finally {
+      setActing(false);
+    }
+  }
 
   const visible = filter ? rows.filter((r) => r.status === filter) : rows;
 
@@ -137,6 +177,58 @@ export default function TrackRequestsPage() {
           {L("newRequest")}
         </Link>
       </div>
+
+      {/* ق-75: إنابات تنتظر قرارك — أول ما يُرى، فهي تنتظر إجراءً */}
+      {delegs.length > 0 && (
+        <div className="stack" style={{ gap: 10 }}>
+          <div className="row">
+            <IcAlert size={18} />
+            <h2 style={{ fontSize: "1.02rem" }}>
+              {L("delegations")}
+              <span className="badge badge-warn"
+                style={{ marginInlineStart: 8 }}>
+                <span className="num">{delegs.length}</span>
+              </span>
+            </h2>
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: 12,
+          }}>
+            {delegs.map((d) => (
+              <div key={d.id} className="card" style={{
+                padding: 18, borderInlineStartWidth: 4,
+                borderInlineStartColor: "var(--teal)",
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                  {d.absentee}
+                </div>
+                <div className="muted" style={{
+                  fontSize: ".86rem", marginBottom: 12,
+                }}>
+                  {L("delegHint")}
+                  <div style={{ marginTop: 4 }}>
+                    <span className="num">{d.starts_on}</span>
+                    {" — "}
+                    <span className="num">{d.ends_on}</span>
+                  </div>
+                </div>
+                <div className="row">
+                  <button className="btn btn-sm btn-primary" disabled={acting}
+                    onClick={() => decideDeleg(d.id, true)}>
+                    {L("acceptDeleg")}
+                  </button>
+                  <button className="btn btn-sm btn-ghost" disabled={acting}
+                    onClick={() => decideDeleg(d.id, false)}>
+                    {L("declineDeleg")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="row" style={{ gap: 6 }}>
         {["", "pending", "approved", "rejected"].map((s) => (
