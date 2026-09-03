@@ -5,6 +5,7 @@
  *   إعدادات الرواتب · الاشتراك · الفريق والصلاحيات
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { apiGet, apiPut, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -12,6 +13,12 @@ import { IcAlert, IcCheck, IcPayroll, IcUsers, IcWallet } from "@/components/Ico
 
 const T: Dict = {
   title: { ar: "الإعدادات", en: "Settings" },
+  general: { ar: "إعدادات عامة", en: "General" },
+  users: { ar: "المستخدمون", en: "Users" },
+  usersHint: {
+    ar: "حسابات الدخول وصلاحياتها",
+    en: "Login accounts and permissions",
+  },
   payroll: { ar: "إعدادات الرواتب", en: "Payroll settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   team: { ar: "الفريق", en: "Team" },
@@ -224,6 +231,26 @@ function PayrollPanel({
           {L("eosbHint")}
         </div>
       )}
+
+      {/* ══ إعدادات عامة ══
+          بطاقات مجمّعة لا تبويبات: البنود تكثر مع نمو النظام،
+          والتبويب يضيق بها. */}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <h3 style={{
+          fontSize: "1rem", padding: "14px 20px",
+          borderBottom: "1px solid var(--line)", color: "var(--teal)",
+        }}>
+          {L("general")}
+        </h3>
+        <Link href="/settings/users" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("users")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("usersHint")}
+          </span>
+        </Link>
+      </div>
 
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ fontSize: "1rem", marginBottom: 6 }}>{L("payroll")}</h3>

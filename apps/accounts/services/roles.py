@@ -37,6 +37,7 @@ DEFAULT_ROLES = {
             "attendance.view", "attendance.view_all",
             "attendance.edit", "attendance.approve",
             "attendance.shifts",
+            "sites.view", "sites.assign", "sites.manage",
             "leaves.view", "leaves.view_all", "leaves.create",
             "leaves.approve", "leaves.approve_all", "leaves.manage",
             "requests.view", "requests.view_all", "requests.create",
@@ -64,6 +65,7 @@ DEFAULT_ROLES = {
             "audit.view",
             "persons.view_cross_company",
             "attendance.view", "attendance.view_all", "attendance.edit",
+            "sites.view", "sites.assign", "sites.manage",
             "leaves.view", "leaves.view_all", "leaves.create",
             "leaves.approve", "leaves.approve_all",
             "requests.view", "requests.view_all", "requests.create",
@@ -81,6 +83,8 @@ DEFAULT_ROLES = {
         "permissions": [
             "org.view", "employees.view",
             "attendance.view", "attendance.approve",
+            # يُسنِد موظفيه للمواقع المضافة ولا يُنشئ (ق-68)
+            "sites.view", "sites.assign",
             "leaves.view", "leaves.create", "leaves.approve",
             "requests.view", "requests.create", "requests.approve",
             "requests.manage",

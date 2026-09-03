@@ -230,6 +230,12 @@ function SimpleTable({
 
 export default function OrgPage() {
   const { L } = useT(T);
+  /**
+   * الزر الذي يظهر ثم يُرفض عند الضغط خلل: يوهم المستخدم بقدرة
+   * لا يملكها. فمن لا يملك إدارة الهيكل لا يرى زر الإضافة —
+   * ومدير الإدارة يطّلع ولا يعدّل (ق-68).
+   */
+  const [canManage, setCanManage] = useState(false);
   const [tab, setTab] = useState<Tab>("branches");
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -262,6 +268,12 @@ export default function OrgPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setCanManage((d.permissions || []).includes("org.manage")))
+      .catch(() => setCanManage(false));
+  }, []);
 
   const ENDPOINTS: Record<Tab, string> = {
     branches: "/org/branches/",
@@ -403,7 +415,7 @@ export default function OrgPage() {
             {L("subtitle")}
           </div>
         </div>
-        {!adding && (
+        {!adding && canManage && (
           <button className="btn btn-primary" onClick={() => {
             setAdding(true);
             setError("");

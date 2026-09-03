@@ -234,12 +234,20 @@ class Gate:
         if all(n in names for n in cls._SCOPE_FIELDS):
             return ""
 
-        # علاقة واحدة صريحة بـEmployment
+        # علاقة واحدة صريحة بـEmployment — والوصفية تُستثنى.
+        #
+        # فحقل «مدير الموقع» يصف الموقع ولا يحدّد من يراه: اشتقاقه
+        # كمسار نطاق جعل مدير الإدارة يرى المواقع التي هو مديرها
+        # وحدها، وهي صفر.
         from apps.employees.models import Employment
+        DESCRIPTIVE = {"site_manager", "manager_employment",
+                       "created_by", "updated_by", "approved_by",
+                       "adjusted_by", "uploaded_by", "direct_manager"}
         links = [
             f.name for f in model._meta.get_fields()
             if getattr(f, "many_to_one", False)
             and getattr(f, "related_model", None) is Employment
+            and f.name not in DESCRIPTIVE
         ]
         if len(links) == 1:
             return f"{links[0]}__"

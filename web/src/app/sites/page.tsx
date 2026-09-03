@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcPlus, IcUsers, IcX } from "@/components/Icons";
+import DateField from "@/components/DateField";
 import SiteMap from "@/components/SiteMap";
 
 const T: Dict = {
@@ -63,6 +64,11 @@ const T: Dict = {
     en: "Pick the location on the map",
   },
   assignTitle: { ar: "موظفو الموقع", en: "Site employees" },
+  fromHint: {
+    ar: "تاريخ بداية العمل في الموقع — البصمة تُقاس منه",
+    en: "Start date at this site — attendance is measured from it",
+  },
+  since: { ar: "من", en: "From" },
   addEmployee: { ar: "إضافة موظف", en: "Add employee" },
   remove: { ar: "إزالة", en: "Remove" },
   close: { ar: "إغلاق", en: "Close" },
@@ -260,6 +266,13 @@ function AssignDialog({
   const [rows, setRows] = useState<Assignment[]>([]);
   const [pool, setPool] = useState<Employee[]>([]);
   const [pick, setPick] = useState("");
+  /**
+   * ق-77: النقل بتاريخ سريان — البصمة تُقاس بنطاق الموقع، فنقل
+   * بلا تاريخ يجعل بصمات الأمس تُقاس بموقع اليوم.
+   */
+  const [err, setErr] = useState("");
+  const [from, setFrom] = useState(
+    () => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(true);
 
   const load = useCallback(() => {
@@ -275,11 +288,19 @@ function AssignDialog({
   const available = pool.filter((e) => !assigned.has(e.id));
 
   async function add() {
-    if (!pick) return;
-    await apiPost(`/sites/${site.id}/employees/`,
-                  { employment_id: Number(pick) }).catch(() => {});
-    setPick("");
-    load();
+    if (!pick || !from) return;
+    try {
+      await apiPost(`/sites/${site.id}/employees/`, {
+        employment_id: Number(pick),
+        effective_from: from,      // ق-77: النقل بتاريخه
+      });
+      setPick("");
+      setErr("");
+      load();
+    } catch (e) {
+      // الخطأ يُعرض لا يُبلع: من يُسنِد يحتاج معرفة ما منعه
+      setErr((e as ApiError).message);
+    }
   }
 
   async function remove(id: number) {
@@ -320,10 +341,25 @@ function AssignDialog({
               </option>
             ))}
           </select>
-          <button className="btn btn-primary" disabled={!pick} onClick={add}>
+          {/* بلا maxWidth: النمط يُطبَّق على حاوية التقويم فتقصّه */}
+          <div style={{ width: 165, flexShrink: 0 }}>
+            <DateField value={from} onChange={setFrom} />
+          </div>
+          <button className="btn btn-primary" disabled={!pick || !from}
+            onClick={add}>
             <IcPlus size={16} />
           </button>
         </div>
+
+        {err && (
+          <div style={{
+            background: "var(--danger-soft)", color: "var(--danger)",
+            padding: "9px 12px", borderRadius: "var(--radius-sm)",
+            marginBottom: 12, fontSize: ".86rem",
+          }}>
+            {err}
+          </div>
+        )}
 
         {busy ? (
           <div style={{ padding: 24, textAlign: "center", color: "var(--ink-3)" }}>
@@ -386,6 +422,24 @@ export default function SitesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  /**
+   * الزر الذي يظهر ثم يُرفض عند الضغط خلل: يوهم المستخدم بقدرة
+   * لا يملكها. فمن لا يملك تعديل الحضور لا يرى زر «موقع جديد» —
+   * ومدير الإدارة يُسنِد موظفيه للمواقع المضافة ولا ينشئ (ق-68).
+   */
+  const [canManage, setCanManage] = useState(false);
+  const [canAssign, setCanAssign] = useState(false);
+
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => {
+        const p = new Set(d.permissions || []);
+        setCanManage(p.has("sites.manage"));
+        setCanAssign(p.has("sites.assign"));
+      })
+      .catch(() => { setCanManage(false); setCanAssign(false); });
+  }, []);
+
   async function save(data: Record<string, unknown>) {
     setSaving(true);
     setError("");
@@ -429,7 +483,7 @@ export default function SitesPage() {
             {L("subtitle")}
           </div>
         </div>
-        {!form && (
+        {!form && canManage && (
           <button className="btn btn-primary" onClick={() => {
             setForm("new"); setError("");
           }}>
@@ -507,16 +561,22 @@ export default function SitesPage() {
                       <div className="row" style={{
                         gap: 6, justifyContent: "flex-end",
                       }}>
-                        <button className="btn btn-sm btn-ghost"
-                          onClick={() => setAssigning(s)}>
-                          <IcUsers size={15} />
-                          {L("manage")}
-                        </button>
-                        <button className="btn btn-sm btn-ghost"
-                          onClick={() => { setForm(s); setError(""); }}>
-                          {L("edit")}
-                        </button>
-                        {s.is_active && (
+                        {/* كل زر بصلاحيته: من يُسنِد ليس بالضرورة
+                            من يُنشئ، ومن يطّلع لا يرى الأزرار (ق-78) */}
+                        {canAssign && (
+                          <button className="btn btn-sm btn-ghost"
+                            onClick={() => setAssigning(s)}>
+                            <IcUsers size={15} />
+                            {L("manage")}
+                          </button>
+                        )}
+                        {canManage && (
+                          <button className="btn btn-sm btn-ghost"
+                            onClick={() => { setForm(s); setError(""); }}>
+                            {L("edit")}
+                          </button>
+                        )}
+                        {canManage && s.is_active && (
                           <button className="btn btn-sm btn-ghost"
                             style={{ color: "var(--danger)" }}
                             onClick={() => deactivate(s)}>

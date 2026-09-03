@@ -39,6 +39,9 @@ urlpatterns = [
     path("api/access/roles/", access_api.role_list, name="role-list"),
     path("api/access/roles/<int:role_id>/", access_api.role_detail, name="role-detail"),
     path("api/access/roles/<int:role_id>/permissions/", access_api.role_permissions_update, name="role-perms"),
+    # صلاحيات موظف بعينه (ق-67 وق-78)
+    path("api/access/members/", access_api.member_list, name="member-list"),
+    path("api/access/members/<int:employment_id>/permissions/", access_api.member_permissions, name="member-perms"),
     path("api/billing/plans/", billing_api.plan_catalog, name="plan-catalog"),
     path("api/billing/subscription/", billing_api.my_subscription, name="my-subscription"),
     path("api/billing/estimate/", billing_api.billing_estimate, name="billing-estimate"),

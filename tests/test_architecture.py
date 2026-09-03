@@ -75,6 +75,8 @@ def test_no_raw_queryset_in_api_views():
                     "deputy=emp",
                     # الإشعار يخصّ شخصًا بعينه — المستقبل هو القيد
                     "recipient_person_id=person.id",
+                    # الاستثناء يخصّ عضوية بعينها — العضوية هي القيد
+                    "membership=membership",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
                     # site جاء من Gate.filter_queryset، وp من emp.person
                     "person=p", "site=site")):
@@ -300,4 +302,37 @@ def test_no_orphan_notification_events():
     orphans = EVENT_KEYS - set(TEMPLATES)
     assert not orphans, (
         "أحداث بلا قوالب:\n" + "\n".join(sorted(orphans))
+    )
+
+
+def test_no_native_date_input():
+    """
+    لا <input type="date"> في الشاشات — DateField وحده.
+
+    العنصر الأصلي يعرض تقويم المتصفح بالإنجليزية وبصيغة
+    MM/DD/YYYY، والقارئ السعودي يقرأ 08/25/2026 فيظنه اليوم الثامن
+    من الشهر الخامس والعشرين. وDateField يعرض DD/MM/YYYY بأسماء
+    عربية، ولوحته تخرج من أي حاوية تقصّها.
+    """
+    from pathlib import Path
+
+    web = Path("web/src")
+    if not web.exists():
+        return
+
+    offenders = []
+    for f in sorted(web.rglob("*.tsx")):
+        if f.name == "DateField.tsx":
+            continue      # المكوّن نفسه يلفّ العنصر الأصلي
+        for i, line in enumerate(
+                f.read_text(encoding="utf-8").split("\n"), 1):
+            stripped = line.strip()
+            if stripped.startswith(("*", "//", "/*")):
+                continue
+            if 'type="date"' in line:
+                offenders.append(f"{f.relative_to(web)}:{i}")
+
+    assert not offenders, (
+        "تقويم المتصفح الأصلي في الشاشات — استخدم DateField:\n"
+        + "\n".join(offenders)
     )

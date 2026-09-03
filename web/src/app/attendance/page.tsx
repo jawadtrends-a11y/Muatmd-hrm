@@ -439,13 +439,11 @@ function EmployeeRecord({
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
             <div className="field" style={{ minWidth: 150 }}>
               <label className="label">{L("from")}</label>
-              <input type="date" className="input" value={from}
-                onChange={(e) => setFrom(e.target.value)} />
+              <DateField value={from} onChange={setFrom} />
             </div>
             <div className="field" style={{ minWidth: 150 }}>
               <label className="label">{L("to")}</label>
-              <input type="date" className="input" value={to}
-                onChange={(e) => setTo(e.target.value)} />
+              <DateField value={to} onChange={setTo} />
             </div>
           </div>
         </div>

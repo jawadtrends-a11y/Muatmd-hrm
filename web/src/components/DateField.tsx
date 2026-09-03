@@ -144,6 +144,38 @@ export default function DateField({
     setOpen(false);
   };
 
+  /**
+   * اللوحة تُرسم بموضع ثابت محسوب من الزر — لا داخل الحاوية.
+   *
+   * فأي أب فيه overflow يقصّها: نافذة تُمرَّر رأسيًا، أو جدول
+   * يُمرَّر أفقيًا. وتحويلها إلى fixed يخرجها من كل قصّ، ويمنع
+   * رجوع العلّة في أي نافذة تُبنى لاحقًا.
+   */
+  const [pos, setPos] = useState<{ top: number; start: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !boxRef.current) { setPos(null); return; }
+    const place = () => {
+      const r = boxRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom;
+      const up = below < 340 && r.top > 340;
+      setPos({
+        top: up ? r.top - 346 : r.bottom + 6,
+        start: document.dir === "rtl" || document.documentElement.dir === "rtl"
+          ? window.innerWidth - r.right
+          : r.left,
+      });
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
   return (
     <div ref={boxRef} style={{ position: "relative", ...style }}
       className={className}>
@@ -172,14 +204,13 @@ export default function DateField({
       </button>
 
       {/* اللوحة */}
-      {open && (
+      {open && pos && (
         <div
           className="card"
           style={{
-            position: "absolute", insetInlineStart: 0, zIndex: 70,
+            position: "fixed", zIndex: 200,
+            top: pos.top, insetInlineStart: pos.start,
             width: 290, padding: 12, boxShadow: "var(--shadow-lg)",
-            ...(flip ? { bottom: "calc(100% + 6px)" }
-                     : { top: "calc(100% + 6px)" }),
           }}
         >
           {pickingMonth ? (

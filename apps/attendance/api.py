@@ -4,7 +4,7 @@ API الحضور والانصراف.
 ⚠️ ق-13: ممنوع إضافة أي تحقق تداخل عبر الشركات هنا أو في أي طبقة.
 الحضور المتداخل حالة صحيحة — راجع apps/attendance/services/rules.py
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from django.utils import timezone
 from rest_framework import status
@@ -651,6 +651,23 @@ def my_attendance(request):
 
 # ══════════════════ مواقع العمل والبصمة (ق-62) ══════════════════
 
+def _coord(value):
+    """
+    إحداثي بسبع خانات عشرية — كما يقبل النموذج.
+
+    الخريطة تعطي دقة أعلى (21.55544190123)، والمستخدم لم يكتبها
+    بيده. فالخادم يقصّها ولا يرفض الحفظ برسالة تقنية.
+    """
+    if value in (None, ""):
+        return None
+    from decimal import Decimal, ROUND_HALF_UP
+    try:
+        return Decimal(str(value)).quantize(Decimal("0.0000001"),
+                                            rounding=ROUND_HALF_UP)
+    except Exception:      # noqa: BLE001
+        return None
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def work_sites(request):
@@ -662,9 +679,9 @@ def work_sites(request):
         return Response({"detail": "لا شركة نشطة"}, status=400)
 
     if request.method == "GET":
-        Gate.require(request.user, "attendance.view")
+        Gate.require(request.user, "sites.view")
         qs = Gate.filter_queryset(
-            request.user, "attendance.view", WorkSite.objects.all()
+            request.user, "sites.view", WorkSite.objects.all()
         ).filter(company_id=company_id).select_related("site_manager__person")
 
         return Response([{
@@ -684,7 +701,7 @@ def work_sites(request):
             "is_active": s.is_active,
         } for s in qs])
 
-    Gate.require(request.user, "attendance.shifts")
+    Gate.require(request.user, "sites.manage")
     d = request.data
 
     try:
@@ -696,8 +713,8 @@ def work_sites(request):
             name_en=(d.get("name_en") or "").strip()[:150],
             city=(d.get("city") or "").strip()[:80],
             address=(d.get("address") or "").strip()[:255],
-            latitude=d.get("latitude") or None,
-            longitude=d.get("longitude") or None,
+            latitude=_coord(d.get("latitude")),
+            longitude=_coord(d.get("longitude")),
             radius_meters=int(d.get("radius_meters") or 100),
             tolerance_meters=int(d.get("tolerance_meters") or 100),
             enforce_geofence=bool(d.get("enforce_geofence", True)),
@@ -714,9 +731,9 @@ def work_site_detail(request, site_id):
     """تعديل موقع أو تعطيله."""
     from apps.attendance.models_sites import WorkSite
 
-    Gate.require(request.user, "attendance.shifts")
+    Gate.require(request.user, "sites.manage")
     site = Gate.filter_queryset(
-        request.user, "attendance.shifts", WorkSite.objects.all()
+        request.user, "sites.manage", WorkSite.objects.all()
     ).filter(id=site_id).first()
     if site is None:
         return Response({"detail": "الموقع غير موجود"}, status=404)
@@ -731,6 +748,9 @@ def work_site_detail(request, site_id):
         if field in d:
             setattr(site, field, (d.get(field) or "")[:255])
     for field in ("latitude", "longitude"):
+        if field in d:
+            setattr(site, field, _coord(d[field]))
+            continue
         if field in d:
             setattr(site, field, d.get(field) or None)
     for field in ("radius_meters", "tolerance_meters"):
@@ -755,9 +775,9 @@ def site_assignments(request, site_id):
     from apps.attendance.models_sites import SiteAssignment, WorkSite
     from apps.employees.models import Employment
 
-    Gate.require(request.user, "attendance.view")
+    Gate.require(request.user, "sites.view")
     site = Gate.filter_queryset(
-        request.user, "attendance.view", WorkSite.objects.all()
+        request.user, "sites.view", WorkSite.objects.all()
     ).filter(id=site_id).first()
     if site is None:
         return Response({"detail": "الموقع غير موجود"}, status=404)
@@ -769,9 +789,11 @@ def site_assignments(request, site_id):
             "employee_no": a.employment.employee_no,
             "name": a.employment.person.display_name,
             "is_primary": a.is_primary,
+            "effective_from": a.effective_from,
+            "effective_to": a.effective_to,
         } for a in site.assignments.select_related("employment__person")])
 
-    Gate.require(request.user, "attendance.shifts")
+    Gate.require(request.user, "sites.assign")
 
     if request.method == "DELETE":
         # المعرّف من الرابط أو الجسم — الحذف يقبل الاثنين
@@ -780,13 +802,28 @@ def site_assignments(request, site_id):
         SiteAssignment.objects.filter(site=site, employment_id=eid).delete()
         return Response({"removed": True})
 
+    # ق-77: النقل بتاريخ سريان إلزامي.
+    #
+    # فالبصمة تُقاس بنطاق الموقع: نقل بلا تاريخ يجعل بصمات الأمس
+    # تُقاس بموقع اليوم، فيظهر الموظف خارج النطاق في أيام كان
+    # فيها ملتزمًا ويُخصم منه ظلمًا.
+    raw = request.data.get("effective_from")
+    if not raw:
+        return Response(
+            {"detail": "حدّد تاريخ بداية العمل في الموقع",
+             "code": "effective_from_required"}, status=400)
+    try:
+        starts = date.fromisoformat(str(raw))
+    except ValueError:
+        return Response({"detail": f"تاريخ غير صالح: {raw}"}, status=400)
+
     ids = request.data.get("employment_ids") or []
     if request.data.get("employment_id"):
         ids.append(request.data["employment_id"])
 
     # الإسناد يمسّ موظفين آخرين — فالبوابة تحدّ بنطاق المُسنِد
     allowed = Gate.filter_queryset(
-        request.user, "attendance.shifts", Employment.objects.all()
+        request.user, "sites.assign", Employment.objects.all()
     ).filter(company_id=site.company_id)
 
     made = 0
@@ -794,10 +831,19 @@ def site_assignments(request, site_id):
         emp = allowed.filter(id=eid).first()
         if emp is None:
             continue
-        _obj, created = SiteAssignment.objects.get_or_create(
+        # إسناده السابق يُغلق بيوم قبل الجديد — فلكل يوم موقع
+        # واحد، وسجل البصمة يبقى متسقًا مع تاريخ النقل
+        SiteAssignment.objects.filter(
+            employment=emp, effective_to__isnull=True
+        ).exclude(site=site).update(
+            effective_to=starts - timedelta(days=1))
+
+        _obj, created = SiteAssignment.objects.update_or_create(
             employment=emp, site=site,
             defaults={"account_id": site.account_id,
                       "company_id": site.company_id,
+                      "effective_from": starts,
+                      "effective_to": None,
                       "is_primary": bool(request.data.get("is_primary"))})
         made += int(created)
 

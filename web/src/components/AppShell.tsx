@@ -127,10 +127,12 @@ const NAV: NavItem[] = [
     perms: ["payroll.view"], needsScope: true },
   { href: "/reports", key: "reports", icon: IcChart,
     perms: ["payroll.view", "employees.view"], needsScope: true },
+  // ق-68: مدير الإدارة يرى الهيكل، ويبدّل موقع عمل موظفيه من
+  // المواقع المضافة — فيظهران له من نطاق إدارته
   { href: "/org", key: "org", icon: IcOrg,
-    perms: ["org.view"], needsScope: true },
+    perms: ["org.view"], needsScope: true, minScope: "department" },
   { href: "/sites", key: "sites", icon: IcClock,
-    perms: ["attendance.view"], needsScope: true },
+    perms: ["sites.view"] },
 
   // ── شخصية: لكل موظف عن نفسه ──
   { href: "/me/attendance", key: "myAttendance", icon: IcClock,
@@ -229,7 +231,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const held = item.perms.filter((p) => perms.has(p));
     if (held.length === 0) return false;
     if (item.needsScope) {
-      const min = item.minScope === "team" ? 1 : 2;
+      // ق-68: البند الإداري لمن نطاقه أوسع من إدارته.
+      //
+      // فالمشرف يصل لفريقه ومدير الإدارة لقسمه من «إدارة الفريق»،
+      // وإظهار «الموظفون» و«الحضور» لهما تكرار يشتّت. والموارد
+      // فما فوق (branch وcompany وaccount) يرون البنود العامة.
+      const min = item.minScope === "team" ? 1
+                : item.minScope === "department" ? 2
+                : 3;
       return held.some((p) => wideEnough(p, min));
     }
     return true;

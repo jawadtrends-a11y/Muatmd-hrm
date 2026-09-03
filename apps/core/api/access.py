@@ -118,3 +118,136 @@ def role_permissions_update(request, role_id):
 
     return Response({"id": role.id, "permissions": applied,
                      "count": len(applied)})
+
+
+# ══════════ صلاحيات موظف بعينه (ق-67 وق-78) ══════════
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def member_permissions(request, employment_id):
+    """
+    صلاحيات موظف بعينه — قراءةً وتعديلًا.
+
+    مدير الحساب يفتح موظفًا فيرى كل الكتالوج بمفاتيح، ويميّز
+    الموروث من دوره عن الاستثناء الشخصي (ق-67). والصلاحية تحمل
+    مداها في اسمها فلا يُسأل عن نطاق (ق-78).
+    """
+    from apps.accounts.models_access import PermissionOverride
+    from apps.core.access.catalog import PERMISSION_KEYS, validate_keys
+    from apps.employees.models import Employment
+
+    Gate.require(request.user, "access.manage")
+
+    company_id = getattr(getattr(request, "account_ctx", None),
+                         "active_company_id", None)
+    emp = Gate.filter_queryset(
+        request.user, "access.manage", Employment.objects.all()
+    ).filter(id=employment_id, company_id=company_id).first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    user = getattr(emp.person, "user", None)
+    membership = getattr(user, "account_membership", None) if user else None
+    if membership is None:
+        return Response({"detail": "لا حساب دخول لهذا الموظف"}, status=404)
+
+    def role_keys():
+        """صلاحيات أدواره — بلا الاستثناءات الشخصية."""
+        if membership.is_account_owner:
+            return set(PERMISSION_KEYS)
+        keys = set()
+        for a in membership.role_assignments.select_related("role"):
+            keys |= a.role.permission_keys
+        return keys
+
+    if request.method == "PUT":
+        wanted = set(request.data.get("permissions") or [])
+        try:
+            validate_keys(wanted)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+
+        from_role = role_keys()
+
+        # الاستثناء يُسجَّل للفرق وحده: ما زاد عن الدور يُمنح، وما
+        # نقص عنه يُنزع. فلا نكرّر ما يمنحه الدور أصلًا — وتعديل
+        # الدور لاحقًا يسري على الجميع كما ينبغي.
+        with transaction.atomic():
+            # معزول ذاتيًا: مقيَّد بعضوية الموظف المفتوح وشركته
+            PermissionOverride.objects.filter(membership=membership, company_id=company_id).delete()
+            PermissionOverride.objects.bulk_create(
+                [PermissionOverride(membership=membership,
+                                    company_id=company_id,
+                                    permission_key=k, granted=True)
+                 for k in sorted(wanted - from_role)]
+                + [PermissionOverride(membership=membership,
+                                      company_id=company_id,
+                                      permission_key=k, granted=False)
+                   for k in sorted(from_role - wanted)])
+
+    from_role = role_keys()
+    overrides = {
+        o.permission_key: o.granted
+        for o in membership.permission_overrides.all()
+        if o.company_id in (None, company_id)
+    }
+
+    modules = {}
+    for p in PERMISSIONS:
+        inherited = p.key in from_role
+        modules.setdefault(p.module, []).append({
+            "key": p.key,
+            "name_ar": p.name_ar,
+            "granted": overrides.get(p.key, inherited),
+            "inherited": inherited,
+            "is_override": p.key in overrides,
+        })
+
+    return Response({
+        "employment_id": emp.id,
+        "employee_no": emp.employee_no,
+        "name_ar": emp.person.display_name,
+        "roles": [a.role.name_ar
+                  for a in membership.role_assignments.select_related("role")],
+        "is_account_owner": membership.is_account_owner,
+        "modules": [{"module": m, "permissions": v}
+                    for m, v in modules.items()],
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def member_list(request):
+    """
+    المستخدمون — موظفو المنشأة بحسابات دخولهم وأدوارهم.
+
+    مدخل شاشة الصلاحيات: يفتح مدير الحساب موظفًا منها فيعدّل
+    صلاحياته (ق-67).
+    """
+    from apps.employees.models import Employment, EmploymentStatus
+
+    Gate.require(request.user, "access.manage")
+    company_id = getattr(getattr(request, "account_ctx", None),
+                         "active_company_id", None)
+
+    qs = Gate.filter_queryset(
+        request.user, "access.manage", Employment.objects.all()
+    ).filter(company_id=company_id,
+             status=EmploymentStatus.ACTIVE).select_related(
+        "person__user", "department").order_by("employee_no")
+
+    rows = []
+    for e in qs:
+        user = getattr(e.person, "user", None)
+        m = getattr(user, "account_membership", None) if user else None
+        rows.append({
+            "id": e.id,
+            "employee_no": e.employee_no,
+            "name_ar": e.person.display_name,
+            "department": e.department.name_ar if e.department else None,
+            "username": user.username if user else None,
+            "roles": ([a.role.name_ar
+                       for a in m.role_assignments.select_related("role")]
+                      if m else []),
+        })
+    return Response(rows)
