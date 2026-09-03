@@ -71,10 +71,30 @@ def test_renderer_falls_back_to_arabic(acct):
 
 @pytest.mark.django_db(transaction=True)
 def test_renderer_raises_when_no_template(acct):
-    """قالب مفقود يرفع خطأً — لا فشل صامت."""
+    """
+    قالب مفقود يرفع خطأً — لا فشل صامت.
+
+    والحدث المعرَّف في الكود لم يعد يرفعه: العارض يرجع للتعريف
+    هناك حين تخلو القاعدة، فقاعدة جديدة بلا بذر لا تُصمت النظام.
+    فالخطأ لمن لا نصّ له أصلًا — لا مكتوبًا ولا مبذورًا.
+    """
     with account_scope(acct.account_id):
         with pytest.raises(TemplateNotFound):
-            render("payroll.approved", Channel.IN_APP, "ar", {}, acct.account_id)
+            render("no.such.event", Channel.IN_APP, "ar", {},
+                   acct.account_id)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_renderer_falls_back_to_code(acct):
+    """
+    الحدث المعرَّف في الكود يُعرض ولو خلت القاعدة.
+
+    فالقاعدة للتخصيص لا للأساس — والبذر خطوة يدوية تُنسى.
+    """
+    with account_scope(acct.account_id):
+        out = render("payroll.approved", Channel.IN_APP, "ar", {},
+                     acct.account_id)
+    assert out["subject"], "لا عنوان — العارض لم يرجع للكود"
 
 
 @pytest.mark.django_db(transaction=True)

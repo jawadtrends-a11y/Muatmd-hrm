@@ -28,11 +28,43 @@ def _lookup(account_id, event_key, channel, locale):
     )
 
 
+class _CodeTemplate:
+    """قالب من التعريف في الكود — بنفس واجهة سجل القاعدة."""
+
+    def __init__(self, subject, body, locale):
+        self.subject = subject
+        self.body = body
+        self.locale = locale
+
+
+def _from_code(event_key, locale):
+    """نص الحدث كما عُرِّف في الكود — أو None إن لم يُعرَّف."""
+    from apps.notifications.services.templates import TEMPLATES
+
+    t = TEMPLATES.get(event_key)
+    if t is None:
+        return None
+    s_ar, b_ar, s_en, b_en, s_ur, b_ur = t
+    by_locale = {"ar": (s_ar, b_ar), "en": (s_en, b_en), "ur": (s_ur, b_ur)}
+    subject, body = by_locale.get(locale) or by_locale[FALLBACK_LOCALE]
+    return _CodeTemplate(subject, body,
+                         locale if locale in by_locale else FALLBACK_LOCALE)
+
+
 def render(event_key: str, channel: str, locale: str,
            context: dict, account_id: int | None = None) -> dict:
     tpl = _lookup(account_id, event_key, channel, locale)
     if tpl is None and locale != FALLBACK_LOCALE:
         tpl = _lookup(account_id, event_key, channel, FALLBACK_LOCALE)
+    if tpl is None:
+        # الرجوع للتعريف في الكود.
+        #
+        # القاعدة للتخصيص لا للأساس: قاعدة جديدة أو خادم جديد بلا
+        # بذر يعني نظامًا صامتًا لا يصل منه إشعار — وهي خطوة يدوية
+        # تُنسى. فالنص المعرَّف في الكود يعمل دائمًا، والشركة تبقى
+        # قادرة على تخصيصه بصف في القاعدة يسبقه.
+        tpl = _from_code(event_key, locale)
+
     if tpl is None:
         raise TemplateNotFound(
             f"لا قالب لـ{event_key}/{channel}/{locale} — "
