@@ -38,6 +38,7 @@ const T: Dict = {
     ar: "طلب منك أن تنوب عنه أثناء غيابه",
     en: "Asked you to cover while away",
   },
+  yourDeputy: { ar: "نائبك", en: "Your deputy" },
   acceptDeleg: { ar: "أقبل الإنابة", en: "Accept" },
   declineDeleg: { ar: "أعتذر", en: "Decline" },
   empty: { ar: "لم تقدّم أي طلب بعد", en: "No requests yet" },
@@ -55,6 +56,11 @@ type Req = {
   closed_at?: string | null;
   attachment_url?: string;
   approvals?: ChainRow[];
+  /** ق-75: نائبك أثناء غيابك وحالته */
+  delegation?: {
+    deputy: string; status: string; status_label: string;
+    starts_on: string; ends_on: string;
+  } | null;
   created_at: string; note: string;
   payload: Record<string, unknown>;
 };
@@ -350,6 +356,26 @@ export default function TrackRequestsPage() {
                                 </div>
                               )}
                             </div>
+                            {detail.delegation && (
+                              <div style={{
+                                fontSize: ".85rem",
+                                paddingTop: 10,
+                                borderTop: "1px solid var(--line)",
+                              }}>
+                                <span className="muted">{L("yourDeputy")}: </span>
+                                <span style={{ fontWeight: 500 }}>
+                                  {detail.delegation.deputy}
+                                </span>
+                                <span className={`badge ${
+                                  detail.delegation.status === "accepted"
+                                    ? "badge-teal"
+                                    : detail.delegation.status === "declined"
+                                      ? "badge-danger" : "badge-warn"
+                                }`} style={{ marginInlineStart: 8 }}>
+                                  {detail.delegation.status_label}
+                                </span>
+                              </div>
+                            )}
                             <ApprovalChain rows={detail.approvals ?? []} />
                           </div>
                         ) : (

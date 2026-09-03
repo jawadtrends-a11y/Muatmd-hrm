@@ -177,6 +177,16 @@ def _serialize_request(r, include_chain=False):
             })
         data["approvals"] = rows
         data["attachment_url"] = r.attachment_url
+
+        # ق-75: الغائب يرى حالة نائبه — وإلا بقي لا يدري من يغطّيه
+        d = getattr(r, "delegation", None)
+        data["delegation"] = None if d is None else {
+            "deputy": d.deputy.person.display_name,
+            "status": d.status,
+            "status_label": d.get_status_display(),
+            "starts_on": d.starts_on,
+            "ends_on": d.ends_on,
+        }
     return data
 
 
