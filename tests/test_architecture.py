@@ -73,6 +73,8 @@ def test_no_raw_queryset_in_api_views():
                     "person=person", "person=getattr", "employment=emp",
                     "approver_employment=emp", "employment=employment",
                     "deputy=emp",
+                    # الإشعار يخصّ شخصًا بعينه — المستقبل هو القيد
+                    "recipient_person_id=person.id",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
                     # site جاء من Gate.filter_queryset، وp من emp.person
                     "person=p", "site=site")):

@@ -18,6 +18,7 @@ from apps.accounts import api_platform_auth as platform_auth_api
 from apps.accounts import api_admin as platform_admin_api
 from apps.accounts import api_auth as client_auth
 from apps.leaves import api as leaves_api
+from apps.notifications import api as notifications_api
 
 
 def health(request):
@@ -156,6 +157,9 @@ urlpatterns = [
     # الإنابة أثناء الغياب (ق-75)
     path("api/me/deputies/", leaves_api.eligible_deputies_view, name="eligible-deputies"),
     path("api/me/delegations/", leaves_api.my_delegations, name="my-delegations"),
+    # الإشعارات — جرس المستخدم
+    path("api/me/notifications/", notifications_api.my_notifications, name="my-notifications"),
+    path("api/me/notifications/read/", notifications_api.mark_read, name="notifications-read"),
     path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),

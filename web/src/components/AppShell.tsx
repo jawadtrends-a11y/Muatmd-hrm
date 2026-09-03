@@ -20,6 +20,7 @@ import {
   IcMenu, IcMoon, IcOrg, IcPayroll, IcSettings, IcSun, IcUser, IcUsers,
   IcWallet, IcX,
 } from "@/components/Icons";
+import NotificationBell from "@/components/NotificationBell";
 
 const PUBLIC_PATHS = ["/login", "/accept-invitation", "/signup"];
 
@@ -471,6 +472,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="grow truncate muted" style={{ fontSize: ".9rem" }}>
             {ws?.company?.name || ws?.account?.name || ""}
           </div>
+
+          {/* جرس الإشعارات — ما ينتظر انتباهك يُرى أينما كنت */}
+          <NotificationBell />
 
           <button
             className="btn btn-ghost btn-sm"
