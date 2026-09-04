@@ -17,9 +17,36 @@ DEFAULT_ROLES = {
         # ق-31: «المالك» موقع في النظام لا مسمى وظيفي. الشخص قد يكون
         # المدير العام أو رئيس مجلس الإدارة أو المالك فعليًا — والشركة
         # تعيد تسمية الدور كما تشاء. يرى كل شيء بما فيه الرواتب والقسائم.
-        "name_ar": "المدير العام",
+        "name_ar": "مالك الحساب",
         "scope": Scope.ACCOUNT,
         "permissions": "*",
+    },
+    RoleCode.CEO: {
+        # ق-76: «المدير العام» دور وظيفي، و«مالك الحساب» سيطرة
+        # إدارية — والاثنان منفصلان. فأكثر المديرين العامين لا
+        # يتفرّغون لمتابعة أنظمة الأتمتة، والملكية تنزل للدرجة
+        # المناسبة (غالبًا مدير الموارد).
+        #
+        # يرى كل شيء ولا يغيّر شيئًا — عدا قرارين: اعتماد طلبات
+        # مديري الإدارات ومدير الموارد، واعتماد المسير كمرحلة
+        # أخيرة قبل الصرف.
+        "name_ar": "المدير العام",
+        "scope": Scope.ACCOUNT,
+        "permissions": [
+            "account.view", "company.view", "org.view",
+            "employees.view", "employees.view_all",
+            "audit.view", "persons.view_cross_company",
+            "attendance.view", "attendance.view_all",
+            "sites.view",
+            "leaves.view", "leaves.view_all", "leaves.create",
+            "leaves.approve", "leaves.approve_all",
+            "requests.view", "requests.view_all", "requests.create",
+            "requests.approve", "requests.approve_all",
+            "payroll.view", "payroll.approve",
+            "payslips.view_own", "payslips.view_team", "payslips.view_all",
+            "saudization.view", "compliance.view",
+            "access.view",
+        ],
     },
     RoleCode.HR_MANAGER: {
         "name_ar": "مدير الموارد البشرية",

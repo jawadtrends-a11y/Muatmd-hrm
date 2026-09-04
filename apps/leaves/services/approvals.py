@@ -78,7 +78,7 @@ def _condition_matches(condition: dict, payload: dict) -> bool:
 
 
 # ترتيب الأدوار من الأعلى — لاختيار دور واحد لمن يحمل أكثر من دور
-ROLE_RANK = ["owner", "hr_manager", "hr_staff", "dept_manager",
+ROLE_RANK = ["ceo", "owner", "hr_manager", "hr_staff", "dept_manager",
              "supervisor", "employee"]
 
 
@@ -95,8 +95,11 @@ def requester_role(employment):
     membership = getattr(user, "account_membership", None)
     if membership is None:
         return "employee"
-    if membership.is_account_owner:
-        return "owner"
+    # ق-76: الملكية سيطرة إدارية لا موقع في سلسلة الاعتماد.
+    #
+    # فمالك الحساب غالبًا مدير الموارد — وحسابه بـowner جعل طلبه
+    # يسلك سلسلة المدير العام بدل سلسلته. والدور الوظيفي وحده
+    # يحدّد من يعتمد طلبه.
 
     codes = {a.role.code for a in
              membership.role_assignments.select_related("role")}

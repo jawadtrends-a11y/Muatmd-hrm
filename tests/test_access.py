@@ -22,9 +22,18 @@ def account(db):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_every_account_gets_six_roles(account):
+def test_every_account_gets_default_roles(account):
+    """
+    كل حساب يُهيَّأ بالأدوار السبعة (ق-76: المدير العام دور وظيفي
+    منفصل عن مالك الحساب).
+    """
+    from apps.accounts.services.roles import DEFAULT_ROLES
+
     with account_scope(account.account_id):
-        assert Role.objects.filter(account_id=account.account_id).count() == 6
+        codes = set(Role.objects.filter(
+            account_id=account.account_id).values_list("code", flat=True))
+    want = {c.value for c in DEFAULT_ROLES}
+    assert codes == want, f"ناقص: {want - codes} | زائد: {codes - want}"
 
 
 @pytest.mark.django_db(transaction=True)

@@ -137,14 +137,16 @@ DEFAULT_CHAINS = [
     # والدرجة بلا شاغل تُتخطى (ق-35): من لا مدير إدارة له يمضي
     # طلبه للموارد مباشرة بلا تعليق.
 
-    # المدير العام: مدير الموارد يعتمد
-    (RequestType.LEAVE, "إجازة المدير العام", {"requester_role": "owner"}, 60,
+    # المدير العام: مدير الموارد يعتمد.
+    # والدور ceo لا owner (ق-76): الملكية سيطرة إدارية تنتقل بين
+    # الأشخاص، والمدير العام موقع وظيفي ثابت في السلسلة.
+    (RequestType.LEAVE, "إجازة المدير العام", {"requester_role": "ceo"}, 60,
      [(1, ApproverType.ROLE, "hr_manager", True, 72)]),
 
     # مدير الموارد: المدير العام يعتمد
     (RequestType.LEAVE, "إجازة مدير الموارد",
      {"requester_role": "hr_manager"}, 50,
-     [(1, ApproverType.ROLE, "owner", True, 72)]),
+     [(1, ApproverType.ROLE, "ceo", True, 72)]),
 
     # موظف الموارد: مدير الموارد يعتمد
     (RequestType.LEAVE, "إجازة موظف الموارد",
@@ -158,7 +160,9 @@ DEFAULT_CHAINS = [
      {"requester_role": "dept_manager"}, 30,
      [(1, ApproverType.ROLE, "supervisor", True, 48, True, True),
       (2, ApproverType.ROLE, "hr_staff", True, 72),
-      (3, ApproverType.ROLE, "hr_manager", True, 72)]),
+      (3, ApproverType.ROLE, "hr_manager", True, 72),
+      # المدير العام يعتمد طلبات مديري الإدارات ومدير الموارد
+      (4, ApproverType.ROLE, "ceo", True, 72)]),
 
     # المشرف: مدير الإدارة ثم موظف الموارد ثم مدير الموارد
     (RequestType.LEAVE, "إجازة المشرف",
@@ -179,10 +183,12 @@ DEFAULT_CHAINS = [
      [(1, ApproverType.DIRECT_MANAGER, "", True, 24)]),
     (RequestType.CERTIFICATE, "الشهادات والخطابات", {}, 0,
      [(1, ApproverType.ROLE, "hr_staff", True, 48)]),
+    # الاستقالة قرار جسيم — المدير العام يختمها (ق-76: الدور
+    # الوظيفي لا الملكية، فالملكية تنتقل بين الأشخاص)
     (RequestType.RESIGNATION, "الاستقالة", {}, 0,
      [(1, ApproverType.DIRECT_MANAGER, "", True, 72),
       (2, ApproverType.ROLE, "hr_manager", True, 72),
-      (3, ApproverType.ROLE, "owner", True, None)]),
+      (3, ApproverType.ROLE, "ceo", True, None)]),
 
     # ── الأنواع المضافة (ق-54) ──
 
@@ -208,10 +214,10 @@ DEFAULT_CHAINS = [
      [(1, ApproverType.DIRECT_MANAGER, "", True, 48),
       (2, ApproverType.ROLE, "hr_staff", True, 72)]),
 
-    # التذكرة: استحقاق سنوي — الموارد ثم المالية عبر المالك
+    # التذكرة: استحقاق سنوي — الموارد ثم المدير العام
     (RequestType.TICKET, "تذكرة السفر السنوية", {}, 0,
      [(1, ApproverType.ROLE, "hr_manager", True, 72),
-      (2, ApproverType.ROLE, "owner", True, None)]),
+      (2, ApproverType.ROLE, "ceo", True, None)]),
 
     # رحلة العمل: المدير ثم الموارد — والبدل بسياسة المنشأة
     (RequestType.BUSINESS_TRIP, "رحلة العمل", {}, 0,

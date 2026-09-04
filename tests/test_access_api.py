@@ -75,7 +75,8 @@ def test_role_list_never_leaks_other_account(acct, rls_enforced):
     )
     u = _user("api.iso", acct.account_id, "hr_manager", Scope.COMPANY)
     roles = _client(u).get("/api/access/roles/").json()
-    assert len(roles) == 6
+    from apps.accounts.services.roles import DEFAULT_ROLES
+    assert len(roles) == len(DEFAULT_ROLES)
     with account_scope(other.account_id):
         other_ids = set(
             Role.objects.filter(account_id=other.account_id).values_list("id", flat=True)

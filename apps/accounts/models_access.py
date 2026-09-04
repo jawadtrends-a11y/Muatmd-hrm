@@ -13,6 +13,7 @@ from apps.core.access.catalog import Scope
 
 class RoleCode(models.TextChoices):
     OWNER           = "owner",           _("مالك الحساب")
+    CEO             = "ceo",             _("المدير العام")
     HR_MANAGER      = "hr_manager",      _("مدير الموارد البشرية")
     HR_STAFF        = "hr_staff",        _("موظف موارد بشرية")
     DEPT_MANAGER    = "dept_manager",    _("مدير إدارة")
