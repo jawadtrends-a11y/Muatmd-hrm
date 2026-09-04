@@ -77,6 +77,8 @@ def test_no_raw_queryset_in_api_views():
                     "recipient_person_id=person.id",
                     # الاستثناء يخصّ عضوية بعينها — العضوية هي القيد
                     "membership=membership",
+                    # التخصيص يخصّ عضوية بعينها
+                    "membership=m,",
                     # الملكية تُنزع داخل حساب المنفّذ وحده
                     "account_id=me.account_id",
                     # مقيَّد بشركة الموظف الذي مرّ بالبوابة

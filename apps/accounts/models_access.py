@@ -6,6 +6,8 @@
 """
 from django.conf import settings
 from django.db import models
+
+from apps.core.models import CompanyScopedModel
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.access.catalog import Scope
@@ -19,6 +21,46 @@ class RoleCode(models.TextChoices):
     DEPT_MANAGER    = "dept_manager",    _("مدير إدارة")
     SUPERVISOR      = "supervisor",      _("مشرف")
     EMPLOYEE        = "employee",        _("موظف")
+
+
+class ApproverScope(CompanyScopedModel):
+    """
+    تخصيص أنواع الطلبات لمعتمِد بعينه (ق-74).
+
+    فمدير الموارد قد يجعل موظفًا يعتمد الإجازات وآخر السلف —
+    والدرجة تبقى واحدة في السلسلة.
+
+    والطلب يظهر لكل من في الدرجة، والقرار لمن خُصّص له وحده:
+    فالمتابعة حق الجميع، والقرار مسؤولية مَن كُلّف.
+
+    وغياب التخصيص لا يعطّل: من لا تخصيص له يعتمد كل الأنواع —
+    فالتخصيص استثناء لا شرط.
+    """
+
+    membership = models.ForeignKey(
+        "accounts.AccountMembership", on_delete=models.CASCADE,
+        related_name="approver_scopes", verbose_name=_("العضوية"))
+    request_type = models.CharField(
+        _("نوع الطلب"), max_length=30,
+        help_text=_("رمز النوع كما في كتالوج الطلبات"))
+
+    note = models.CharField(_("ملاحظة"), max_length=200, blank=True)
+    created_by_person_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("تخصيص اعتماد")
+        verbose_name_plural = _("تخصيصات الاعتماد")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membership", "company", "request_type"],
+                name="uq_approver_scope"),
+        ]
+        indexes = [
+            models.Index(fields=["company", "request_type"]),
+        ]
+
+    def __str__(self):
+        return f"{self.membership_id} — {self.request_type}"
 
 
 class Role(models.Model):

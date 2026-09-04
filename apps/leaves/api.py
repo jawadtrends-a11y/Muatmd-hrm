@@ -438,12 +438,17 @@ def my_approvals(request):
         # ينتظره بعده قبل أن يقرّر — لا بعد أن يفتح تفصيلًا منفصلًا
         # ق-74: درجة العلم تعرض «اطّلعت» وحدها بلا رفض — فالمعنى
         # إحاطة لا موافقة، وزر الرفض يناقضه
-        from apps.leaves.services.approvals import _step_is_acknowledgement
+        from apps.leaves.services.approvals import (
+            _step_is_acknowledgement, can_decide_type)
         rows.append({
             **_serialize_request(r, include_chain=True),
             "my_step": a.step_order,
             "waiting_since": r.created_at,
             "is_acknowledgement": _step_is_acknowledgement(r, a.step_order),
+            # ق-74: من لم يُخصّص للنوع يتابع ولا يقرّر — فالزر
+            # يختفي بدل أن يُرفض عند الضغط
+            "can_decide": can_decide_type(emp, r.request_type,
+                                          r.company_id),
         })
 
     return Response(rows)

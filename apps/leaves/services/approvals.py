@@ -287,6 +287,13 @@ def decide(*, request_obj, approver_employment, decision, comment="",
         raise ApprovalError(
             "لست ضمن معتمِدي هذه الدرجة، أو سبق أن اتخذت قرارًا")
 
+    # ق-74: القرار لمن خُصّص للنوع — والطلب يظهر للجميع في الدرجة.
+    # فالمتابعة حق الجميع، والقرار مسؤولية مَن كُلّف.
+    if not can_decide_type(approver_employment, request_obj.request_type,
+                           request_obj.company_id):
+        raise ApprovalError(
+            "هذا النوع مخصَّص لمعتمِد آخر — راجع مدير الموارد البشرية")
+
     record.decision = decision
     record.decided_at = timezone.now()
     record.comment = comment
@@ -446,3 +453,26 @@ def cancel_request(*, request_obj, by_employment, reason=""):
         channel="web")
 
     return request_obj
+
+
+def can_decide_type(employment, request_type, company_id=None):
+    """
+    هل يعتمد هذا الموظف طلبات هذا النوع؟ (ق-74)
+
+    التخصيص استثناء لا شرط: من لا تخصيص له يعتمد كل الأنواع.
+    ومن خُصّص لأنواع، يعتمدها وحدها — والباقي يراه ولا يقرّر فيه،
+    فالمتابعة حق الجميع والقرار مسؤولية مَن كُلّف.
+    """
+    from apps.accounts.models_access import ApproverScope
+
+    user = getattr(getattr(employment, "person", None), "user", None)
+    m = getattr(user, "account_membership", None)
+    if m is None:
+        return True      # لا حساب — لا تخصيص يقيّده
+
+    scopes = ApproverScope.objects.filter(
+        membership=m, company_id=company_id or employment.company_id)
+    types = set(scopes.values_list("request_type", flat=True))
+    if not types:
+        return True      # بلا تخصيص — يعتمد الكل
+    return request_type in types

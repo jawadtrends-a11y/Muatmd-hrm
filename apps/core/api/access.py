@@ -468,3 +468,68 @@ def _reassign_ownership(account_id, was_founding):
                 "by_fallback": code}
 
     return {"warning": "لا مالك ولا موارد — الحساب بلا سيطرة"}
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def member_approver_scopes(request, employment_id):
+    """
+    أنواع الطلبات التي يعتمدها هذا الموظف (ق-74).
+
+    فمدير الموارد قد يجعل موظفًا يعتمد الإجازات وآخر السلف. وبلا
+    تخصيص يعتمد الكل — فالتخصيص استثناء لا شرط.
+    """
+    from apps.accounts.models_access import ApproverScope
+    from apps.employees.models import Employment
+    from apps.leaves.services.requests import SPECS
+
+    Gate.require(request.user, "access.manage")
+
+    company_id = getattr(getattr(request, "account_ctx", None),
+                         "active_company_id", None)
+    emp = Gate.filter_queryset(
+        request.user, "access.manage", Employment.objects.all()
+    ).filter(id=employment_id,
+             company_id=company_id).select_related("person__user").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    user = getattr(emp.person, "user", None)
+    m = getattr(user, "account_membership", None) if user else None
+    if m is None:
+        return Response({"detail": "لا حساب دخول لهذا الموظف"}, status=404)
+
+    known = {code: spec.name_ar for code, spec in SPECS.items()}
+
+    if request.method == "PUT":
+        wanted = set(request.data.get("types") or [])
+        unknown = wanted - set(known)
+        if unknown:
+            return Response(
+                {"detail": f"أنواع غير معروفة: {sorted(unknown)}"},
+                status=400)
+
+        with transaction.atomic():
+            # معزول ذاتيًا: مقيَّد بعضوية الموظف المفتوح وشركته
+            # معزول ذاتيًا: مقيَّد بعضوية الموظف المفتوح
+            ApproverScope.objects.filter(membership=m, company_id=company_id).delete()
+            ApproverScope.objects.bulk_create([
+                ApproverScope(
+                    account_id=m.account_id,
+                    membership=m, company_id=company_id,
+                    request_type=t,
+                    created_by_person_id=getattr(
+                        getattr(request.user, "person", None), "id", None))
+                for t in sorted(wanted)])
+
+    # معزول ذاتيًا: مقيَّد بعضوية الموظف المفتوح وشركته
+    current = set(ApproverScope.objects.filter(membership=m, company_id=company_id).values_list(
+        "request_type", flat=True))
+
+    return Response({
+        "employment_id": emp.id,
+        "name_ar": emp.person.display_name,
+        "restricted": bool(current),
+        "types": [{"code": c, "name_ar": n, "assigned": c in current}
+                  for c, n in known.items()],
+    })

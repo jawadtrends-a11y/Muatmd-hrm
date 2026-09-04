@@ -51,6 +51,10 @@ const T: Dict = {
   attachment: { ar: "المرفق", en: "Attachment" },
   openAttachment: { ar: "فتح المرفق", en: "Open" },
   acknowledge: { ar: "اطّلعت", en: "Acknowledge" },
+  notYourType: {
+    ar: "هذا النوع مخصَّص لمعتمِد آخر — تتابعه ولا تقرّر فيه",
+    en: "Assigned to another approver — you follow but cannot decide",
+  },
   confirmApprove: {
     ar: "اعتماد الطلب؟ السلسلة تمضي للدرجة التالية ولا يُعاد القرار.",
     en: "Approve? The chain moves on and the decision is final.",
@@ -94,6 +98,8 @@ type Req = {
   approvals?: ChainRow[];
   /** ق-74: درجة علم — «اطّلعت» وحدها بلا رفض */
   is_acknowledgement?: boolean;
+  /** ق-74: من لم يُخصّص للنوع يتابع ولا يقرّر */
+  can_decide?: boolean;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -209,7 +215,14 @@ function ApprovalCard({
         </div>
       )}
 
-      {open ? (
+      {req.can_decide === false ? (
+        <div className="muted" style={{
+          fontSize: ".85rem", padding: "9px 12px",
+          background: "var(--paper-2)", borderRadius: "var(--radius-sm)",
+        }}>
+          {L("notYourType")}
+        </div>
+      ) : open ? (
         <div className="stack" style={{ gap: 8 }}>
           <input
             className="input"

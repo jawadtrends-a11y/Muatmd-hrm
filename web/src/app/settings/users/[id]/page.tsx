@@ -38,6 +38,20 @@ const T: Dict = {
     en: "The account owner holds all permissions",
   },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
+  scopesTitle: {
+    ar: "أنواع الطلبات التي يقرّر فيها",
+    en: "Request types they decide on",
+  },
+  scopesAll: {
+    ar: "بلا تخصيص — يقرّر في كل الأنواع",
+    en: "No restriction — decides on all types",
+  },
+  scopesSome: {
+    ar: "يتابع كل الطلبات ويقرّر في المحدَّدة وحدها",
+    en: "Follows all requests, decides only on the selected",
+  },
+  saveScopes: { ar: "حفظ التخصيص", en: "Save assignment" },
+  scopesSaved: { ar: "حُفظ التخصيص", en: "Assignment saved" },
   noAccess: { ar: "لا تملك هذه الصلاحية", en: "Not permitted" },
 };
 
@@ -61,6 +75,9 @@ type Perm = {
   is_override: boolean;
 };
 
+type ScopeType = { code: string; name_ar: string; assigned: boolean };
+
+
 type Data = {
   employment_id: number;
   employee_no: string;
@@ -76,6 +93,10 @@ export default function UserPage() {
   const id = params?.id as string;
 
   const [tab, setTab] = useState<"account" | "permissions">("account");
+  /** ق-74: أنواع الطلبات التي يعتمدها — بلا تخصيص يعتمد الكل */
+  const [scopes, setScopes] = useState<ScopeType[]>([]);
+  const [scopeOn, setScopeOn] = useState<Set<string>>(new Set());
+  const [savingScopes, setSavingScopes] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [on, setOn] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
@@ -99,6 +120,31 @@ export default function UserPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    apiGet<{ types: ScopeType[] }>(
+      `/access/members/${id}/approver-scopes/`)
+      .then((d) => {
+        setScopes(d.types || []);
+        setScopeOn(new Set((d.types || [])
+          .filter((t) => t.assigned).map((t) => t.code)));
+      })
+      .catch(() => setScopes([]));
+  }, [id]);
+
+  async function saveScopes() {
+    setSavingScopes(true);
+    try {
+      await apiPut(`/access/members/${id}/approver-scopes/`,
+                   { types: [...scopeOn] });
+      setToast(L("scopesSaved"));
+    } catch (e) {
+      setToast((e as ApiError).message);
+    } finally {
+      setSavingScopes(false);
+      setTimeout(() => setToast(""), 4000);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -300,6 +346,59 @@ export default function UserPage() {
                       );
                     })}
                   </div>
+
+                  {/* ق-74: أنواع الطلبات التي يقرّر فيها.
+                      والطلب يظهر له في الحالين — فالمتابعة حق
+                      الجميع، والقرار مسؤولية مَن كُلّف. */}
+                  {scopes.length > 0 && (
+                    <div style={{ borderTop: "1px solid var(--line)" }}>
+                      <div style={{
+                        padding: "12px 18px", background: "var(--paper-2)",
+                      }}>
+                        <div style={{
+                          fontWeight: 600, fontSize: ".9rem",
+                          color: "var(--teal)",
+                        }}>
+                          {L("scopesTitle")}
+                        </div>
+                        <div className="muted" style={{ fontSize: ".78rem" }}>
+                          {scopeOn.size === 0 ? L("scopesAll")
+                            : L("scopesSome")}
+                        </div>
+                      </div>
+
+                      <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                        {scopes.map((t) => (
+                          <label key={t.code} className="spread" style={{
+                            padding: "9px 18px", cursor: "pointer",
+                            borderBottom: "1px solid var(--line)",
+                          }}>
+                            <span style={{ fontSize: ".88rem" }}>
+                              {t.name_ar}
+                            </span>
+                            <input type="checkbox"
+                              checked={scopeOn.has(t.code)}
+                              onChange={() => setScopeOn((v) => {
+                                const n = new Set(v);
+                                if (n.has(t.code)) n.delete(t.code);
+                                else n.add(t.code);
+                                return n;
+                              })}
+                              style={{ width: 17, height: 17,
+                                       accentColor: "var(--teal)",
+                                       cursor: "pointer" }} />
+                          </label>
+                        ))}
+                      </div>
+
+                      <div style={{ padding: "10px 18px" }}>
+                        <button className="btn btn-sm btn-primary"
+                          disabled={savingScopes} onClick={saveScopes}>
+                          {savingScopes ? L("saving") : L("saveScopes")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{
                     padding: "12px 18px", borderTop: "1px solid var(--line)",

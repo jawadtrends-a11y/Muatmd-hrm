@@ -4,7 +4,10 @@ from decimal import Decimal as D
 
 import pytest
 
+from django.contrib.auth.models import User
+
 from apps.accounts.models import Account, Company
+from apps.accounts.models_access import AccountMembership
 from apps.accounts.services.provisioning import provision_account
 from apps.core.tenancy.context import account_scope
 from apps.employees.services.hiring import create_employment, create_person
@@ -343,3 +346,76 @@ def test_requests_isolated_between_accounts(env, rls_enforced_late):
     rls_enforced_late()
     with account_scope(other.account_id):
         assert Request.objects.count() == 0
+
+
+# ══════════ تخصيص أنواع الطلبات (ق-74) ══════════
+
+@pytest.mark.django_db(transaction=True)
+def test_no_scope_decides_all_types():
+    """
+    التخصيص استثناء لا شرط — فمن لا تخصيص له يقرّر في كل الأنواع.
+
+    وغيابه لا يعطّل الاعتماد.
+    """
+    from apps.leaves.services.approvals import can_decide_type
+
+    r = provision_account(slug="scope-1", display_name_ar="حساب",
+                          company_name_ar="شركة", is_sandbox=True)
+    with account_scope(r.account_id):
+        acc = Account.objects.get(id=r.account_id)
+        comp = Company.objects.get(id=r.company_id)
+        p, _ = create_person(
+            account=acc, first_name_ar="أمل", family_name_ar="الغامدي",
+            gender="female", nationality_code="SA",
+            id_type="national_id", id_number="1011122233",
+            mobile="0501112223")
+        e, _, _ = create_employment(person=p, company=comp,
+                                    employee_no="S1",
+                                    join_date=date(2023, 1, 1))
+        u = User.objects.create_user(username="sc.1", password="x")
+        p.user = u
+        p.save(update_fields=["user"])
+        AccountMembership.objects.create(
+            user=u, account=acc, active_company=comp)
+
+        assert can_decide_type(e, "leave")
+        assert can_decide_type(e, "advance")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_scope_limits_to_assigned_types():
+    """
+    ⚠️ من خُصّص لأنواع يقرّر فيها وحدها.
+
+    فتخصيص بلا أثر يعني أن كل معتمِد يقرّر في كل شيء — والتكليف
+    الإداري بلا معنى.
+    """
+    from apps.accounts.models_access import ApproverScope
+    from apps.leaves.services.approvals import can_decide_type
+
+    r = provision_account(slug="scope-2", display_name_ar="حساب",
+                          company_name_ar="شركة", is_sandbox=True)
+    with account_scope(r.account_id):
+        acc = Account.objects.get(id=r.account_id)
+        comp = Company.objects.get(id=r.company_id)
+        p, _ = create_person(
+            account=acc, first_name_ar="ريم", family_name_ar="القرني",
+            gender="female", nationality_code="SA",
+            id_type="national_id", id_number="1022233344",
+            mobile="0502223334")
+        e, _, _ = create_employment(person=p, company=comp,
+                                    employee_no="S2",
+                                    join_date=date(2023, 1, 1))
+        u = User.objects.create_user(username="sc.2", password="x")
+        p.user = u
+        p.save(update_fields=["user"])
+        m = AccountMembership.objects.create(
+            user=u, account=acc, active_company=comp)
+
+        ApproverScope.objects.create(
+            account=acc, membership=m, company=comp,
+            request_type="leave")
+
+        assert can_decide_type(e, "leave"), "مُنع من نوعه المخصَّص"
+        assert not can_decide_type(e, "advance"), (
+            "قرّر في نوع لم يُخصَّص له — التكليف بلا أثر")
