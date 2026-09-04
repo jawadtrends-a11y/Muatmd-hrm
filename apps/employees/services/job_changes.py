@@ -165,8 +165,12 @@ def _apply(change, actor=None):
 
     if change.change_type == ChangeType.DISMISSAL:
         # الفصل لا يُنهي الخدمة هنا: المخالصة وإخلاء الطرف وإرجاع
-        # العهد خطوات تالية (ق-54). والاعتماد يفتح الباب لها.
+        # العهد خطوات تالية (ق-54). والاعتماد يفتح الباب لها،
+        # ويعلّم الملف فيُعرف من هو في طريقه للخروج.
+        emp.termination_pending_from = change.effective_from
+        fields.append("termination_pending_from")
         out["settlement_due"] = True
+        out["termination_pending_from"] = str(change.effective_from)
 
     if fields:
         emp.save(update_fields=fields + ["updated_at"])

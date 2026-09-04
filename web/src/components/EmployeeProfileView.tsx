@@ -44,6 +44,7 @@ const T: Dict = {
   documents: { ar: "الوثائق", en: "Documents" },
   files: { ar: "الملفات", en: "Files" },
   changes: { ar: "التغييرات الوظيفية", en: "Job changes" },
+  leaving: { ar: "إنهاء قيد الإنجاز", en: "Leaving" },
   audit: { ar: "السجل الوظيفي", en: "Activity" },
   jcType: { ar: "النوع", en: "Type" },
   jcFrom: { ar: "يسري من", en: "Effective" },
@@ -505,6 +506,8 @@ type Profile = Record<string, never> & {
   is_own?: boolean;
   can_edit?: boolean;
   status_label: string;
+  /** ق-82: فصل معتمَد — الخدمة تنتهي بإتمام المخالصة */
+  termination_pending_from?: string | null;
   avatar_url: string | null;
   personal: Record<string, string>;
   job: Record<string, string | number | null>;
@@ -1220,6 +1223,14 @@ export default function EmployeeProfileView({
           }>
             {data.status_label}
           </span>
+          {/* ق-82: الفصل المعتمَد يفتح المخالصة ولا يُنهي الخدمة */}
+          {data.termination_pending_from && (
+            <span className="badge badge-danger"
+              style={{ marginInlineStart: 6 }}
+              title={String(data.termination_pending_from)}>
+              {L("leaving")}
+            </span>
+          )}
         </div>
       </div>
 

@@ -200,6 +200,15 @@ class Employment(CompanyScopedModel):
         "organization.JobTitle", on_delete=models.PROTECT,
         null=True, blank=True, related_name="employments",
         verbose_name=_("المسمى الوظيفي"))
+    # ق-82: الفصل المعتمَد يفتح المخالصة ولا يُنهي الخدمة.
+    #
+    # فمن أُقفل حسابه قبل إرجاع عهده يصعب متابعته، ويسقط من
+    # الشاشات التي تُنجز فيها معاملاته (ق-54).
+    termination_pending_from = models.DateField(
+        _("إنهاء خدمة قيد الإنجاز من"), null=True, blank=True,
+        help_text=_("تاريخ سريان الفصل المعتمَد — الخدمة تنتهي "
+                    "بإتمام المخالصة وإخلاء الطرف"))
+
     direct_manager = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="subordinates", verbose_name=_("المدير المباشر"))

@@ -49,6 +49,9 @@ def _employment_brief(e):
         "job_title": e.job_title.name_ar if e.job_title else None,
         "department": e.department.name_ar if e.department else None,
         "status": e.status, "join_date": e.join_date,
+        # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته تُنجز وهو
+        # نشط (المخالصة وإخلاء الطرف وإرجاع العهد)
+        "termination_pending_from": e.termination_pending_from,
         "is_gosi_registered": e.is_gosi_registered,
         "is_mol_registered": e.is_mol_registered,
         "include_in_wps": e.include_in_wps,
@@ -421,6 +424,9 @@ def my_profile(request):
                         if emp.direct_manager else ""),
             "status": emp.status,
             "status_label": emp.get_status_display(),
+            # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته
+            # تُنجز وهو نشط (المخالصة وإخلاء الطرف والعهد)
+            "termination_pending_from": emp.termination_pending_from,
         },
         "service": {
             "join_date": emp.join_date,
@@ -853,6 +859,9 @@ def employee_profile(request, employment_id):
         "employee_no": emp.employee_no,
         "status": emp.status,
         "status_label": emp.get_status_display(),
+        # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته
+        # تُنجز وهو نشط (المخالصة وإخلاء الطرف والعهد)
+        "termination_pending_from": emp.termination_pending_from,
         "avatar_url": avatar["url"] if avatar else None,
         # الموظف يقرأ ملفه ويطلب تعديله؛ الموارد تعدّل مباشرةً
         "is_own": bool(own),

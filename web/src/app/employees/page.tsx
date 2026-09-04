@@ -19,6 +19,7 @@ const T: Dict = {
     en: "Employment records and statutory registration",
   },
   active: { ar: "على رأس العمل", en: "Active" },
+  leaving: { ar: "إنهاء قيد الإنجاز", en: "Leaving" },
   all: { ar: "الكل", en: "All" },
   terminated: { ar: "منتهية خدمتهم", en: "Terminated" },
   suspended: { ar: "موقوفون", en: "Suspended" },
@@ -41,6 +42,8 @@ type Employee = {
   is_gosi_registered: boolean;
   is_mol_registered: boolean;
   include_in_wps: boolean;
+  /** ق-82: فصل معتمَد — الخدمة تنتهي بإتمام المخالصة */
+  termination_pending_from?: string | null;
 };
 
 const STATUSES = ["active", "", "suspended", "terminated"] as const;
@@ -71,14 +74,24 @@ export default function EmployeesPage() {
       render: (r) => flag(r.is_mol_registered) },
     { key: "wps", label: { ar: "حماية الأجور", en: "WPS" }, width: 110,
       render: (r) => flag(r.include_in_wps) },
-    { key: "status", label: { ar: "الحالة", en: "Status" }, width: 120,
+    { key: "status", label: { ar: "الحالة", en: "Status" }, width: 170,
       render: (r) => (
-        <span className={
-          r.status === "active" ? "badge badge-ok"
-            : r.status === "terminated" ? "badge" : "badge badge-warn"
-        }>
-          {r.status === "active" ? L("active") : r.status === "terminated" ? L("terminated") : L("suspended")}
-        </span>
+        <div className="row" style={{ gap: 5, flexWrap: "wrap" }}>
+          <span className={
+            r.status === "active" ? "badge badge-ok"
+              : r.status === "terminated" ? "badge" : "badge badge-warn"
+          }>
+            {r.status === "active" ? L("active") : r.status === "terminated" ? L("terminated") : L("suspended")}
+          </span>
+          {/* ق-82: الفصل المعتمَد يفتح المخالصة ولا يُنهي الخدمة —
+              فمن هو في طريقه للخروج يُعرف ومعاملاته تُنجز وهو نشط */}
+          {r.termination_pending_from && (
+            <span className="badge badge-danger"
+              title={String(r.termination_pending_from)}>
+              {L("leaving")}
+            </span>
+          )}
+        </div>
       ) },
   ];
 
