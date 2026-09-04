@@ -5,6 +5,7 @@ API إدارة الصلاحيات والأدوار.
 كل دور قابل للتعديل عدا الحد الأدنى المحمي لدور المالك.
 """
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -282,10 +283,13 @@ def transfer_ownership(request, employment_id):
 
     company_id = getattr(getattr(request, "account_ctx", None),
                          "active_company_id", None)
-    emp = Gate.filter_queryset(
-        request.user, "access.manage", Employment.objects.all()
-    ).filter(id=employment_id,
-             company_id=company_id).select_related("person__user").first()
+    # معزول ذاتيًا: مقيَّد بحساب المنفّذ نفسه.
+    #
+    # ولا يُفلتر بـaccess.manage: المدير العام يمنح الملكية (ق-76)
+    # ولا يدير الصلاحيات (ق-78) — فالفلترة بها تمنعه مما يملكه.
+    emp = Employment.objects.filter(
+        id=employment_id, account_id=me.account_id,
+        company_id=company_id).select_related("person__user").first()
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
 
@@ -295,24 +299,62 @@ def transfer_ownership(request, employment_id):
         return Response(
             {"detail": "لا حساب دخول لهذا الموظف — أنشئه أولًا"}, status=400)
 
-    if target.id == me.id:
-        return Response({"detail": "الملكية لك أصلًا"}, status=400)
+    grant = request.data.get("grant", True)
 
-    with transaction.atomic():
-        # مالك واحد للحساب: الملكية تنتقل ولا تتعدّد
-        # معزول ذاتيًا: مقيَّد بحساب المنفّذ نفسه
-        AccountMembership.objects.filter(account_id=me.account_id, is_account_owner=True).update(is_account_owner=False)
-        target.is_account_owner = True
-        target.save(update_fields=["is_account_owner"])
+    if grant:
+        if target.is_account_owner:
+            return Response({"detail": "هو مالك أصلًا"}, status=400)
+
+        with transaction.atomic():
+            # الملكية تُضاف ولا تُنقل (ق-79): الشركات الكبرى تحتاج
+            # أكثر من مالك لئلا يتوقف كل شيء بغياب واحد.
+            #
+            # وأول مالك يُوسم مؤسسًا: لا تُنزع ملكيته إلا بحذفه
+            # نهائيًا من الشركة، ويخلفه أقدم مالك بعده.
+            first = not AccountMembership.objects.filter(
+                account_id=me.account_id, is_account_owner=True).exists()
+            target.is_account_owner = True
+            target.is_founding_owner = first
+            target.owner_since = timezone.now()
+            target.save(update_fields=["is_account_owner",
+                                       "is_founding_owner", "owner_since"])
+        summary = f"مُنحت ملكية الحساب لـ{emp.person.display_name}"
+
+    else:
+        if not target.is_account_owner:
+            return Response({"detail": "ليس مالكًا"}, status=400)
+
+        if target.is_founding_owner:
+            return Response(
+                {"detail": "المالك المؤسس لا تُنزع ملكيته — تُنقل بحذفه "
+                           "نهائيًا من الشركة",
+                 "code": "founding_owner"}, status=400)
+
+        others = AccountMembership.objects.filter(
+            account_id=me.account_id, is_account_owner=True
+        ).exclude(id=target.id).count()
+        if others == 0:
+            return Response(
+                {"detail": "لا يُزال آخر مالك — امنح الملكية لغيره أولًا",
+                 "code": "last_owner"}, status=400)
+
+        target.is_account_owner = False
+        target.owner_since = None
+        target.save(update_fields=["is_account_owner", "owner_since"])
+        summary = f"نُزعت ملكية الحساب عن {emp.person.display_name}"
 
     from apps.core.services.audit import log_action
     log_action(
-        instance=target, action="update", actor=request.user.person,
-        label=emp.employee_no,
-        summary=f"نُقلت ملكية الحساب إلى {emp.person.display_name}",
-        channel="web")
+        instance=target, action="update",
+        actor=getattr(request.user, "person", None),
+        label=emp.employee_no, summary=summary, channel="web")
+
+    owners = AccountMembership.objects.filter(
+        account_id=me.account_id, is_account_owner=True
+    ).select_related("user").order_by("owner_since")
 
     return Response({
-        "owner_employment_id": emp.id,
-        "owner_name": emp.person.display_name,
+        "granted": bool(grant),
+        "owners": [{"username": o.user.username,
+                    "is_founding": o.is_founding_owner} for o in owners],
     })
