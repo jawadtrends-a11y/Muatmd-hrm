@@ -128,7 +128,87 @@ def active_delegations_for(employment, on_day=None):
     يراهم صاحبهم — طوال المدة لا قبلها ولا بعدها.
     """
     day = on_day or date.today()
+    from django.db.models import Q
     return Delegation.objects.filter(
+        Q(ends_on__gte=day) | Q(ends_on__isnull=True),
         deputy=employment, status=DelegationStatus.ACCEPTED,
-        starts_on__lte=day, ends_on__gte=day,
+        starts_on__lte=day,
     ).select_related("absentee")
+
+
+# ══════════ الخلافة عند المغادرة (ق-79) ══════════
+
+#: المواقع التي لا تُترك بلا بديل — من يعتمد أو يدير فريقًا
+ADMIN_ROLES = {"ceo", "hr_manager", "hr_staff", "dept_manager", "supervisor"}
+
+
+def holds_admin_position(employment):
+    """
+    هل يشغل موقعًا إداريًا؟
+
+    فمغادرة الموظف العادي لا تقطع سلسلة — لا يعتمد شيئًا ولا
+    يدير أحدًا. والبديل شرط لمن يعتمد أو يدير أو يملك الحساب.
+    """
+    user = getattr(getattr(employment, "person", None), "user", None)
+    m = getattr(user, "account_membership", None)
+    if m is None:
+        return False
+    if m.is_account_owner:
+        return True
+    codes = {a.role.code for a in m.role_assignments.select_related("role")}
+    if codes & ADMIN_ROLES:
+        return True
+    # ومن يدير قسمًا أو يشرف على أحد ولو بلا دور إداري مسجَّل
+    from apps.employees.models import Employment
+    if Employment.objects.filter(direct_manager=employment).exists():
+        return True
+    from apps.organization.models import Department
+    return Department.objects.filter(
+        manager_employment_id=employment.id).exists()
+
+
+@transaction.atomic
+def appoint_successor(*, leaving, successor, effective_from,
+                      actor=None, note=""):
+    """
+    يعيّن خليفة لمن يغادر موقعه (ق-79).
+
+    الخليفة يبقى بدوره ويرث المهام: مشرف يخلف مدير إدارة يبقى
+    مشرفًا ويدير الإدارة كاملة — كالإنابة تمامًا (ق-75) لكن بلا
+    نهاية، فمن غادر لا يُنتظر رجوعه.
+    """
+    if successor.id == leaving.id:
+        raise DelegationError("لا يخلف الموظف نفسه — اختر غيره")
+
+    if successor.company_id != leaving.company_id:
+        raise DelegationError("الخليفة من شركة أخرى")
+
+    if successor.status != EmploymentStatus.ACTIVE:
+        raise DelegationError("الخليفة غير نشط على رأس العمل")
+
+    d = Delegation.objects.create(
+        account_id=leaving.account_id, company_id=leaving.company_id,
+        request=None, absentee=leaving, deputy=successor,
+        starts_on=effective_from, ends_on=None,
+        is_permanent=True, note=note,
+        # الخلافة قرار إداري نافذ لا عرض يُقبل: من غادر لا يبقى
+        # موقعه معلّقًا بانتظار موافقة. والاعتماد يقع على القرار
+        # نفسه في سلسلته لا على الخلافة بعده.
+        status=DelegationStatus.ACCEPTED)
+
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=d, action="create", actor=actor,
+        label=f"{leaving.employee_no} → {successor.employee_no}",
+        summary=(f"خلافة دائمة: {successor.person.display_name} يخلف "
+                 f"{leaving.person.display_name} من {effective_from}"),
+        channel="web")
+    return d
+
+
+def successor_of(employment):
+    """خليفة هذا الموظف إن عُيّن — أحدث خلافة سارية."""
+    return Delegation.objects.filter(
+        absentee=employment, is_permanent=True,
+        status=DelegationStatus.ACCEPTED
+    ).select_related("deputy__person").order_by("-starts_on").first()

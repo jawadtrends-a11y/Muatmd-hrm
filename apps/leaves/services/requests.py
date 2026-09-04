@@ -109,7 +109,10 @@ SPECS = {
     RequestType.RESIGNATION: RequestSpec(
         code="resignation", name_ar="طلب إنهاء عقد", icon="alert",
         required_fields=("termination_reason", "request_date"),
-        optional_fields=("note",),
+        # ق-79: البديل إلزامي لمن يشغل موقعًا إداريًا — وإلزامه
+        # يُحسب بموقع المُقدِّم لا بشرط مكتوب هنا، فالموظف العادي
+        # لا يقطع بمغادرته سلسلة
+        optional_fields=("successor_employment_id", "note"),
         hint_ar="مدة الإشعار 30 يومًا تبدأ من تاريخ الاعتماد النهائي",
     ),
     RequestType.OVERTIME: RequestSpec(
@@ -610,8 +613,46 @@ def _effect_resignation(req):
 
     لا يغيّر حالة الموظف تلقائيًا — إنهاء الخدمة قرار بمخالصة
     وإخلاء طرف وإرجاع عهد.
+
+    والخليفة يُفعَّل هنا لا عند التقديم (ق-79): البديل يُسمّى مع
+    الطلب، والمهام لا تنتقل حتى يُعتمد — فقد يُرفض.
     """
-    return {"note": "يبقى مفتوحًا حتى إنهاء المخالصة وإخلاء الطرف"}
+    out = {"note": "يبقى مفتوحًا حتى إنهاء المخالصة وإخلاء الطرف"}
+
+    sid = (req.payload or {}).get("successor_employment_id")
+    if not sid:
+        return out
+
+    from apps.employees.models import Employment
+    from apps.leaves.services.delegation import (DelegationError,
+                                                 appoint_successor,
+                                                 successor_of)
+
+    if successor_of(req.employment) is not None:
+        out["successor"] = "معيَّن سلفًا"
+        return out
+
+    successor = Employment.objects.filter(
+        id=sid, company_id=req.company_id).first()
+    if successor is None:
+        out["successor_error"] = "البديل غير موجود"
+        return out
+
+    try:
+        # يسري من تاريخ الطلب — فالمهام تنتقل حين يُعتمد لا قبله
+        starts = (req.payload or {}).get("request_date")
+        from datetime import date as _date
+        appoint_successor(
+            leaving=req.employment, successor=successor,
+            effective_from=(_date.fromisoformat(str(starts)) if starts
+                            else _date.today()),
+            note=f"خلافة بموجب {req.request_no}")
+        out["successor"] = successor.person.display_name
+    except (DelegationError, ValueError) as e:
+        # فشل الخلافة لا يلغي اعتماد الاستقالة — القرار الإداري تمّ
+        out["successor_error"] = str(e)
+
+    return out
 
 
 

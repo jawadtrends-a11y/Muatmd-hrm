@@ -354,8 +354,9 @@ class Delegation(CompanyScopedModel):
     الموظف في إجازته.
     """
 
+    # الخلافة الدائمة بلا طلب — تقع بالمغادرة لا بإجازة (ق-79)
     request = models.OneToOneField(
-        "leaves.Request", on_delete=models.CASCADE,
+        "leaves.Request", on_delete=models.CASCADE, null=True, blank=True,
         related_name="delegation", verbose_name=_("الطلب"))
     absentee = models.ForeignKey(
         "employees.Employment", on_delete=models.CASCADE,
@@ -365,7 +366,11 @@ class Delegation(CompanyScopedModel):
         related_name="delegations_received", verbose_name=_("النائب"))
 
     starts_on = models.DateField(_("من"))
-    ends_on = models.DateField(_("إلى"))
+    ends_on = models.DateField(_("إلى"), null=True, blank=True)
+    is_permanent = models.BooleanField(
+        _("خلافة دائمة"), default=False,
+        help_text=_("بديل من غادر موقعه — لا يُنتظر انتهاؤها (ق-79). "
+                    "والإنابة المؤقتة تنتهي بتاريخها (ق-75)"))
 
     status = models.CharField(
         _("الحالة"), max_length=20, choices=DelegationStatus.choices,
@@ -389,8 +394,12 @@ class Delegation(CompanyScopedModel):
         """مقبولة وسارية اليوم — فالتفويض يبدأ وينتهي تلقائيًا."""
         from django.utils import timezone
         today = timezone.localdate()
-        return (self.status == DelegationStatus.ACCEPTED
-                and self.starts_on <= today <= self.ends_on)
+        if self.status != DelegationStatus.ACCEPTED:
+            return False
+        if self.starts_on > today:
+            return False
+        # الخلافة الدائمة بلا نهاية — بديل من غادر لا يُنتظر رجوعه
+        return self.ends_on is None or today <= self.ends_on
 
 
 class ApproverType(models.TextChoices):

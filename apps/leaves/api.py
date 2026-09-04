@@ -547,6 +547,19 @@ def submit_request(request):
     # صفحة خطأ حمراء بدل رسالة تخبر بما يُفعل
     from apps.leaves.services.balances import LeaveError
 
+    # ق-79: من يشغل موقعًا إداريًا لا يغادر بلا بديل — فمغادرته
+    # تقطع سلاسل الموافقات وتترك مرؤوسيه بلا مرجع. والبديل يُسمّى
+    # مع الطلب ويسري بالاعتماد لا قبله.
+    if rtype == RequestType.RESIGNATION:
+        from apps.leaves.services.delegation import (holds_admin_position,
+                                                     successor_of)
+        if (holds_admin_position(emp) and successor_of(emp) is None
+                and not payload.get("successor_employment_id")):
+            return Response(
+                {"detail": "سمِّ بديلًا يخلفك — فموقعك الإداري لا يُترك "
+                           "بلا شاغل",
+                 "code": "successor_required"}, status=400)
+
     try:
         res = create_request(
             employment=emp, request_type=rtype, payload=payload,
