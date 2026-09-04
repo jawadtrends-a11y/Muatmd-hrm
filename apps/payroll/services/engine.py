@@ -621,15 +621,18 @@ def variance_report(run):
 
 def _pending_retro(run, employment):
     """
-    تسويات هذا الموظف المعلّقة (ق-69).
+    تسويات هذا الموظف المختارة للإدراج في هذا المسير (ق-69).
+
+    ولا تُدرج تلقائيًا: القرار صريح بيد موظف الموارد — فما يمرّ
+    بالإهمال يُصرف بلا مراجعة. وهو يختارها قبل الاحتساب.
 
     ولا تُدرج تسوية شهر في مسير الشهر نفسه — فالاحتساب يأخذها.
     """
     from apps.payroll.models import RetroAdjustment, RetroStatus
 
     return list(RetroAdjustment.objects.filter(
-        employment=employment, status=RetroStatus.PENDING,
-        company_id=run.company_id,
+        employment=employment, status=RetroStatus.SELECTED,
+        merged_run=run,
     ).exclude(period_year=run.period_year,
               period_month=run.period_month))
 

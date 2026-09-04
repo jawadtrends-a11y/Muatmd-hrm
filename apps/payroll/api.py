@@ -514,7 +514,9 @@ def retro_pending(request):
     Gate.require(request.user, "payroll.create")
 
     # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
-    qs = RetroAdjustment.objects.filter(company_id=_company_id(request), status=RetroStatus.PENDING).select_related(
+    # المعلّقة والمختارة معًا — فمن أدرج تسوية يراها مختارة لا
+    # تختفي عنه قبل أن يُحتسب المسير
+    qs = RetroAdjustment.objects.filter(company_id=_company_id(request), status__in=[RetroStatus.PENDING, RetroStatus.SELECTED]).select_related(
         "employment__person")
 
     return Response([{
@@ -528,6 +530,8 @@ def retro_pending(request):
         "amount_after": str(a.amount_after),
         "amount": str(a.amount),
         "reason_ar": a.reason_ar,
+        "status": a.status,
+        "status_label": a.get_status_display(),
         "created_at": a.created_at,
     } for a in qs.order_by("-period_year", "-period_month")])
 
@@ -546,11 +550,21 @@ def retro_decide(request, adjustment_id):
     if a is None:
         return Response({"detail": "التسوية غير موجودة"}, status=404)
 
+    # الإدراج يحتاج مسيرًا قيد الإعداد — والقرار صريح لا تلقائي
+    run = None
+    if request.data.get("run_id"):
+        from apps.payroll.models import PayrollRun
+        run = PayrollRun.objects.filter(
+            id=request.data["run_id"],
+            company_id=_company_id(request)).first()
+        if run is None:
+            return Response({"detail": "المسير غير موجود"}, status=400)
+
     try:
         a = decide_adjustment(
             adjustment=a, action=request.data.get("action", ""),
             actor=getattr(request.user, "person", None),
-            note=request.data.get("note", ""))
+            note=request.data.get("note", ""), run=run)
     except RetroError as e:
         return Response({"detail": str(e), "code": "cannot_decide"},
                         status=409)

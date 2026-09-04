@@ -11,7 +11,21 @@ import { useRouter } from "next/navigation";
 
 import { apiGet, apiPost, qs, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcPayroll, IcPlus } from "@/components/Icons";
+
+type RetroRow = {
+  id: number;
+  employee_no: string;
+  employee_name: string;
+  period: string;
+  source_label: string;
+  amount: string;
+  reason_ar: string;
+  status: string;
+  status_label: string;
+};
+
 
 const T: Dict = {
   title: { ar: "مسيرات الرواتب", en: "Payroll Runs" },
@@ -34,6 +48,39 @@ const T: Dict = {
   submit: { ar: "رفع للاعتماد", en: "Submit" },
   approve: { ar: "اعتماد", en: "Approve" },
   open: { ar: "فتح", en: "Open" },
+  retroTitle: { ar: "تسويات تنتظر الإدراج", en: "Pending adjustments" },
+  retroHint: {
+    ar: "فروق عن شهور أُغلقت مسيراتها — تُدرج في المسير القادم",
+    en: "Differences from closed months — merged into the next run",
+  },
+  retroEmployee: { ar: "الموظف", en: "Employee" },
+  retroPeriod: { ar: "الشهر", en: "Period" },
+  retroSource: { ar: "المصدر", en: "Source" },
+  retroAmount: { ar: "الفرق", en: "Amount" },
+  retroSelect: { ar: "إدراج", en: "Include" },
+  retroDefer: { ar: "تأجيل", en: "Defer" },
+  retroStatus: { ar: "الحالة", en: "Status" },
+  retroNoRun: {
+    ar: "أنشئ مسيرًا قيد الإعداد أولًا لتُدرج فيه التسويات",
+    en: "Create a draft run first to include adjustments",
+  },
+  confirmSelect: {
+    ar: "إدراج التسوية في المسير؟ ستظهر بندًا في قسيمة الموظف.",
+    en: "Include in the run? It becomes a payslip line.",
+  },
+  confirmDefer: {
+    ar: "تأجيل التسوية؟ تبقى معلّقة لمسير لاحق.",
+    en: "Defer it? It stays pending for a later run.",
+  },
+  confirmCancel: {
+    ar: "إلغاء التسوية نهائيًا؟ لن يستلم الموظف هذا الفرق.",
+    en: "Cancel permanently? The employee will not receive it.",
+  },
+  retroCancel: { ar: "إلغاء", en: "Cancel" },
+  retroMergeHint: {
+    ar: "لا تُدرج تسوية إلا باختيارك — والمُدرجة تظهر في القسيمة عند احتساب المسير",
+    en: "Nothing merges without your choice — selected ones appear when calculated",
+  },
   year: { ar: "السنة", en: "Year" },
   month: { ar: "الشهر", en: "Month" },
   create: { ar: "إنشاء", en: "Create" },
@@ -249,6 +296,12 @@ function RunRow({
 export default function PayrollPage() {
   const { L } = useT(T);
   const [runs, setRuns] = useState<Run[]>([]);
+  /** ق-69: فروق عن شهور أُغلقت — تُدرج في المسير القادم */
+  const [retroRows, setRetroRows] = useState<RetroRow[]>([]);
+  /** التأكيد بتصميم النظام لا بنافذة المتصفح */
+  const [ask, setAsk] = useState<{
+    id: number; action: "select" | "defer" | "cancel";
+  } | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
   const [busy, setBusy] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -262,10 +315,41 @@ export default function PayrollPage() {
     setTimeout(() => setToast(""), 5000);
   };
 
+  /** ق-69: موظف الموارد يؤجّل التسوية أو يلغيها */
+  async function decideRetro(
+    id: number, action: "select" | "defer" | "cancel",
+  ) {
+    // الإدراج يحتاج مسيرًا قيد الإعداد
+    const draft = runs.find(
+      (r) => r.status === "draft" || r.status === "calculated");
+    if (action === "select" && !draft) {
+      setToast(L("retroNoRun"));
+      setTimeout(() => setToast(""), 5000);
+      return;
+    }
+
+    setBusyId(id);
+    try {
+      await apiPost(`/payroll/retro/${id}/decide/`, {
+        action,
+        ...(action === "select" ? { run_id: draft!.id } : {}),
+      });
+      apiGet<RetroRow[]>("/payroll/retro/")
+        .then(setRetroRows).catch(() => {});
+    } catch (e) {
+      setToast((e as ApiError).message);
+      setTimeout(() => setToast(""), 4000);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const load = useCallback(async () => {
     setBusy(true);
     try {
       setRuns(await apiGet<Run[]>(`/payroll/runs/${qs({ year })}`));
+      apiGet<RetroRow[]>("/payroll/retro/")
+        .then(setRetroRows).catch(() => setRetroRows([]));
     } catch (e) {
       notify((e as ApiError).message, "danger");
     } finally {
@@ -358,6 +442,119 @@ export default function PayrollPage() {
             onChange={(e) => setYear(Number(e.target.value))} />
         </div>
       </div>
+
+      {/* ق-69: التسويات تظهر لموظف الموارد عند إعداد المسير،
+          فيدمجها أو يؤجّلها أو يلغيها */}
+      {retroRows.length > 0 && (
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div style={{
+            padding: "14px 18px", borderBottom: "1px solid var(--line)",
+          }}>
+            <div className="row" style={{ gap: 8 }}>
+              <h3 style={{ fontSize: "1rem" }}>{L("retroTitle")}</h3>
+              <span className="badge badge-warn">
+                <span className="num">{retroRows.length}</span>
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: ".82rem", marginTop: 2 }}>
+              {L("retroHint")}
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{L("retroEmployee")}</th>
+                  <th>{L("retroPeriod")}</th>
+                  <th>{L("retroSource")}</th>
+                  <th style={{ textAlign: "end" }}>{L("retroAmount")}</th>
+                  <th>{L("retroStatus")}</th>
+                  <th style={{ width: 210 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {retroRows.map((a) => (
+                  <tr key={a.id}>
+                    <td className="truncate">
+                      <span className="num">{a.employee_no}</span>
+                      {" — "}{a.employee_name}
+                    </td>
+                    <td><span className="num">{a.period}</span></td>
+                    <td className="muted">
+                      {a.source_label}
+                      {a.reason_ar && (
+                        <div style={{ fontSize: ".78rem" }}>{a.reason_ar}</div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "end" }}>
+                      <span className="num" style={{
+                        color: Number(a.amount) >= 0
+                          ? "var(--teal)" : "var(--danger)",
+                        fontWeight: 600,
+                      }}>
+                        {a.amount}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={a.status === "selected"
+                        ? "badge badge-teal" : "badge badge-warn"}>
+                        {a.status_label}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="row" style={{ gap: 6 }}>
+                        {a.status === "pending" && (
+                          <>
+                        <button className="btn btn-sm btn-primary"
+                          disabled={busyId === a.id}
+                          onClick={() => setAsk({ id: a.id, action: "select" })}>
+                          {L("retroSelect")}
+                        </button>
+                        <button className="btn btn-sm btn-ghost"
+                          disabled={busyId === a.id}
+                          onClick={() => setAsk({ id: a.id, action: "defer" })}>
+                          {L("retroDefer")}
+                        </button>
+                        <button className="btn btn-sm btn-ghost"
+                          disabled={busyId === a.id}
+                          style={{ color: "var(--danger)" }}
+                          onClick={() => setAsk({ id: a.id, action: "cancel" })}>
+                          {L("retroCancel")}
+                        </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="muted" style={{
+            padding: "10px 18px", borderTop: "1px solid var(--line)",
+            fontSize: ".82rem",
+          }}>
+            {L("retroMergeHint")}
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={ask !== null}
+        tone={ask?.action === "cancel" ? "danger" : "primary"}
+        confirmLabel={ask ? L(ask.action === "select" ? "retroSelect"
+          : ask.action === "defer" ? "retroDefer" : "retroCancel") : ""}
+        message={ask ? L(ask.action === "select" ? "confirmSelect"
+          : ask.action === "defer" ? "confirmDefer" : "confirmCancel") : ""}
+        onCancel={() => setAsk(null)}
+        onConfirm={() => {
+          const a = ask;
+          setAsk(null);
+          if (a) decideRetro(a.id, a.action);
+        }}
+      />
 
       <div className="card" style={{ overflow: "hidden" }}>
         {busy ? (

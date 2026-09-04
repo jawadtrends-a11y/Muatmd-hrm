@@ -11,7 +11,8 @@ from apps.core.models import CompanyScopedModel
 
 
 class RetroStatus(models.TextChoices):
-    PENDING = "pending", _("بانتظار الإدراج")
+    PENDING = "pending", _("بانتظار القرار")
+    SELECTED = "selected", _("مختارة للإدراج")
     MERGED = "merged", _("مُدرجة في مسير")
     DEFERRED = "deferred", _("مؤجَّلة")
     CANCELLED = "cancelled", _("ملغاة")

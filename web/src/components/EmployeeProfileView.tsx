@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiPost, apiPut, apiDelete, API_BASE, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import NationalityField, { nationalityLabel } from "@/components/NationalityField";
 import AuthImage from "@/components/AuthImage";
 import {
@@ -44,6 +45,10 @@ const T: Dict = {
   documents: { ar: "الوثائق", en: "Documents" },
   files: { ar: "الملفات", en: "Files" },
   changes: { ar: "التغييرات الوظيفية", en: "Job changes" },
+  confirmDelete: {
+    ar: "حذف السجل؟ لا يُتراجع عن الحذف.",
+    en: "Delete this record? This cannot be undone.",
+  },
   leaving: { ar: "إنهاء قيد الإنجاز", en: "Leaving" },
   audit: { ar: "السجل الوظيفي", en: "Activity" },
   jcType: { ar: "النوع", en: "Type" },
@@ -825,6 +830,8 @@ function DependentsTab({
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [relation, setRelation] = useState("spouse");
+  /** ق-44: الحذف لا يُتراجع عنه — فيُؤكَّد */
+  const [askDel, setAskDel] = useState<number | null>(null);
   const [idNumber, setIdNumber] = useState("");
   const [birth, setBirth] = useState("");
   const [busy, setBusy] = useState(false);
@@ -860,6 +867,19 @@ function DependentsTab({
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={askDel !== null}
+        tone="danger"
+        confirmLabel={L("delete", "حذف")}
+        message={L("confirmDelete")}
+        onCancel={() => setAskDel(null)}
+        onConfirm={() => {
+          const id = askDel;
+          setAskDel(null);
+          if (id !== null) remove(id);
+        }}
+      />
+
       <div className="spread">
         <div className="row">
           <IcUsers size={19} />
@@ -956,7 +976,7 @@ function DependentsTab({
                   <td style={{ textAlign: "end" }}>
                     <button className="btn btn-sm btn-ghost"
                       style={{ color: "var(--danger)" }}
-                      onClick={() => remove(d.id)}>
+                      onClick={() => setAskDel(d.id)}>
                       {L("remove")}
                     </button>
                   </td>
@@ -984,6 +1004,8 @@ function ContactTab({
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [relation, setRelation] = useState("");
+  /** ق-44: الحذف لا يُتراجع عنه — فيُؤكَّد */
+  const [askDel, setAskDel] = useState<number | null>(null);
   const [mobile, setMobile] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -1008,6 +1030,19 @@ function ContactTab({
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={askDel !== null}
+        tone="danger"
+        confirmLabel={L("delete", "حذف")}
+        message={L("confirmDelete")}
+        onCancel={() => setAskDel(null)}
+        onConfirm={() => {
+          const id = askDel;
+          setAskDel(null);
+          if (id !== null) remove(id);
+        }}
+      />
+
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>{L("contact")}</h3>
         <ViewGrid items={[
@@ -1078,7 +1113,7 @@ function ContactTab({
                   <td style={{ width: 90, textAlign: "end" }}>
                     <button className="btn btn-sm btn-ghost"
                       style={{ color: "var(--danger)" }}
-                      onClick={() => remove(c.id)}>
+                      onClick={() => setAskDel(c.id)}>
                       {L("remove")}
                     </button>
                   </td>

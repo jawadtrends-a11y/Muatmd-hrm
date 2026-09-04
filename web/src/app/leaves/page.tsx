@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost, qs, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcLeave, IcX } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
   from "@/components/ApprovalChain";
@@ -50,6 +51,14 @@ const T: Dict = {
   attachment: { ar: "المرفق", en: "Attachment" },
   openAttachment: { ar: "فتح المرفق", en: "Open" },
   acknowledge: { ar: "اطّلعت", en: "Acknowledge" },
+  confirmApprove: {
+    ar: "اعتماد الطلب؟ السلسلة تمضي للدرجة التالية ولا يُعاد القرار.",
+    en: "Approve? The chain moves on and the decision is final.",
+  },
+  confirmReject: {
+    ar: "رفض الطلب؟ السلسلة تُغلق ويعود الطلب لمقدّمه.",
+    en: "Reject? The chain closes and the request returns.",
+  },
   delegations: { ar: "إنابات تنتظر قرارك", en: "Delegation requests" },
   delegHint: {
     ar: "طلب منك أن تنوب عنه أثناء غيابه",
@@ -110,11 +119,12 @@ function payloadDays(p: Record<string, unknown>): string {
 /* ══ بطاقة طلب بانتظار الاعتماد — خارج المكوّن الرئيسي ══ */
 
 function ApprovalCard({
-  req, L, onDecide, busy,
+  req, L, onAsk, busy,
 }: {
   req: Req;
   L: (k: string, f?: string) => string;
-  onDecide: (id: number, decision: "approved" | "rejected", comment: string) => void;
+  onAsk: (id: number, decision: "approved" | "rejected",
+          comment: string) => void;
   busy: boolean;
 }) {
   const [open, setOpen] = useState<"approved" | "rejected" | null>(null);
@@ -212,7 +222,7 @@ function ApprovalCard({
             <button
               className={`btn btn-sm ${open === "approved" ? "btn-primary" : "btn-danger"}`}
               disabled={busy}
-              onClick={() => onDecide(req.id, open, comment)}
+              onClick={() => onAsk(req.id, open, comment)}
             >
               {L("confirm")}
             </button>
@@ -228,7 +238,7 @@ function ApprovalCard({
            «اطّلعت» لا «وافقت». */
         <div className="row">
           <button className="btn btn-sm btn-primary" disabled={busy}
-            onClick={() => onDecide(req.id, "approved", "")}>
+            onClick={() => onAsk(req.id, "approved", "")}>
             <IcCheck size={16} />
             {L("acknowledge")}
           </button>
@@ -430,6 +440,13 @@ export default function LeavesPage() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(true);
   const [acting, setActing] = useState(false);
+  /**
+   * ق-44: القرار لا يُعاد — فيُؤكَّد قبل اتخاذه.
+   * والسلسلة تمضي بالاعتماد، وتُغلق بالرفض.
+   */
+  const [ask, setAsk] = useState<{
+    id: number; decision: "approved" | "rejected"; comment: string;
+  } | null>(null);
   const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
@@ -496,6 +513,21 @@ export default function LeavesPage() {
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={ask !== null}
+        tone={ask?.decision === "rejected" ? "danger" : "primary"}
+        confirmLabel={ask ? L(ask.decision === "rejected"
+          ? "reject" : "approve") : ""}
+        message={ask ? L(ask.decision === "rejected"
+          ? "confirmReject" : "confirmApprove") : ""}
+        onCancel={() => setAsk(null)}
+        onConfirm={() => {
+          const a = ask;
+          setAsk(null);
+          if (a) decide(a.id, a.decision, a.comment);
+        }}
+      />
+
       <div className="spread">
         <h1>{L("title")}</h1>
         {toast && (
@@ -593,7 +625,9 @@ export default function LeavesPage() {
                 }}>
                   {approvals.map((r) => (
                     <ApprovalCard key={r.id} req={r} L={L}
-                      onDecide={decide} busy={acting} />
+                      onAsk={(id, decision, comment) =>
+                        setAsk({ id, decision, comment })}
+                      busy={acting} />
                   ))}
                 </div>
               )}

@@ -122,32 +122,49 @@ def merge_into_run(*, adjustments, run, actor=None):
 
 
 @transaction.atomic
-def decide_adjustment(*, adjustment, action, actor=None, note=""):
+def decide_adjustment(*, adjustment, action, actor=None, note="",
+                      run=None):
     """
-    موظف الموارد يؤجّل التسوية أو يلغيها.
+    موظف الموارد يقرّر: يُدرج أو يؤجّل أو يلغي.
 
-    التأجيل يبقيها معلّقة لمسير لاحق، والإلغاء ينهيها.
+    ولا شيء يُدرج تلقائيًا — فما يمرّ بالإهمال يُصرف بلا مراجعة.
+    والتأجيل يبقيها معلّقة لمسير لاحق، والإلغاء ينهيها.
     """
     if adjustment.status != RetroStatus.PENDING:
         raise RetroError(
             f"التسوية {adjustment.get_status_display()} — لا يُعاد القرار")
 
-    if action not in ("defer", "cancel"):
-        raise RetroError("الإجراء إما تأجيل أو إلغاء")
+    if action not in ("select", "defer", "cancel"):
+        raise RetroError("الإجراء إما إدراج أو تأجيل أو إلغاء")
 
-    adjustment.status = (RetroStatus.DEFERRED if action == "defer"
-                         else RetroStatus.CANCELLED)
+    if action == "select":
+        if run is None:
+            raise RetroError("حدّد المسير الذي تُدرج فيه")
+        if run.status not in (PayrollRunStatus.DRAFT,
+                              PayrollRunStatus.CALCULATED):
+            raise RetroError(
+                f"المسير {run.get_status_display()} — لا تُدرج فيه تسويات")
+        adjustment.merged_run = run
+
+    adjustment.status = {
+        "select": RetroStatus.SELECTED,
+        "defer": RetroStatus.DEFERRED,
+        "cancel": RetroStatus.CANCELLED,
+    }[action]
     adjustment.decided_by_person_id = getattr(actor, "id", None)
     adjustment.decided_at = timezone.now()
     adjustment.note = note
-    adjustment.save(update_fields=["status", "decided_by_person_id",
+    adjustment.save(update_fields=["status", "merged_run",
+                                   "decided_by_person_id",
                                    "decided_at", "note", "updated_at"])
 
     from apps.core.services.audit import log_action
     log_action(
         instance=adjustment, action="update", actor=actor,
         label=adjustment.employment.employee_no,
-        summary=("أُجّلت التسوية" if action == "defer" else "أُلغيت التسوية"),
+        summary={"select": "أُدرجت التسوية في المسير",
+                 "defer": "أُجّلت التسوية",
+                 "cancel": "أُلغيت التسوية"}[action],
         channel="web")
     return adjustment
 

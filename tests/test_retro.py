@@ -277,13 +277,20 @@ def test_only_hr_sees_retro(env):
 
 # ══════════ الدمج في القسيمة (ق-69) ══════════
 
-def _run_payroll(env, year, month):
-    """يُنشئ مسيرًا ويحتسبه — كما يفعل موظف الموارد."""
+def _run_payroll(env, year, month, select=()):
+    """
+    يُنشئ مسيرًا ويحتسبه — كما يفعل موظف الموارد.
+
+    وتُختار التسويات صراحةً قبل الاحتساب (ق-69): لا شيء يُدرج
+    تلقائيًا، فما يمرّ بالإهمال يُصرف بلا مراجعة.
+    """
     from apps.payroll.models import PayrollRunType
     from apps.payroll.services.engine import calculate_run, create_run
 
     run = create_run(company=env["comp"], run_type=PayrollRunType.REGULAR,
                      year=year, month=month)
+    for adj in select:
+        decide_adjustment(adjustment=adj, action="select", run=run)
     calculate_run(run)
     return run
 
@@ -298,13 +305,13 @@ def test_retro_becomes_payslip_line(env):
     from apps.payroll.models import Payslip
 
     with account_scope(env["account_id"]):
-        record_adjustment(
+        adj = record_adjustment(
             employment=env["emp"], year=2026, month=8,
             source=RetroSource.ATTENDANCE_FIX,
             amount_before=0, amount_after=Decimal("78.12"),
             reason_ar="تصحيح بصمة أغسطس")
 
-        run = _run_payroll(env, 2026, 9)
+        run = _run_payroll(env, 2026, 9, select=[adj])
         slip = Payslip.objects.filter(run=run,
                                       employment=env["emp"]).first()
         lines = list(slip.lines.filter(
@@ -331,12 +338,12 @@ def test_retro_moves_the_net(env):
         base = Payslip.objects.get(run=base_run,
                                    employment=env["emp"]).net_pay
 
-        record_adjustment(
+        adj = record_adjustment(
             employment=env["emp"], year=2026, month=8,
             source=RetroSource.ATTENDANCE_FIX,
             amount_before=0, amount_after=Decimal("100.00"))
 
-        run = _run_payroll(env, 2026, 11)
+        run = _run_payroll(env, 2026, 11, select=[adj])
         after = Payslip.objects.get(run=run, employment=env["emp"]).net_pay
 
     assert after == base + Decimal("100.00"), (
@@ -357,7 +364,7 @@ def test_retro_paid_once(env):
             source=RetroSource.ATTENDANCE_FIX,
             amount_before=0, amount_after=Decimal("100.00"))
 
-        first = _run_payroll(env, 2026, 9)
+        first = _run_payroll(env, 2026, 9, select=[adj])
         adj.refresh_from_db()
         assert adj.status == RetroStatus.MERGED
         assert adj.merged_run_id == first.id, "لم تُنسب لمسيرها"
@@ -378,12 +385,12 @@ def test_negative_retro_is_a_deduction(env):
     from apps.payroll.models import Payslip, PayslipLineType
 
     with account_scope(env["account_id"]):
-        record_adjustment(
+        adj = record_adjustment(
             employment=env["emp"], year=2026, month=8,
             source=RetroSource.OTHER,
             amount_before=Decimal("200.00"), amount_after=Decimal("50.00"))
 
-        run = _run_payroll(env, 2026, 9)
+        run = _run_payroll(env, 2026, 9, select=[adj])
         slip = Payslip.objects.get(run=run, employment=env["emp"])
         line = slip.lines.filter(
             component_code__startswith="RETRO").first()
@@ -413,3 +420,28 @@ def test_same_month_retro_not_merged(env):
         lines = slip.lines.filter(component_code__startswith="RETRO")
 
     assert not lines.exists(), "أُدرجت تسوية الشهر في مسيره"
+
+@pytest.mark.django_db(transaction=True)
+def test_nothing_merges_without_selection(env):
+    """
+    ⚠️ لا شيء يُدرج تلقائيًا (ق-69).
+
+    فما يمرّ بالإهمال يُصرف بلا مراجعة — والقرار صريح بيد موظف
+    الموارد.
+    """
+    from apps.payroll.models import Payslip
+
+    with account_scope(env["account_id"]):
+        adj = record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=Decimal("100.00"))
+
+        run = _run_payroll(env, 2026, 9)      # بلا اختيار
+        slip = Payslip.objects.get(run=run, employment=env["emp"])
+        lines = slip.lines.filter(component_code__startswith="RETRO")
+        adj.refresh_from_db()
+
+    assert not lines.exists(), "أُدرجت تسوية بلا قرار صريح"
+    assert adj.status == RetroStatus.PENDING, (
+        f"تغيّرت حالتها بلا قرار: {adj.status}")

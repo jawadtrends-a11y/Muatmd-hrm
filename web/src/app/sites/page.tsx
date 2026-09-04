@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcPlus, IcUsers, IcX } from "@/components/Icons";
 import DateField from "@/components/DateField";
 import SiteMap from "@/components/SiteMap";
@@ -51,6 +52,14 @@ const T: Dict = {
   manage: { ar: "الموظفون", en: "Employees" },
   edit: { ar: "تعديل", en: "Edit" },
   deactivate: { ar: "تعطيل", en: "Deactivate" },
+  confirmDeactivate: {
+    ar: "تعطيل الموقع؟ لن تُقاس البصمة به بعد الآن.",
+    en: "Deactivate? Punches will no longer be measured here.",
+  },
+  confirmRemoveEmp: {
+    ar: "إزالة الموظف من الموقع؟",
+    en: "Remove the employee from this site?",
+  },
   save: { ar: "حفظ", en: "Save" },
   saving: { ar: "جارٍ الحفظ…", en: "Saving…" },
   cancel: { ar: "إلغاء", en: "Cancel" },
@@ -429,6 +438,8 @@ export default function SitesPage() {
    */
   const [canManage, setCanManage] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  /** ق-44: التعطيل لا يُتراجع عنه بضغطة — فيُؤكَّد */
+  const [askSite, setAskSite] = useState<Site | null>(null);
 
   useEffect(() => {
     apiGet<{ permissions: string[] }>("/me/workspace/")
@@ -476,6 +487,19 @@ export default function SitesPage() {
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={askSite !== null}
+        tone="danger"
+        confirmLabel={L("deactivate")}
+        message={L("confirmDeactivate")}
+        onCancel={() => setAskSite(null)}
+        onConfirm={() => {
+          const s = askSite;
+          setAskSite(null);
+          if (s) deactivate(s);
+        }}
+      />
+
       <div className="spread">
         <div>
           <h1>{L("title")}</h1>
@@ -579,7 +603,7 @@ export default function SitesPage() {
                         {canManage && s.is_active && (
                           <button className="btn btn-sm btn-ghost"
                             style={{ color: "var(--danger)" }}
-                            onClick={() => deactivate(s)}>
+                            onClick={() => setAskSite(s)}>
                             {L("deactivate")}
                           </button>
                         )}
