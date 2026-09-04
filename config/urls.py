@@ -135,6 +135,9 @@ urlpatterns = [
     path("api/me/approvals/", leaves_api.my_approvals, name="my-approvals"),
     path("api/me/leaves/", leaves_api.my_leave_summary, name="my-leaves"),
     # إدارة المسيرات
+    # التسويات الرجعية (ق-69)
+    path("api/payroll/retro/", payroll_api.retro_pending, name="retro-pending"),
+    path("api/payroll/retro/<int:adjustment_id>/decide/", payroll_api.retro_decide, name="retro-decide"),
     path("api/payroll/runs/", payroll_api.payroll_runs, name="payroll-runs"),
     path("api/payroll/runs/<int:run_id>/calculate/", payroll_api.run_calculate, name="run-calculate"),
     path("api/payroll/runs/<int:run_id>/submit/", payroll_api.run_submit, name="run-submit"),

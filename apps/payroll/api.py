@@ -498,3 +498,62 @@ def bank_lookup(request):
         "known": bank is not None,
         "supports_wps": bank.supports_wps if bank else True,
     })
+
+
+# ══════════ التسويات الرجعية (ق-69) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def retro_pending(request):
+    """
+    التسويات التي تنتظر الإدراج — تظهر لموظف الموارد عند إعداد
+    المسير، فيدمجها أو يؤجّلها أو يلغيها (ق-69).
+    """
+    from apps.payroll.models import RetroAdjustment, RetroStatus
+
+    Gate.require(request.user, "payroll.create")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    qs = RetroAdjustment.objects.filter(company_id=_company_id(request), status=RetroStatus.PENDING).select_related(
+        "employment__person")
+
+    return Response([{
+        "id": a.id,
+        "employee_no": a.employment.employee_no,
+        "employee_name": a.employment.person.display_name,
+        "period": f"{a.period_year}-{a.period_month:02d}",
+        "source": a.source,
+        "source_label": a.get_source_display(),
+        "amount_before": str(a.amount_before),
+        "amount_after": str(a.amount_after),
+        "amount": str(a.amount),
+        "reason_ar": a.reason_ar,
+        "created_at": a.created_at,
+    } for a in qs.order_by("-period_year", "-period_month")])
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def retro_decide(request, adjustment_id):
+    """يؤجّل التسوية أو يلغيها — لموظف الموارد (ق-69)."""
+    from apps.payroll.models import RetroAdjustment
+    from apps.payroll.services.retro import RetroError, decide_adjustment
+
+    Gate.require(request.user, "payroll.create")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    a = RetroAdjustment.objects.filter(id=adjustment_id, company_id=_company_id(request)).first()
+    if a is None:
+        return Response({"detail": "التسوية غير موجودة"}, status=404)
+
+    try:
+        a = decide_adjustment(
+            adjustment=a, action=request.data.get("action", ""),
+            actor=getattr(request.user, "person", None),
+            note=request.data.get("note", ""))
+    except RetroError as e:
+        return Response({"detail": str(e), "code": "cannot_decide"},
+                        status=409)
+
+    return Response({"id": a.id, "status": a.status,
+                     "status_label": a.get_status_display()})

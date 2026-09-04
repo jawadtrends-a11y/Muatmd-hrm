@@ -11,7 +11,7 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal as D
+from decimal import Decimal, Decimal as D
 
 from django.db import transaction
 from django.utils import timezone
@@ -446,6 +446,9 @@ def _effect_attendance_fix(req):
         employment=req.employment, work_date=work_date,
         defaults={"status": DayStatus.PRESENT})
 
+    # ق-69: ما كان محتسبًا قبل التصحيح — به يُقاس الفرق
+    before_minutes = day.worked_minutes or 0
+
     def _dt(value):
         if not value:
             return None
@@ -468,7 +471,68 @@ def _effect_attendance_fix(req):
     day.adjustment_note = f"تصحيح بطلب {req.request_no}: {p.get('reason','')}"
     day.save()
 
-    return {"attendance_day_id": day.id, "work_date": str(work_date)}
+    out = {"attendance_day_id": day.id, "work_date": str(work_date)}
+
+    # ق-69: التصحيح في شهر أُغلق مسيره يترك فرقًا مستحقًا.
+    #
+    # والفرق يُحتسب بإعادة حساب الشهر بالبيانات المصححة لا بردّ
+    # الخصم كاملًا: من تأخر ساعة ونسي بصمته ساعتين يعود له أجر
+    # ساعة لا ساعتين.
+    retro = _retro_for_month(req, work_date, before_minutes, day)
+    if retro:
+        out["retro"] = retro
+
+    return out
+
+
+def _retro_for_month(req, work_date, before_minutes, day):
+    """
+    يسجّل تسوية رجعية إن كان مسير الشهر مغلقًا (ق-69).
+
+    ولا يُنشئ شيئًا إن كان المسير مفتوحًا — فالاحتساب القادم يأخذ
+    التصحيح بنفسه.
+    """
+    from apps.payroll.models import PayrollSettings
+    from apps.payroll.services.retro import (RetroSource, closed_run_for,
+                                             record_adjustment)
+
+    run = closed_run_for(company=req.company,
+                         year=work_date.year, month=work_date.month)
+    if run is None:
+        return None      # المسير مفتوح — لا حاجة لتسوية
+
+    st = PayrollSettings.objects.filter(company=req.company).first()
+    daily = _daily_wage(req.employment)
+    if daily is None:
+        return None
+
+    # الفرق بالدقائق × أجر الدقيقة — لا قيمة اليوم كاملًا
+    minute_wage = daily / Decimal("480")      # 8 ساعات معيارية
+    gained = Decimal(str(max(0, day.worked_minutes - before_minutes)))
+    if gained == 0:
+        return None
+
+    adj = record_adjustment(
+        employment=req.employment,
+        year=work_date.year, month=work_date.month,
+        source=RetroSource.ATTENDANCE_FIX,
+        amount_before=Decimal("0"),
+        amount_after=(minute_wage * gained).quantize(Decimal("0.01")),
+        reason_ar=f"تصحيح بصمة {work_date} بطلب {req.request_no}",
+        source_request=req)
+    return {"id": adj.id, "amount": str(adj.amount)} if adj else None
+
+
+def _daily_wage(employment):
+    """أجر اليوم من آخر هيكل راتب ساري."""
+    from apps.employees.models import SalaryStructure
+
+    st = (SalaryStructure.objects
+          .filter(employment=employment, effective_to__isnull=True)
+          .order_by("-effective_from").first())
+    if st is None:
+        return None
+    return (st.gross_monthly or Decimal("0")) / Decimal("30")
 
 
 def _effect_remote_work(req):

@@ -124,6 +124,18 @@ class PayrollSettings(CompanyScopedModel):
     """إعدادات الرواتب لكل شركة — تُقرأ منها كل الحسابات."""
 
     # ── أنواع المسيرات (ق-21) ──
+    # ق-69: طريقة معالجة الأثر الرجعي — تُضبط عند إعداد الحساب
+    retro_method = models.CharField(
+        _("طريقة التسوية الرجعية"), max_length=20,
+        choices=[("next_run", _("تسوية في المسير التالي")),
+                 ("recalc", _("إعادة احتساب المسير القديم"))],
+        default="next_run",
+        help_text=_("إعادة الاحتساب ممكنة خلال 48 ساعة من إغلاق "
+                    "المسير — وبعدها تصير التسوية في التالي حتمًا"))
+    retro_reopen_hours = models.PositiveSmallIntegerField(
+        _("مهلة إعادة فتح المسير (ساعات)"), default=48,
+        help_text=_("بعدها لا يُمسّ المسير المغلق (ق-44)"))
+
     merge_supplementary_into_regular = models.BooleanField(
         _("دمج مسير الإضافي مع العام"), default=True,
         help_text=_("الافتراض: مسير واحد. الفصل خيار الشركة"))
@@ -622,4 +634,10 @@ class BankColumn(models.Model):
 # بنوك السعودية ورموزها (ق-57)
 from apps.payroll.models_banks import (  # noqa: E402,F401
     Bank, BankKind, OTHER_LABEL, label_for, lookup, sync_banks,
+)
+
+
+# التسويات الرجعية (ق-69)
+from apps.payroll.models_retro import (  # noqa: E402,F401
+    RetroAdjustment, RetroSource, RetroStatus,
 )
