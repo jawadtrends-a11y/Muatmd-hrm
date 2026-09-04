@@ -320,6 +320,31 @@ def calculate_slip(*, run, employment, settings_obj):
                 "amount": amount, "explanation": "استقطاع ثابت",
                 "order": comp.display_order})
 
+    # ── 7ب. التسويات الرجعية (ق-69) ──
+    #
+    # تدخل المجاميع قبل الصافي: بند بلا أثر في الصافي يظهر في
+    # القسيمة ولا يُدفع — والموظف يقرأ استحقاقًا لم يصله.
+    retro_rows = _pending_retro(run, employment)
+    for adj in retro_rows:
+        row = {
+            "code": f"RETRO_{adj.source.upper()}",
+            "name_ar": (f"تسوية {adj.period_year}/{adj.period_month:02d}"
+                        f" — {adj.get_source_display()}"),
+            "name_en": f"Retro {adj.period_year}/{adj.period_month:02d}",
+            "name_ur": f"سابقہ تصفیہ {adj.period_year}/"
+                       f"{adj.period_month:02d}",
+            "amount": abs(adj.amount),
+            "explanation": (adj.reason_ar
+                            or f"فرق عن {adj.period_year}/"
+                               f"{adj.period_month:02d}"),
+            "order": 90,
+        }
+        if adj.amount >= ZERO:
+            earnings.append(row)
+            gross += adj.amount
+        else:
+            deductions.append(row)
+
     # ── 8. الصافي ──
     total_ded = sum((d["amount"] for d in deductions), ZERO)
     total_er = sum((e["amount"] for e in employer_costs), ZERO)
@@ -384,6 +409,9 @@ def calculate_slip(*, run, employment, settings_obj):
                 amount=r2(e["amount"]), explanation=e["explanation"],
                 display_order=e.get("order", 50)))
     PayslipLine.objects.bulk_create(bulk)
+
+    # تُعلَّم مدموجة بمسيرها بعد أن صارت بنودًا — فلا تُصرف مرتين
+    _mark_retro_merged(run, retro_rows)
 
     # تسجيل أقساط السلف بعد الخصم الفعلي — السجل يطابق القسائم
     if advance_deductions:
@@ -589,3 +617,31 @@ def variance_report(run):
         for s in run.payslips.filter(has_variance=True).select_related(
             "employment__person")
     ]
+
+
+def _pending_retro(run, employment):
+    """
+    تسويات هذا الموظف المعلّقة (ق-69).
+
+    ولا تُدرج تسوية شهر في مسير الشهر نفسه — فالاحتساب يأخذها.
+    """
+    from apps.payroll.models import RetroAdjustment, RetroStatus
+
+    return list(RetroAdjustment.objects.filter(
+        employment=employment, status=RetroStatus.PENDING,
+        company_id=run.company_id,
+    ).exclude(period_year=run.period_year,
+              period_month=run.period_month))
+
+
+def _mark_retro_merged(run, rows):
+    """تُعلَّم مدموجة بمسيرها — فلا تُصرف مرتين."""
+    if not rows:
+        return
+    from django.utils import timezone
+
+    from apps.payroll.models import RetroAdjustment, RetroStatus
+
+    RetroAdjustment.objects.filter(id__in=[a.id for a in rows]).update(
+        status=RetroStatus.MERGED, merged_run=run,
+        decided_at=timezone.now())
