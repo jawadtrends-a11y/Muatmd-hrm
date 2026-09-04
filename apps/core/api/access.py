@@ -251,3 +251,68 @@ def member_list(request):
                       if m else []),
         })
     return Response(rows)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transfer_ownership(request, employment_id):
+    """
+    نقل ملكية الحساب لموظف آخر (ق-76).
+
+    الملكية سيطرة إدارية على النظام، والمدير العام دور وظيفي —
+    وأكثر المديرين العامين لا يتفرّغون لمتابعة أنظمة الأتمتة.
+    فتنزل الملكية للدرجة المناسبة.
+
+    وينقلها المالك الحالي، أو ينتزعها المدير العام: فهو صاحب
+    السلطة العليا في الشركة ولو لم يُدر النظام.
+    """
+    from apps.accounts.models_access import AccountMembership
+    from apps.employees.models import Employment
+
+    me = getattr(request.user, "account_membership", None)
+    if me is None:
+        return Response({"detail": "لا عضوية لحسابك"}, status=403)
+
+    is_ceo = any(a.role.code == "ceo"
+                 for a in me.role_assignments.select_related("role"))
+    if not (me.is_account_owner or is_ceo):
+        return Response(
+            {"detail": "ينقل الملكية مالك الحساب الحالي أو المدير العام",
+             "code": "not_allowed"}, status=403)
+
+    company_id = getattr(getattr(request, "account_ctx", None),
+                         "active_company_id", None)
+    emp = Gate.filter_queryset(
+        request.user, "access.manage", Employment.objects.all()
+    ).filter(id=employment_id,
+             company_id=company_id).select_related("person__user").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    user = getattr(emp.person, "user", None)
+    target = getattr(user, "account_membership", None) if user else None
+    if target is None:
+        return Response(
+            {"detail": "لا حساب دخول لهذا الموظف — أنشئه أولًا"}, status=400)
+
+    if target.id == me.id:
+        return Response({"detail": "الملكية لك أصلًا"}, status=400)
+
+    with transaction.atomic():
+        # مالك واحد للحساب: الملكية تنتقل ولا تتعدّد
+        # معزول ذاتيًا: مقيَّد بحساب المنفّذ نفسه
+        AccountMembership.objects.filter(account_id=me.account_id, is_account_owner=True).update(is_account_owner=False)
+        target.is_account_owner = True
+        target.save(update_fields=["is_account_owner"])
+
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=target, action="update", actor=request.user.person,
+        label=emp.employee_no,
+        summary=f"نُقلت ملكية الحساب إلى {emp.person.display_name}",
+        channel="web")
+
+    return Response({
+        "owner_employment_id": emp.id,
+        "owner_name": emp.person.display_name,
+    })

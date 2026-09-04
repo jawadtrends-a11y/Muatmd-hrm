@@ -102,6 +102,13 @@ class AccountMembership(models.Model):
         null=True, blank=True, related_name="+",
         verbose_name=_("الشركة النشطة"),
     )
+    is_founding_owner = models.BooleanField(
+        _("المالك المؤسس"), default=False,
+        help_text=_("أول مالك — لا تُنزع ملكيته إلا بحذفه نهائيًا "
+                    "من الشركة، ويخلفه مالك آخر بنفس الحماية (ق-79)"))
+    owner_since = models.DateTimeField(
+        _("مالك منذ"), null=True, blank=True,
+        help_text=_("ترتيب المنح — به يُعرف من يخلف المؤسس"))
     is_account_owner = models.BooleanField(
         _("مالك الحساب"), default=False,
         help_text=_("يتجاوز فحص الصلاحيات داخل حسابه"),

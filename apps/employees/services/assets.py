@@ -39,7 +39,7 @@ def _next_asset_no(company):
 def assign_asset(*, employment, name_ar, value=0, category="other",
                  serial_number="", assigned_date=None,
                  expected_return_date=None, handover_document="",
-                 condition_note=""):
+                 condition_note="", actor=None):
     """يسلّم عهدة لموظف."""
     value = Decimal(str(value))
     if value < 0:
@@ -55,8 +55,10 @@ def assign_asset(*, employment, name_ar, value=0, category="other",
         handover_document=handover_document,
         condition_note=condition_note, status=AssetStatus.ASSIGNED)
 
+    # ق-80: من سلّم العهدة يُنسب — والعهدة تدخل المخالصة، فمن
+    # يُسأل عن قيمتها لاحقًا يحتاج معرفة من سلّمها ومتى
     from apps.core.services.audit import log_create
-    log_create(instance=asset, label=asset.asset_no,
+    log_create(instance=asset, label=asset.asset_no, actor=actor,
                summary=(f"تسليم {name_ar} بقيمة {value} لـ"
                         f"{employment.employee_no}"))
     return asset
@@ -64,7 +66,7 @@ def assign_asset(*, employment, name_ar, value=0, category="other",
 
 @transaction.atomic
 def return_asset(*, asset, returned_date=None, condition_note="",
-                 status=AssetStatus.RETURNED):
+                 status=AssetStatus.RETURNED, actor=None):
     """
     استرجاع العهدة.
 
@@ -85,6 +87,7 @@ def return_asset(*, asset, returned_date=None, condition_note="",
 
     from apps.core.services.audit import log_action
     log_action(instance=asset, action="update", label=asset.asset_no,
+               actor=actor,
                summary=f"{asset.get_status_display()} — {asset.name_ar}",
                changes={"status": {"from": previous,
                                    "to": asset.get_status_display()}})

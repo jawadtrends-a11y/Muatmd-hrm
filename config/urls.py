@@ -42,6 +42,8 @@ urlpatterns = [
     # صلاحيات موظف بعينه (ق-67 وق-78)
     path("api/access/members/", access_api.member_list, name="member-list"),
     path("api/access/members/<int:employment_id>/permissions/", access_api.member_permissions, name="member-perms"),
+    # نقل ملكية الحساب (ق-76)
+    path("api/access/members/<int:employment_id>/ownership/", access_api.transfer_ownership, name="member-ownership"),
     path("api/billing/plans/", billing_api.plan_catalog, name="plan-catalog"),
     path("api/billing/subscription/", billing_api.my_subscription, name="my-subscription"),
     path("api/billing/estimate/", billing_api.billing_estimate, name="billing-estimate"),

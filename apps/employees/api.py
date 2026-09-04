@@ -262,11 +262,14 @@ def salary_structures(request, employment_id):
             return Response({"detail": str(e)}, status=400)
 
     try:
+        # ق-80: الفاعل يُنسب — وتعديل الراتب أخطر تغيير في النظام،
+        # فتسجيله مجهولًا يُفرغ سجل العمليات من معناه
         s = set_salary_structure(
             employment=emp, lines=lines,
             effective_from=date.fromisoformat(request.data["effective_from"]),
             reason=request.data.get("reason", "adjustment"),
-            note=request.data.get("note", ""))
+            note=request.data.get("note", ""),
+            approved_by=getattr(request.user, "person", None))
     except HiringError as e:
         return Response({"detail": str(e)}, status=400)
     except (KeyError, ValueError) as e:

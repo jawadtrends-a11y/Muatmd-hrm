@@ -77,6 +77,8 @@ def test_no_raw_queryset_in_api_views():
                     "recipient_person_id=person.id",
                     # الاستثناء يخصّ عضوية بعينها — العضوية هي القيد
                     "membership=membership",
+                    # الملكية تُنزع داخل حساب المنفّذ وحده
+                    "account_id=me.account_id",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
                     # site جاء من Gate.filter_queryset، وp من emp.person
                     "person=p", "site=site")):
