@@ -358,3 +358,113 @@ def transfer_ownership(request, employment_id):
         "owners": [{"username": o.user.username,
                     "is_founding": o.is_founding_owner} for o in owners],
     })
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def remove_login(request, employment_id):
+    """
+    حذف حساب الدخول — لا الملف الوظيفي (ق-79).
+
+    فالسجل لا يُمحى (ق-44): الموظف يبقى بملفه وطلباته وسجل
+    عملياته، ويُنزع وصوله وحده.
+
+    ولو كان مالكًا مؤسسًا خلفه أقدم مالك بعده. ولو زال الملاك
+    جميعًا ناب مدير الموارد، فإن لم يكن فموظف الموارد — فلا يُترك
+    حساب بلا من يديره.
+    """
+    from apps.accounts.models_access import (AccountMembership, Role,
+                                             RoleAssignment)
+    from apps.employees.models import Employment
+
+    me = getattr(request.user, "account_membership", None)
+    if me is None:
+        return Response({"detail": "لا عضوية لحسابك"}, status=403)
+
+    is_ceo = any(a.role.code == "ceo"
+                 for a in me.role_assignments.select_related("role"))
+    if not (me.is_account_owner or is_ceo):
+        return Response(
+            {"detail": "يحذف حسابات الدخول مالك الحساب أو المدير العام",
+             "code": "not_allowed"}, status=403)
+
+    # معزول ذاتيًا: مقيَّد بحساب المنفّذ نفسه
+    emp = Employment.objects.filter(
+        id=employment_id, account_id=me.account_id
+    ).select_related("person__user").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    user = getattr(emp.person, "user", None)
+    target = getattr(user, "account_membership", None) if user else None
+    if target is None:
+        return Response({"detail": "لا حساب دخول لهذا الموظف"}, status=400)
+
+    if target.id == me.id:
+        return Response(
+            {"detail": "لا تحذف حسابك بنفسك — اطلب من مالك آخر",
+             "code": "self_delete"}, status=400)
+
+    out = {}
+    with transaction.atomic():
+        was_owner = target.is_account_owner
+        was_founding = target.is_founding_owner
+
+        target.delete()      # العضوية وإسناداتها
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+
+        if was_owner:
+            out.update(_reassign_ownership(me.account_id, was_founding))
+
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=emp, action="update",
+        actor=getattr(request.user, "person", None),
+        label=emp.employee_no,
+        summary=(f"حُذف حساب دخول {emp.person.display_name}"
+                 + (f" — {out['new_owner']} يخلفه في الملكية"
+                    if out.get("new_owner") else "")),
+        channel="web")
+
+    return Response({"removed": True, **out})
+
+
+def _reassign_ownership(account_id, was_founding):
+    """
+    يعيد توزيع الملكية بعد حذف مالك (ق-79).
+
+    المؤسس يخلفه أقدم مالك بعده بنفس الحماية. وإن زال الملاك
+    جميعًا ناب مدير الموارد، فإن لم يكن فموظف الموارد.
+    """
+    from apps.accounts.models_access import AccountMembership, RoleAssignment
+
+    # معزول ذاتيًا: مقيَّد بالحساب المُمرَّر من مسار فحص صلاحيته
+    remaining = AccountMembership.objects.filter(account_id=account_id, is_account_owner=True).order_by("owner_since")
+
+    heir = remaining.first()
+    if heir is not None:
+        if was_founding and not remaining.filter(
+                is_founding_owner=True).exists():
+            heir.is_founding_owner = True
+            heir.save(update_fields=["is_founding_owner"])
+            return {"new_owner": heir.user.username,
+                    "founding": True}
+        return {}
+
+    # لا مالك — الموارد ينوب (مديرها أولًا)
+    for code in ("hr_manager", "hr_staff"):
+        a = RoleAssignment.objects.filter(role__code=code, membership__account_id=account_id).select_related(
+            "membership__user").order_by("id").first()
+        if a is None:
+            continue
+        m = a.membership
+        m.is_account_owner = True
+        m.is_founding_owner = True
+        m.owner_since = timezone.now()
+        m.save(update_fields=["is_account_owner", "is_founding_owner",
+                              "owner_since"])
+        return {"new_owner": m.user.username, "founding": True,
+                "by_fallback": code}
+
+    return {"warning": "لا مالك ولا موارد — الحساب بلا سيطرة"}

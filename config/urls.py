@@ -44,6 +44,7 @@ urlpatterns = [
     path("api/access/members/<int:employment_id>/permissions/", access_api.member_permissions, name="member-perms"),
     # نقل ملكية الحساب (ق-76)
     path("api/access/members/<int:employment_id>/ownership/", access_api.transfer_ownership, name="member-ownership"),
+    path("api/access/members/<int:employment_id>/login/", access_api.remove_login, name="member-login-remove"),
     path("api/billing/plans/", billing_api.plan_catalog, name="plan-catalog"),
     path("api/billing/subscription/", billing_api.my_subscription, name="my-subscription"),
     path("api/billing/estimate/", billing_api.billing_estimate, name="billing-estimate"),

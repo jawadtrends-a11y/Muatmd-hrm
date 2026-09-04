@@ -83,6 +83,8 @@ def test_no_raw_queryset_in_api_views():
                     "company_id=emp.company_id",
                     # مقيَّد بشركة المنفّذ النشطة
                     "company_id=_company_id(request)",
+                    # دوال الملكية تتلقّى الحساب من مسار فحصه
+                    "account_id=account_id",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:
                     # site جاء من Gate.filter_queryset، وp من emp.person
                     "person=p", "site=site")):
