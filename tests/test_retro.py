@@ -445,3 +445,83 @@ def test_nothing_merges_without_selection(env):
     assert not lines.exists(), "أُدرجت تسوية بلا قرار صريح"
     assert adj.status == RetroStatus.PENDING, (
         f"تغيّرت حالتها بلا قرار: {adj.status}")
+
+# ══════════ المصادر الأخرى (ق-69) ══════════
+
+@pytest.mark.django_db(transaction=True)
+def test_late_overtime_creates_retro(env):
+    """
+    ⚠️ الإضافي المعتمد بعد إغلاق مسير شهره لم يُحتسب أصلًا —
+    فالفرق قيمته كاملة بمعامله النظامي (1.5).
+    """
+    from apps.leaves.services.requests import apply_effect
+
+    wd = date(2026, 8, 12)
+    with account_scope(env["account_id"]):
+        _closed_run(env, 2026, 8)
+        AttendanceDay.objects.filter(
+            employment=env["emp"], work_date=wd).delete()
+        AttendanceDay.objects.create(
+            account_id=env["acc"].id, company_id=env["comp"].id,
+            employment=env["emp"], work_date=wd,
+            status=DayStatus.PRESENT, worked_minutes=480)
+
+        req = Request.objects.create(
+            account_id=env["acc"].id, company_id=env["comp"].id,
+            request_no="OT-1", employment=env["emp"],
+            request_type=RequestType.OVERTIME,
+            status=RequestStatus.APPROVED,
+            payload={"work_date": str(wd), "minutes": 120})
+        apply_effect(req)
+
+        adj = RetroAdjustment.objects.filter(
+            source=RetroSource.OVERTIME).first()
+
+        from apps.leaves.services.requests import _daily_wage
+        daily = _daily_wage(env["emp"])
+
+    assert adj is not None, "لم تُنشأ تسوية عن الإضافي المتأخر"
+    expected = (daily / Decimal("480") * Decimal("120")
+                * Decimal("1.5")).quantize(Decimal("0.01"))
+    assert adj.amount == expected, (
+        f"التسوية {adj.amount} والمتوقّع {expected} — أُهمل معامل "
+        f"الإضافي النظامي")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_unpaid_leave_leaves_no_retro(env):
+    """
+    ⚠️ الإجازة بلا أجر لا تردّ خصمًا — فالخصم واقع بحقّه.
+
+    وردّه يعني دفع أجر يوم لم يُعمل ولم يُستحق.
+    """
+    from apps.leaves.models import LeaveType
+    from apps.leaves.services.leave_requests import _retro_leave
+
+    with account_scope(env["account_id"]):
+        _closed_run(env, 2026, 8)
+        unpaid = LeaveType.objects.get(company=env["comp"], is_paid=False)
+        paid = LeaveType.objects.filter(
+            company=env["comp"], is_paid=True).first()
+
+        # أيام حضور فعلية — وإلا مرّ الحارس لخلوّ السجل لا لمقصده
+        for d in (10, 11, 12):
+            AttendanceDay.objects.get_or_create(
+                account_id=env["acc"].id, company_id=env["comp"].id,
+                employment=env["emp"], work_date=date(2026, 8, d),
+                defaults={"status": DayStatus.ABSENT})
+
+        req = Request.objects.create(
+            account_id=env["acc"].id, company_id=env["comp"].id,
+            request_no="LV-UNPAID", employment=env["emp"],
+            request_type=RequestType.LEAVE,
+            status=RequestStatus.APPROVED, payload={})
+
+        no_pay = _retro_leave(req, date(2026, 8, 10), date(2026, 8, 12),
+                              unpaid)
+        with_pay = _retro_leave(req, date(2026, 8, 10), date(2026, 8, 12),
+                                paid) if paid else None
+
+    assert no_pay is None, "رُدّ خصم إجازة بلا أجر — دُفع أجر لم يُستحق"
+    assert with_pay is not None, (
+        "المدفوعة لم تردّ خصمها — والحارس لا يفرّق بين النوعين")

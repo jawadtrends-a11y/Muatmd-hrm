@@ -165,7 +165,7 @@ def apply_approved_leave(request_obj):
     request_obj.payload = payload
     request_obj.save(update_fields=["payload", "updated_at"])
 
-    return {
+    out = {
         "consumed_days": str(days),
         "attendance_days_marked": marked,
         "is_paid": leave_type.is_paid,
@@ -173,6 +173,71 @@ def apply_approved_leave(request_obj):
         "note": ("إجازة بلا أجر — يُخصم أجر الأيام في المسير"
                  if not leave_type.is_paid else "إجازة مدفوعة"),
     }
+
+    # ق-69: الإجازة المعتمدة بأثر رجعي — أيامها كانت محسوبة غيابًا
+    retro = _retro_leave(request_obj, start, end, leave_type)
+    if retro:
+        out["retro"] = retro
+    return out
+
+
+def _retro_leave(request_obj, start, end, leave_type):
+    """
+    تسوية عن إجازة اعتُمدت بعد إغلاق مسير شهرها (ق-69).
+
+    فأيامها كانت محسوبة غيابًا ومخصومة. والإجازة المدفوعة تردّ
+    الخصم كاملًا، وغير المدفوعة لا تردّ شيئًا — فالخصم واقع في
+    الحالين.
+    """
+    from apps.payroll.services.retro import (RetroSource, closed_run_for,
+                                             record_adjustment)
+
+    if not leave_type.is_paid:
+        return None      # بلا أجر — الخصم قائم بحقّه
+
+    run = closed_run_for(company=request_obj.company,
+                         year=start.year, month=start.month)
+    if run is None:
+        return None      # المسير مفتوح — الاحتساب يأخذها
+
+    # أيام الإجازة الواقعة في شهر المسير المغلق وحدها
+    from apps.attendance.models import AttendanceDay, DayStatus
+    absent_days = AttendanceDay.objects.filter(
+        employment=request_obj.employment,
+        work_date__gte=start, work_date__lte=end,
+        work_date__year=start.year, work_date__month=start.month,
+    ).count()
+    if absent_days == 0:
+        return None
+
+    daily = _daily_wage_for(request_obj.employment)
+    if daily is None:
+        return None
+
+    pct = (leave_type.pay_percentage or Decimal("100")) / Decimal("100")
+    amount = (daily * Decimal(absent_days) * pct).quantize(Decimal("0.01"))
+
+    adj = record_adjustment(
+        employment=request_obj.employment,
+        year=start.year, month=start.month,
+        source=RetroSource.LEAVE,
+        amount_before=Decimal("0"), amount_after=amount,
+        reason_ar=(f"إجازة {leave_type.name_ar} بأثر رجعي — "
+                   f"{absent_days} يومًا بطلب {request_obj.request_no}"),
+        source_request=request_obj)
+    return {"id": adj.id, "amount": str(adj.amount)} if adj else None
+
+
+def _daily_wage_for(employment):
+    """أجر اليوم من آخر هيكل راتب ساري."""
+    from apps.employees.models import SalaryStructure
+
+    st = (SalaryStructure.objects
+          .filter(employment=employment, effective_to__isnull=True)
+          .order_by("-effective_from").first())
+    if st is None:
+        return None
+    return (st.gross_monthly or Decimal("0")) / Decimal("30")
 
 
 def _mark_attendance_days(*, employment, start, end, leave_type,

@@ -648,13 +648,59 @@ def _effect_overtime(req):
     if day is None:
         return {"skipped": "لا سجل حضور لذلك اليوم"}
 
+    before = day.approved_overtime_minutes or 0
     minutes = int(p.get("minutes") or float(p.get("hours", 0)) * 60)
     day.approved_overtime_minutes = minutes
     day.is_manually_adjusted = True
     day.adjustment_note = f"إضافي معتمد بطلب {req.request_no}"
     day.save()
 
-    return {"approved_minutes": minutes}
+    out = {"approved_minutes": minutes}
+
+    # ق-69: الإضافي المعتمد بعد إغلاق مسير شهره لم يُحتسب أصلًا —
+    # فالفرق قيمته كاملة لا نصفه.
+    retro = _retro_overtime(req, work_date, before, minutes)
+    if retro:
+        out["retro"] = retro
+    return out
+
+
+def _retro_overtime(req, work_date, before_minutes, after_minutes):
+    """
+    تسوية عن إضافي اعتُمد بعد إغلاق مسير شهره (ق-69).
+
+    وأجر الإضافي بمعامله النظامي (1.5) لا بأجر الدقيقة العادي.
+    """
+    from apps.payroll.services.retro import (RetroSource, closed_run_for,
+                                             record_adjustment)
+
+    run = closed_run_for(company=req.company,
+                         year=work_date.year, month=work_date.month)
+    if run is None:
+        return None      # المسير مفتوح — الاحتساب يأخذه
+
+    gained = Decimal(str(max(0, after_minutes - before_minutes)))
+    if gained == 0:
+        return None
+
+    daily = _daily_wage(req.employment)
+    if daily is None:
+        return None
+
+    # ق-24: الإضافي بمعامل 1.5 من أجر الساعة
+    minute_wage = daily / Decimal("480")
+    amount = (minute_wage * gained * Decimal("1.5")).quantize(
+        Decimal("0.01"))
+
+    adj = record_adjustment(
+        employment=req.employment,
+        year=work_date.year, month=work_date.month,
+        source=RetroSource.OVERTIME,
+        amount_before=Decimal("0"), amount_after=amount,
+        reason_ar=(f"إضافي {work_date} — {int(gained)} دقيقة "
+                   f"بطلب {req.request_no}"),
+        source_request=req)
+    return {"id": adj.id, "amount": str(adj.amount)} if adj else None
 
 
 def _effect_certificate(req):
