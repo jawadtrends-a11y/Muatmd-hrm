@@ -1142,3 +1142,141 @@ def employee_contacts(request, employment_id):
         is_primary=bool(d.get("is_primary")))
 
     return Response({"id": obj.id}, status=201)
+
+
+# ══════════ التغيير الوظيفي (ق-82) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def job_changes(request, employment_id):
+    """
+    تغييرات الموظف الوظيفية — قراءةً وتسجيلًا.
+
+    موظف الموارد يسجّل، ومدير الموارد يعتمد (ق-82).
+    """
+    from datetime import date as _date
+
+    from apps.employees.models import ChangeType, JobChange
+    from apps.employees.services.job_changes import (JobChangeError,
+                                                     create_change)
+    from apps.organization.models import Department
+
+    Gate.require(request.user, "employees.view")
+    emp = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=employment_id,
+             company_id=_company_id(request)).select_related(
+        "person", "department").first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    if request.method == "GET":
+        rows = []
+        for c in emp.job_changes.select_related(
+                "new_department", "new_job_title", "successor__person"):
+            rows.append({
+                "id": c.id,
+                "type": c.change_type,
+                "type_label": c.get_change_type_display(),
+                "effective_from": c.effective_from,
+                "status": c.status,
+                "status_label": c.get_status_display(),
+                "new_job_title": (c.new_job_title.name_ar
+                                  if c.new_job_title_id else None),
+                "new_department": (c.new_department.name_ar
+                                   if c.new_department_id else None),
+                "new_role_code": c.new_role_code,
+                "dismissal_reason": c.dismissal_reason,
+                "successor": (c.successor.person.display_name
+                              if c.successor_id else None),
+                "note": c.note,
+                "created_at": c.created_at,
+                "decided_at": c.decided_at,
+                "decision_note": c.decision_note,
+            })
+        return Response(rows)
+
+    # ── التسجيل ──
+    Gate.require(request.user, "employees.edit")
+
+    d = request.data
+    ctype = d.get("change_type", "")
+    if ctype not in ChangeType.values:
+        return Response({"detail": f"نوع غير معروف: {ctype}"}, status=400)
+
+    dept = None
+    if d.get("new_department_id"):
+        # معزول ذاتيًا: مقيَّد بشركة الموظف الذي مرّ بالبوابة
+        dept = Department.objects.filter(id=d["new_department_id"], company_id=emp.company_id).first()
+        if dept is None:
+            return Response({"detail": "الإدارة غير موجودة"}, status=400)
+
+    mgr = None
+    if d.get("new_direct_manager_id"):
+        mgr = Employment.objects.filter(id=d["new_direct_manager_id"], company_id=emp.company_id).first()
+
+    title = None
+    if d.get("new_job_title_id"):
+        from apps.organization.models import JobTitle
+        title = JobTitle.objects.filter(
+            id=d["new_job_title_id"], company_id=emp.company_id).first()
+        if title is None:
+            return Response({"detail": "المسمّى غير موجود"}, status=400)
+
+    succ = None
+    if d.get("successor_employment_id"):
+        succ = Employment.objects.filter(id=d["successor_employment_id"], company_id=emp.company_id).first()
+        if succ is None:
+            return Response({"detail": "البديل غير موجود"}, status=400)
+
+    try:
+        c = create_change(
+            employment=emp, change_type=ctype,
+            effective_from=_date.fromisoformat(str(d["effective_from"])),
+            new_job_title=title,
+            new_department=dept, new_direct_manager=mgr,
+            new_role_code=d.get("new_role_code", ""),
+            dismissal_reason=d.get("dismissal_reason", ""),
+            successor=succ, note=d.get("note", ""),
+            actor=getattr(request.user, "person", None))
+    except JobChangeError as e:
+        return Response({"detail": str(e), "code": "invalid_change"},
+                        status=400)
+    except (KeyError, ValueError) as e:
+        return Response({"detail": f"بيانات ناقصة: {e}"}, status=400)
+
+    return Response({"id": c.id, "status": c.status,
+                     "status_label": c.get_status_display()}, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def decide_job_change(request, change_id):
+    """
+    مدير الموارد يعتمد التغيير أو يرفضه — وبالاعتماد يسري (ق-82).
+    """
+    from apps.employees.models import JobChange
+    from apps.employees.services.job_changes import (JobChangeError,
+                                                     decide_change)
+
+    Gate.require(request.user, "employees.terminate")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    c = JobChange.objects.filter(
+        id=change_id, company_id=_company_id(request)
+    ).select_related("employment__person", "successor__person").first()
+    if c is None:
+        return Response({"detail": "التغيير غير موجود"}, status=404)
+
+    try:
+        c, effect = decide_change(
+            change=c, approve=bool(request.data.get("approve")),
+            actor=getattr(request.user, "person", None),
+            note=request.data.get("note", ""))
+    except JobChangeError as e:
+        return Response({"detail": str(e), "code": "cannot_decide"},
+                        status=409)
+
+    return Response({"id": c.id, "status": c.status,
+                     "status_label": c.get_status_display(),
+                     "effect": effect})

@@ -56,6 +56,9 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/", employees_api.employee_detail, name="employee-detail"),
     path("api/employees/<int:employment_id>/salary/", employees_api.salary_structures, name="salary-structures"),
     path("api/employees/<int:employment_id>/registration/", employees_api.registration_flags, name="registration-flags"),
+    # التغيير الوظيفي (ق-82)
+    path("api/employees/<int:employment_id>/job-changes/", employees_api.job_changes, name="job-changes"),
+    path("api/job-changes/<int:change_id>/decide/", employees_api.decide_job_change, name="job-change-decide"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/punch/", attendance_api.punch, name="punch"),
     path("api/attendance/<int:employment_id>/punches/", attendance_api.punches, name="punches"),

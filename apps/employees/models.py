@@ -425,3 +425,9 @@ from apps.employees.models_assets import (  # noqa: E402,F401
 from apps.employees.models_profile import (  # noqa: E402,F401
     Dependent, EmergencyContact, JobGrade, JobStep, RelationKind,
 )
+
+
+# التغيير الوظيفي (ق-82)
+from apps.employees.models_changes import (  # noqa: E402,F401
+    ChangeStatus, ChangeType, JobChange,
+)
