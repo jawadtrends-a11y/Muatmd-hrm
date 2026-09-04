@@ -43,7 +43,22 @@ const T: Dict = {
   contact: { ar: "الاتصال", en: "Contact" },
   documents: { ar: "الوثائق", en: "Documents" },
   files: { ar: "الملفات", en: "Files" },
+  changes: { ar: "التغييرات الوظيفية", en: "Job changes" },
   audit: { ar: "السجل الوظيفي", en: "Activity" },
+  jcType: { ar: "النوع", en: "Type" },
+  jcFrom: { ar: "يسري من", en: "Effective" },
+  jcStatus: { ar: "الحالة", en: "Status" },
+  jcSuccessor: { ar: "الخليفة", en: "Successor" },
+  jcNone: { ar: "لا تغييرات وظيفية", en: "No job changes" },
+  jcApprove: { ar: "اعتماد", en: "Approve" },
+  jcReject: { ar: "رفض", en: "Reject" },
+  jcNew: { ar: "تسجيل تغيير", en: "New change" },
+  jcDept: { ar: "الإدارة الجديدة", en: "New department" },
+  jcTitle: { ar: "المسمّى الجديد", en: "New title" },
+  jcRole: { ar: "الدور الجديد", en: "New role" },
+  jcReason: { ar: "سبب الفصل", en: "Dismissal reason" },
+  jcSave: { ar: "تسجيل", en: "Save" },
+  jcCancel: { ar: "إلغاء", en: "Cancel" },
 
   // الحقول الشخصية
   firstName: { ar: "الاسم الأول", en: "First name" },
@@ -174,9 +189,313 @@ const T: Dict = {
   },
 };
 
+/**
+ * التغييرات الوظيفية (ق-82).
+ *
+ * موظف الموارد يسجّل، ومدير الموارد يعتمد — والأثر يسري بالاعتماد
+ * لا بالتسجيل. والقيم القديمة تبقى مع الجديدة (ق-80).
+ */
+function JobChangesTab({ empId, L }: {
+  empId: number; L: (k: string, f?: string) => string;
+}) {
+  const [rows, setRows] = useState<JobChangeRow[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [acting, setActing] = useState(false);
+  const [err, setErr] = useState("");
+  const [perms, setPerms] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({
+    change_type: "promotion",
+    effective_from: new Date().toISOString().slice(0, 10),
+  });
+  const [depts, setDepts] = useState<{ id: number; name_ar: string }[]>([]);
+  const [peers, setPeers] = useState<
+    { employment_id: number; employee_no: string; name_ar: string }[]>([]);
+
+  const load = useCallback(() => {
+    apiGet<JobChangeRow[]>(`/employees/${empId}/job-changes/`)
+      .then((d) => { setRows(d); setBusy(false); })
+      .catch(() => { setRows([]); setBusy(false); });
+  }, [empId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setPerms(new Set(d.permissions || [])))
+      .catch(() => setPerms(new Set()));
+    apiGet<{ id: number; name_ar: string }[]>("/org/departments/")
+      .then(setDepts).catch(() => setDepts([]));
+  }, []);
+
+  useEffect(() => {
+    if (!adding) return;
+    // زملاء الموظف — يُختار منهم الخليفة (ق-79)
+    apiGet<{ employment_id: number; employee_no: string;
+             name_ar: string }[]>(`/me/deputies/?employment_id=${empId}`)
+      .then(setPeers).catch(() => setPeers([]));
+  }, [adding, empId]);
+
+  async function save() {
+    setActing(true);
+    setErr("");
+    try {
+      const body: Record<string, unknown> = {
+        change_type: form.change_type,
+        effective_from: form.effective_from,
+        note: form.note || "",
+      };
+      if (form.new_department_id) {
+        body.new_department_id = Number(form.new_department_id);
+      }
+      if (form.new_role_code) body.new_role_code = form.new_role_code;
+      if (form.dismissal_reason) {
+        body.dismissal_reason = form.dismissal_reason;
+      }
+      if (form.successor_employment_id) {
+        body.successor_employment_id = Number(form.successor_employment_id);
+      }
+      await apiPost(`/employees/${empId}/job-changes/`, body);
+      setAdding(false);
+      setForm({ change_type: "promotion",
+                effective_from: new Date().toISOString().slice(0, 10) });
+      load();
+    } catch (e) {
+      setErr((e as ApiError).message);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function decide(id: number, approve: boolean) {
+    setActing(true);
+    setErr("");
+    try {
+      await apiPost(`/job-changes/${id}/decide/`, { approve });
+      load();
+    } catch (e) {
+      setErr((e as ApiError).message);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  const canDecide = perms.has("employees.terminate");
+
+  if (busy) {
+    return (
+      <div className="card" style={{
+        padding: 32, textAlign: "center", color: "var(--ink-3)",
+      }}>
+        {L("loading", "جارٍ التحميل…")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      {err && (
+        <div style={{
+          background: "var(--danger-soft)", color: "var(--danger)",
+          padding: "10px 14px", borderRadius: "var(--radius-sm)",
+          fontSize: ".88rem",
+        }}>
+          {err}
+        </div>
+      )}
+
+      {perms.has("employees.edit") && !adding && (
+        <div>
+          <button className="btn btn-primary btn-sm"
+            onClick={() => { setAdding(true); setErr(""); }}>
+            {L("jcNew")}
+          </button>
+        </div>
+      )}
+
+      {adding && (
+        <div className="card" style={{ padding: 18 }}>
+          <div className="row" style={{
+            flexWrap: "wrap", gap: 12, alignItems: "flex-start",
+          }}>
+            <div className="field" style={{ minWidth: 170 }}>
+              <label className="label">{L("jcType")}</label>
+              <select className="select" value={form.change_type}
+                onChange={(e) => setForm({ ...form,
+                                           change_type: e.target.value })}>
+                <option value="promotion">ترقية</option>
+                <option value="demotion">تنزيل</option>
+                <option value="transfer">نقل وظيفي</option>
+                <option value="dismissal">فصل</option>
+              </select>
+            </div>
+
+            <div className="field" style={{ minWidth: 165 }}>
+              <label className="label">{L("jcFrom")}</label>
+              <DateField value={form.effective_from || ""}
+                onChange={(v) => setForm({ ...form, effective_from: v })} />
+            </div>
+
+            {form.change_type === "transfer" && (
+              <div className="field" style={{ minWidth: 180 }}>
+                <label className="label">{L("jcDept")}</label>
+                <select className="select"
+                  value={form.new_department_id || ""}
+                  onChange={(e) => setForm({
+                    ...form, new_department_id: e.target.value })}>
+                  <option value="">—</option>
+                  {depts.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name_ar}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {(form.change_type === "promotion"
+              || form.change_type === "demotion") && (
+              <div className="field" style={{ minWidth: 180 }}>
+                <label className="label">{L("jcRole")}</label>
+                <select className="select" value={form.new_role_code || ""}
+                  onChange={(e) => setForm({
+                    ...form, new_role_code: e.target.value })}>
+                  <option value="">—</option>
+                  <option value="employee">موظف</option>
+                  <option value="supervisor">مشرف</option>
+                  <option value="dept_manager">مدير إدارة</option>
+                  <option value="hr_staff">موظف موارد بشرية</option>
+                  <option value="hr_manager">مدير الموارد البشرية</option>
+                </select>
+              </div>
+            )}
+
+            {form.change_type === "dismissal" && (
+              <div className="field" style={{ minWidth: 200 }}>
+                <label className="label">{L("jcReason")}</label>
+                <input className="input"
+                  value={form.dismissal_reason || ""}
+                  onChange={(e) => setForm({
+                    ...form, dismissal_reason: e.target.value })} />
+              </div>
+            )}
+
+            <div className="field" style={{ minWidth: 200 }}>
+              <label className="label">{L("jcSuccessor")}</label>
+              <select className="select"
+                value={form.successor_employment_id || ""}
+                onChange={(e) => setForm({
+                  ...form, successor_employment_id: e.target.value })}>
+                <option value="">—</option>
+                {peers.map((p) => (
+                  <option key={p.employment_id} value={p.employment_id}>
+                    {p.employee_no} — {p.name_ar}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="row" style={{ marginTop: 14 }}>
+            <button className="btn btn-primary btn-sm" disabled={acting}
+              onClick={save}>
+              {L("jcSave")}
+            </button>
+            <button className="btn btn-ghost btn-sm"
+              onClick={() => { setAdding(false); setErr(""); }}>
+              {L("jcCancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ overflow: "hidden" }}>
+        {rows.length === 0 ? (
+          <div style={{
+            padding: 32, textAlign: "center", color: "var(--ink-3)",
+          }}>
+            {L("jcNone")}
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{L("jcType")}</th>
+                  <th style={{ textAlign: "end" }}>{L("jcFrom")}</th>
+                  <th>{L("jcSuccessor")}</th>
+                  <th>{L("jcStatus")}</th>
+                  <th style={{ width: 150 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      {r.type_label}
+                      {r.new_department && (
+                        <span className="muted" style={{
+                          fontSize: ".8rem", marginInlineStart: 6,
+                        }}>
+                          → {r.new_department}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "end" }}>
+                      <span className="num">{r.effective_from}</span>
+                    </td>
+                    <td className="muted">{r.successor || "—"}</td>
+                    <td>
+                      <span className={`badge ${
+                        r.status === "approved" ? "badge-teal"
+                        : r.status === "rejected" ? "badge-danger"
+                        : "badge-warn"}`}>
+                        {r.status_label}
+                      </span>
+                    </td>
+                    <td>
+                      {r.status === "pending" && canDecide && (
+                        <div className="row" style={{ gap: 6 }}>
+                          <button className="btn btn-sm btn-primary"
+                            disabled={acting}
+                            onClick={() => decide(r.id, true)}>
+                            {L("jcApprove")}
+                          </button>
+                          <button className="btn btn-sm btn-ghost"
+                            disabled={acting}
+                            style={{ color: "var(--danger)" }}
+                            onClick={() => decide(r.id, false)}>
+                            {L("jcReject")}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+type JobChangeRow = {
+  id: number;
+  type: string;
+  type_label: string;
+  effective_from: string;
+  status: string;
+  status_label: string;
+  new_department: string | null;
+  new_job_title: string | null;
+  successor: string | null;
+};
+
+
 const TABS = [
   "personal", "job", "contract", "salary", "gosi", "bank",
-  "dependents", "contact", "documents", "files", "audit",
+  "dependents", "contact", "documents", "files", "changes", "audit",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -853,7 +1172,7 @@ export default function EmployeeProfileView({
   const ICONS: Record<Tab, React.ComponentType<{ size?: number }>> = {
     personal: IcUser, job: IcOrg, contract: IcDoc, salary: IcPayroll,
     gosi: IcCheck, bank: IcWallet, dependents: IcUsers, contact: IcUser,
-    documents: IcDoc, files: IcDoc, audit: IcClock,
+    documents: IcDoc, files: IcDoc, changes: IcOrg, audit: IcClock,
   };
 
   return (
@@ -1265,6 +1584,7 @@ export default function EmployeeProfileView({
         </div>
       )}
 
+      {tab === "changes" && <JobChangesTab empId={empId} L={L} />}
       {tab === "audit" && <AuditTab empId={empId} L={L} />}
     </div>
   );

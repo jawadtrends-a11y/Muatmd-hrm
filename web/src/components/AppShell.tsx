@@ -298,10 +298,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // ق-68: ما ينتظر قرارك يُرى من القائمة بلا فتح الشاشة
   useEffect(() => {
     if (!ready || isPublic || !ws) return;
+    // العدّاد يجمع ما ينتظر قرارك: الطلبات والتغييرات الوظيفية
     const load = () => {
-      apiGet<unknown[]>("/me/approvals/")
-        .then((d) => setPendingCount(Array.isArray(d) ? d.length : 0))
-        .catch(() => setPendingCount(0));
+      Promise.all([
+        apiGet<unknown[]>("/me/approvals/").catch(() => []),
+        apiGet<unknown[]>("/me/job-changes/").catch(() => []),
+      ]).then(([a, b]) => setPendingCount(
+        (Array.isArray(a) ? a.length : 0) + (Array.isArray(b) ? b.length : 0)
+      )).catch(() => setPendingCount(0));
     };
     load();
     const t = setInterval(load, 60000);

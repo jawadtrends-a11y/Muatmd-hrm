@@ -92,6 +92,9 @@ def create_change(*, employment, change_type, effective_from,
         created_by_person_id=getattr(actor, "id", None),
     )
 
+    # مدير الموارد يُعلَم فورًا — وإلا لم يعرف حتى يفتح الملف
+    _notify_managers(change, "job_change.submitted")
+
     from apps.core.services.audit import log_create
     log_create(
         instance=change, actor=actor, label=employment.employee_no,
@@ -125,6 +128,10 @@ def decide_change(*, change, approve, actor=None, note=""):
     effect = {}
     if approve:
         effect = _apply(change, actor=actor)
+
+    # ومن سجّله يُعلَم بالقرار
+    _notify_creator(change, "job_change.approved" if approve
+                    else "job_change.rejected", note=note)
 
     from apps.core.services.audit import log_action
     log_action(
@@ -209,3 +216,43 @@ def _switch_role(employment, new_code):
         membership=m, role=role, company_id=employment.company_id,
         scope=scope)
     return role.name_ar
+
+
+def _ctx(change, **extra):
+    return {
+        "change_type": change.get_change_type_display(),
+        "employee": change.employment.person.display_name,
+        "effective_from": str(change.effective_from),
+        **extra,
+    }
+
+
+def _notify_managers(change, event_key):
+    """يُعلم مديري الموارد بما ينتظر قرارهم."""
+    from apps.accounts.models_access import RoleAssignment
+    from apps.notifications.bus import emit
+
+    people = [
+        a.membership.user.person.id
+        for a in RoleAssignment.objects.filter(
+            role__code="hr_manager",
+            membership__account_id=change.account_id
+        ).select_related("membership__user__person")
+        if getattr(a.membership.user, "person", None)
+    ]
+    if people:
+        emit(event_key, account_id=change.account_id,
+             company_id=change.company_id, context=_ctx(change),
+             recipients=people)
+
+
+def _notify_creator(change, event_key, note=""):
+    """يُعلم من سجّل التغيير بالقرار."""
+    from apps.notifications.bus import emit
+
+    if not change.created_by_person_id:
+        return
+    emit(event_key, account_id=change.account_id,
+         company_id=change.company_id,
+         context=_ctx(change, reason=f" — {note}" if note else ""),
+         recipients=[change.created_by_person_id])

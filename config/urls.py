@@ -59,6 +59,7 @@ urlpatterns = [
     # التغيير الوظيفي (ق-82)
     path("api/employees/<int:employment_id>/job-changes/", employees_api.job_changes, name="job-changes"),
     path("api/job-changes/<int:change_id>/decide/", employees_api.decide_job_change, name="job-change-decide"),
+    path("api/me/job-changes/", employees_api.my_job_changes, name="my-job-changes"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/punch/", attendance_api.punch, name="punch"),
     path("api/attendance/<int:employment_id>/punches/", attendance_api.punches, name="punches"),

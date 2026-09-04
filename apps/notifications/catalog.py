@@ -55,6 +55,14 @@ EVENTS = [
     _e("delegation.declined", "requests", "الاعتذار عن الإنابة",
        ("in_app",)),
 
+    # التغيير الوظيفي (ق-82)
+    _e("job_change.submitted", "employees", "تغيير وظيفي بانتظار اعتمادك",
+       ("in_app", "email")),
+    _e("job_change.approved", "employees", "اعتماد التغيير الوظيفي",
+       ("in_app",)),
+    _e("job_change.rejected", "employees", "رفض التغيير الوظيفي",
+       ("in_app",)),
+
     # ══ الرواتب ══
     _e("payroll.calculation_started", "payroll", "بدء احتساب المسير", ("in_app",)),
     _e("payroll.calculation_completed", "payroll", "اكتمال احتساب المسير",

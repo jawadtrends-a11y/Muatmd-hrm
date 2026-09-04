@@ -124,6 +124,33 @@ TEMPLATES = {
         "نیابت قبول کر لی گئی",
         "{{deputy}} نے {{starts_on}} سے {{ends_on}} تک نیابت قبول کر لی۔",
     ),
+    "job_change.submitted": (
+        "تغيير وظيفي بانتظار اعتمادك",
+        "سُجّل {{change_type}} لـ{{employee}} يسري من {{effective_from}} "
+        "— بانتظار اعتمادك.",
+        "Job change awaiting your approval",
+        "{{change_type}} for {{employee}} effective {{effective_from}} "
+        "awaits your approval.",
+        "ملازمتی تبدیلی آپ کی منظوری کی منتظر",
+        "{{employee}} کی {{change_type}} آپ کی منظوری کی منتظر ہے۔",
+    ),
+    "job_change.approved": (
+        "اعتُمد التغيير الوظيفي",
+        "اعتُمد {{change_type}} لـ{{employee}} ويسري من {{effective_from}}.",
+        "Job change approved",
+        "{{change_type}} for {{employee}} is approved, effective "
+        "{{effective_from}}.",
+        "ملازمتی تبدیلی منظور",
+        "{{employee}} کی {{change_type}} منظور ہو گئی۔",
+    ),
+    "job_change.rejected": (
+        "رُفض التغيير الوظيفي",
+        "رُفض {{change_type}} لـ{{employee}}{{reason}}.",
+        "Job change rejected",
+        "{{change_type}} for {{employee}} was rejected{{reason}}.",
+        "ملازمتی تبدیلی مسترد",
+        "{{employee}} کی {{change_type}} مسترد کر دی گئی۔",
+    ),
     "delegation.declined": (
         "اعتذر النائب",
         "اعتذر {{deputy}} عن الإنابة — وإجازتك ماضية، وتصعد مهامك "

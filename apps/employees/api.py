@@ -1280,3 +1280,37 @@ def decide_job_change(request, change_id):
     return Response({"id": c.id, "status": c.status,
                      "status_label": c.get_status_display(),
                      "effect": effect})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_job_changes(request):
+    """
+    التغييرات الوظيفية التي تنتظر قراري (ق-82).
+
+    تُضمّ لعدّاد ما ينتظر القرار: فمن يفتح النظام يرى الرقم بلا
+    فتح ملف كل موظف.
+    """
+    from apps.employees.models import ChangeStatus, JobChange
+
+    if not Gate.check(request.user, "employees.terminate").allowed:
+        return Response([])
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    qs = JobChange.objects.filter(company_id=_company_id(request), status=ChangeStatus.PENDING).select_related(
+        "employment__person", "new_department", "successor__person")
+
+    return Response([{
+        "id": c.id,
+        "employment_id": c.employment_id,
+        "employee_no": c.employment.employee_no,
+        "employee_name": c.employment.person.display_name,
+        "type": c.change_type,
+        "type_label": c.get_change_type_display(),
+        "effective_from": c.effective_from,
+        "new_department": (c.new_department.name_ar
+                           if c.new_department_id else None),
+        "successor": (c.successor.person.display_name
+                      if c.successor_id else None),
+        "created_at": c.created_at,
+    } for c in qs.order_by("-created_at")])
