@@ -345,3 +345,97 @@ def test_cancelled_hidden_from_others(env):
     assert any(x["request_no"] == "C-4" for x in mine), "أُخفي عن مقدّمه"
     assert not any(x["request_no"] == "C-4" for x in theirs), (
         "الملغى ظاهر لمن لم يصله")
+
+# ══════════ حذف حساب الدخول والخلافة (ق-79) ══════════
+
+@pytest.mark.django_db(transaction=True)
+def test_login_removal_keeps_employment(env):
+    """
+    ⚠️ يُحذف حساب الدخول لا الملف الوظيفي.
+
+    فالسجل لا يُمحى (ق-44): الموظف يبقى بملفه وطلباته وسجل
+    عملياته، ويُنزع وصوله وحده.
+    """
+    r = _client(env["ceo"]).delete(
+        f"/api/access/members/{env['sup'].id}/login/")
+    assert r.status_code == 200, r.content.decode()[:200]
+
+    env["sup"].refresh_from_db()
+    assert env["sup"].id, "حُذف الملف الوظيفي"
+    assert env["sup"].status == "active", "أُنهيت الخدمة بحذف الحساب"
+
+    user = env["sup"].person.user
+    user.refresh_from_db()
+    assert not user.is_active, "بقي الوصول بعد الحذف"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_founding_owner_heir_gets_protection(env):
+    """
+    ⚠️ حذف المؤسس ينقل وسمه لأقدم مالك بعده.
+
+    فبلا ذلك يبقى الحساب بلا مالك محميّ، وتُنزع ملكية الجميع
+    بقرار واحد.
+    """
+    _post(env["ceo"], f"/api/access/members/{env['sup'].id}/ownership/",
+          {"grant": True})
+
+    r = _client(env["ceo"]).delete(
+        f"/api/access/members/{env['hrm'].id}/login/")
+    assert r.status_code == 200, r.content.decode()[:200]
+
+    with account_scope(env["account_id"]):
+        owners = list(AccountMembership.objects.filter(
+            account_id=env["account_id"], is_account_owner=True))
+
+    assert len(owners) == 1, f"الملاك: {len(owners)}"
+    assert owners[0].is_founding_owner, "لم يرث الخليفة الحماية"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_hr_takes_over_when_owners_gone(env):
+    """
+    ⚠️ زال الملاك جميعًا فناب مدير الموارد — ولا يُترك حساب بلا
+    من يديره.
+    """
+    # نجعل المشرف المالك الوحيد ثم نحذفه
+    with account_scope(env["account_id"]):
+        m = env["hrm"].person.user.account_membership
+        m.is_account_owner = False
+        m.is_founding_owner = False
+        m.save(update_fields=["is_account_owner", "is_founding_owner"])
+        sm = env["sup"].person.user.account_membership
+        sm.is_account_owner = True
+        sm.is_founding_owner = True
+        sm.save(update_fields=["is_account_owner", "is_founding_owner"])
+
+    r = _client(env["ceo"]).delete(
+        f"/api/access/members/{env['sup'].id}/login/")
+    assert r.status_code == 200, r.content.decode()[:200]
+
+    with account_scope(env["account_id"]):
+        owners = list(AccountMembership.objects.filter(
+            account_id=env["account_id"], is_account_owner=True))
+
+    assert owners, "الحساب بلا مالك — لا سيطرة إدارية عليه"
+    codes = {a.role.code for a in owners[0].role_assignments.select_related(
+        "role")}
+    assert codes & {"hr_manager", "hr_staff"}, (
+        f"ناب غير الموارد: {codes}")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_cannot_delete_own_login(env):
+    """لا يحذف أحد حسابه بنفسه — فيقفل الباب على نفسه."""
+    r = _client(env["hrm"]).delete(
+        f"/api/access/members/{env['hrm'].id}/login/")
+    assert r.status_code == 400
+    assert r.json().get("code") == "self_delete"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_only_owner_or_ceo_removes_login(env):
+    """حذف الوصول بيد مالك الحساب أو المدير العام."""
+    r = _client(env["sup"]).delete(
+        f"/api/access/members/{env['emp'].id}/login/")
+    assert r.status_code == 403, "حذف مشرفٌ حساب غيره"
