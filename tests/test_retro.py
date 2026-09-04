@@ -274,3 +274,142 @@ def test_only_hr_sees_retro(env):
     c2.force_login(env["emp"].person.user)
     assert c2.get("/api/payroll/retro/").status_code == 403, (
         "موظف عادي يرى فروق رواتب غيره")
+
+# ══════════ الدمج في القسيمة (ق-69) ══════════
+
+def _run_payroll(env, year, month):
+    """يُنشئ مسيرًا ويحتسبه — كما يفعل موظف الموارد."""
+    from apps.payroll.models import PayrollRunType
+    from apps.payroll.services.engine import calculate_run, create_run
+
+    run = create_run(company=env["comp"], run_type=PayrollRunType.REGULAR,
+                     year=year, month=month)
+    calculate_run(run)
+    return run
+
+
+@pytest.mark.django_db(transaction=True)
+def test_retro_becomes_payslip_line(env):
+    """
+    ⚠️ التسوية بندًا في القسيمة لا علمًا في جدول.
+
+    فتعليمها «مدموجة» بلا بند لا يصل الموظف شيء.
+    """
+    from apps.payroll.models import Payslip
+
+    with account_scope(env["account_id"]):
+        record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=Decimal("78.12"),
+            reason_ar="تصحيح بصمة أغسطس")
+
+        run = _run_payroll(env, 2026, 9)
+        slip = Payslip.objects.filter(run=run,
+                                      employment=env["emp"]).first()
+        lines = list(slip.lines.filter(
+            component_code__startswith="RETRO")) if slip else []
+
+    assert lines, "التسوية لم تصر بندًا في القسيمة"
+    assert lines[0].amount == Decimal("78.12")
+    assert "2026/08" in lines[0].name_ar, (
+        f"البند بلا شهره: {lines[0].name_ar}")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_retro_moves_the_net(env):
+    """
+    ⚠️ الحارس الحرج: التسوية تدخل الصافي.
+
+    فبند يظهر ولا يُدفع أسوأ من غيابه — الموظف يقرأ استحقاقًا لم
+    يصله.
+    """
+    from apps.payroll.models import Payslip
+
+    with account_scope(env["account_id"]):
+        base_run = _run_payroll(env, 2026, 10)
+        base = Payslip.objects.get(run=base_run,
+                                   employment=env["emp"]).net_pay
+
+        record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=Decimal("100.00"))
+
+        run = _run_payroll(env, 2026, 11)
+        after = Payslip.objects.get(run=run, employment=env["emp"]).net_pay
+
+    assert after == base + Decimal("100.00"), (
+        f"الصافي {after} والمتوقّع {base + Decimal('100.00')} — "
+        f"البند ظهر ولم يُدفع")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_retro_paid_once(env):
+    """
+    ⚠️ لا تُصرف مرتين: تُعلَّم مدموجة بمسيرها فلا تعود في التالي.
+    """
+    from apps.payroll.models import Payslip
+
+    with account_scope(env["account_id"]):
+        adj = record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=Decimal("100.00"))
+
+        first = _run_payroll(env, 2026, 9)
+        adj.refresh_from_db()
+        assert adj.status == RetroStatus.MERGED
+        assert adj.merged_run_id == first.id, "لم تُنسب لمسيرها"
+
+        second = _run_payroll(env, 2026, 10)
+        slip = Payslip.objects.get(run=second, employment=env["emp"])
+        again = slip.lines.filter(component_code__startswith="RETRO")
+
+    assert not again.exists(), "صُرفت التسوية مرتين"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_negative_retro_is_a_deduction(env):
+    """
+    التسوية السالبة استقطاع لا استحقاق — فالفرق قد يكون على
+    الموظف لا له.
+    """
+    from apps.payroll.models import Payslip, PayslipLineType
+
+    with account_scope(env["account_id"]):
+        record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.OTHER,
+            amount_before=Decimal("200.00"), amount_after=Decimal("50.00"))
+
+        run = _run_payroll(env, 2026, 9)
+        slip = Payslip.objects.get(run=run, employment=env["emp"])
+        line = slip.lines.filter(
+            component_code__startswith="RETRO").first()
+
+    assert line is not None
+    assert line.line_type == PayslipLineType.DEDUCTION, (
+        "الفرق السالب ظهر استحقاقًا — يُدفع للموظف بدل أن يُخصم")
+    assert line.amount == Decimal("150.00")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_same_month_retro_not_merged(env):
+    """
+    تسوية شهر لا تُدرج في مسير الشهر نفسه — فالاحتساب يأخذها،
+    وإدراجها يعني صرفها مرتين.
+    """
+    from apps.payroll.models import Payslip
+
+    with account_scope(env["account_id"]):
+        record_adjustment(
+            employment=env["emp"], year=2026, month=9,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=Decimal("100.00"))
+
+        run = _run_payroll(env, 2026, 9)
+        slip = Payslip.objects.get(run=run, employment=env["emp"])
+        lines = slip.lines.filter(component_code__startswith="RETRO")
+
+    assert not lines.exists(), "أُدرجت تسوية الشهر في مسيره"
