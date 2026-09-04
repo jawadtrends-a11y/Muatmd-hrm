@@ -61,6 +61,13 @@ def workspace(request):
             "username": user.username,
             "is_account_owner": membership.is_account_owner,
         },
+        # الترحيب بالاسم الأول: «مرحبًا، جواد» أقرب من الاسم
+        # الرباعي كاملًا في شريط ضيّق
+        "person": ({
+            "display_name": person.display_name,
+            "first_name": person.first_name_ar or person.display_name,
+            "preferred_locale": getattr(person, "preferred_locale", None),
+        } if (person := getattr(user, "person", None)) else None),
         "account": {
             "id": account.id,
             "slug": account.slug,

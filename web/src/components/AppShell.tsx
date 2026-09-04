@@ -9,7 +9,7 @@
  * 🔑 الخيارات تختلف بالدور لا الشاشات (ق-53): الموظف يرى
  * قسائمه وطلباته، ومدير الموارد يرى كل شيء — من نفس المسارات.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -47,6 +47,7 @@ const T: Dict = {
   sites: { ar: "مواقع العمل", en: "Work Sites" },
   settings: { ar: "الإعدادات", en: "Settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
+  greeting: { ar: "مرحبًا، ", en: "Hi, " },
   logout: { ar: "تسجيل الخروج", en: "Sign out" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   readOnly: {
@@ -60,7 +61,11 @@ const T: Dict = {
 };
 
 type Workspace = {
-  person: { display_name: string; preferred_locale?: string } | null;
+  person: {
+    display_name: string;
+    first_name?: string;
+    preferred_locale?: string;
+  } | null;
   account: { name: string } | null;
   company: { name: string } | null;
   permissions: string[];
@@ -190,6 +195,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
   /** أي المجموعات مفتوحة — والافتراضي مفتوحة إن كنا داخلها */
   const [openGroups, setOpenGroups] =
     useState<Record<string, boolean>>({});
@@ -329,6 +335,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, pathname, ws]);
+
+  /**
+   * القائمة تُغلق بالنقر خارجها وبالانتقال لصفحة أخرى.
+   *
+   * فبقاؤها مفتوحة تحجب المحتوى، ومن ينتقل لا يقصد إبقاءها.
+   */
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!accountRef.current?.contains(e.target as Node)) {
+        setAccountOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [accountOpen]);
+
+  useEffect(() => { setAccountOpen(false); }, [pathname]);
 
   if (isPublic) return <>{children}</>;
 
@@ -557,14 +581,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {theme === "dark" ? <IcSun size={17} /> : <IcMoon size={17} />}
           </button>
 
-          <div style={{ position: "relative" }}>
+          <div ref={accountRef} style={{ position: "relative" }}>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => setAccountOpen((v) => !v)}
             >
               <IcUser size={17} />
-              <span className="truncate" style={{ maxWidth: 130 }}>
-                {ws?.person?.display_name || "—"}
+              <span className="truncate" style={{ maxWidth: 190 }}>
+                {ws?.person?.first_name
+                  ? `${L("greeting")}${ws.person.first_name}`
+                  : (ws?.person?.display_name || "—")}
               </span>
             </button>
 
@@ -577,6 +603,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   zIndex: 50,
                 }}
               >
+                {/* بيانات مالية عن الحساب: مالك الحساب
+                    والمدير العام ومدير الموارد */}
+                {perms.has("account.view") && (
                 <Link
                   href="/settings/subscription"
                   onClick={() => setAccountOpen(false)}
@@ -589,6 +618,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <IcWallet size={18} />
                   {L("subscription")}
                 </Link>
+                )}
                 <button
                   onClick={logout}
                   className="btn btn-ghost"

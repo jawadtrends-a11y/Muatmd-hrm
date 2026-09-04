@@ -6,8 +6,8 @@
  * كل تبويب قسم مستقل يُعدَّل وحده — فتغيير حقل لا يرسل الملف
  * كاملًا، ولا يفتح باب الخطأ في بيانات لم تُمسّ.
  */
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiGet, apiPost, apiPut, apiDelete, API_BASE, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -176,10 +176,6 @@ const T: Dict = {
   fileKind: { ar: "النوع", en: "Kind" },
   fileSize: { ar: "الحجم", en: "Size" },
   view: { ar: "عرض", en: "View" },
-  ownHint: {
-    ar: "تعديلاتك تُقدَّم كطلب يعتمده موظف الموارد البشرية",
-    en: "Your edits are submitted as a request for HR approval",
-  },
   requestSubmitted: {
     ar: "قُدّم طلب التعديل",
     en: "Edit request submitted",
@@ -1130,7 +1126,28 @@ function ContactTab({
 
 /* ══ الشاشة ══ */
 
-export default function EmployeeProfileView({
+/**
+ * useSearchParams تحتاج Suspense في Next.js — وبدونها تُسقط
+ * الصفحة كلها عند التشغيل بلا خطأ في البناء.
+ */
+export default function EmployeeProfileView(
+  props: React.ComponentProps<typeof ProfileInner>,
+) {
+  return (
+    <Suspense fallback={
+      <div className="card" style={{
+        padding: 40, textAlign: "center", color: "var(--ink-3)",
+      }}>
+        …
+      </div>
+    }>
+      <ProfileInner {...props} />
+    </Suspense>
+  );
+}
+
+
+function ProfileInner({
   employmentId, showBack,
 }: {
   employmentId: number;
@@ -1141,7 +1158,24 @@ export default function EmployeeProfileView({
   const empId = employmentId;
 
   const [data, setData] = useState<Profile | null>(null);
-  const [tab, setTab] = useState<Tab>("personal");
+  /**
+   * التبويب في الرابط لا في الذاكرة (?tab=salary).
+   *
+   * فمن يحدّث الصفحة يبقى في تبويبه، ومن يرسل رابطًا لزميله يفتح
+   * على التبويب نفسه — والرجوع يعمل كما يتوقّع.
+   */
+  const search = useSearchParams();
+  const urlTab = search?.get("tab") as Tab | null;
+  const [tab, setTabState] = useState<Tab>(
+    urlTab && (TABS as readonly string[]).includes(urlTab)
+      ? urlTab : "personal");
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    const q = new URLSearchParams(Array.from(search?.entries() ?? []));
+    q.set("tab", t);
+    router.replace(`?${q.toString()}`, { scroll: false });
+  };
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1269,15 +1303,8 @@ export default function EmployeeProfileView({
         </div>
       </div>
 
-      {data.is_own && (
-        <div style={{
-          fontSize: ".87rem", padding: "9px 13px",
-          background: "var(--teal-soft)", color: "var(--teal)",
-          borderRadius: "var(--radius-sm)", fontWeight: 500,
-        }}>
-          {L("ownHint")}
-        </div>
-      )}
+      {/* لا شريط يخبر بمسار التعديل قبل أن يبدأ: من يفتح ملفه
+          يريد قراءته، ومن يعدّل يعرف عند الحفظ (requestSubmitted) */}
 
       {requested && (
         <div style={{
@@ -1294,29 +1321,45 @@ export default function EmployeeProfileView({
         </div>
       )}
 
-      {/* التبويبات */}
-      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-        {TABS.map((t) => {
-          const Icon = ICONS[t];
-          const count =
-            t === "dependents" ? data.dependents.length
-            : t === "documents" ? data.documents.length
-            : t === "files" ? data.files.length
-            : null;
-
-          return (
-            <button key={t}
-              className={`btn btn-sm ${tab === t ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setTab(t)}>
-              <Icon size={15} />
-              {L(t)}
-              {count != null && count > 0 && (
-                <span className="num" style={{ opacity: .7 }}>({count})</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* قائمة جانبية لا شريطًا أفقيًا: اثنا عشر تبويبًا تلتفّ
+          لسطرين وتختلط، والقائمة تفصلها بطبعها */}
+      <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
+        <div className="card" style={{
+          padding: 6, width: 210, flexShrink: 0,
+          position: "sticky", top: 12,
+        }}>
+          {TABS.map((t) => {
+            const Icon = ICONS[t];
+            const count =
+              t === "dependents" ? data.dependents.length
+              : t === "documents" ? data.documents.length
+              : t === "files" ? data.files.length
+              : null;
+            const on = tab === t;
+            return (
+              <button key={t} onClick={() => setTab(t)} style={{
+                display: "flex", alignItems: "center", gap: 9,
+                width: "100%", textAlign: "start", cursor: "pointer",
+                padding: "9px 11px", marginBottom: 2, border: "none",
+                borderRadius: "var(--radius-sm)", font: "inherit",
+                fontSize: ".9rem", fontWeight: on ? 600 : 500,
+                color: on ? "var(--teal)" : "var(--ink-2)",
+                background: on ? "var(--teal-soft)" : "transparent",
+              }}>
+                <Icon size={16} />
+                <span className="grow truncate">{L(t)}</span>
+                {count != null && count > 0 && (
+                  <span className="num" style={{
+                    opacity: .65, fontSize: ".78rem",
+                  }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="grow stack" style={{ minWidth: 0 }}>
 
       {error && (
         <div style={{
@@ -1632,6 +1675,8 @@ export default function EmployeeProfileView({
 
       {tab === "changes" && <JobChangesTab empId={empId} L={L} />}
       {tab === "audit" && <AuditTab empId={empId} L={L} />}
+        </div>
+      </div>
     </div>
   );
 }
