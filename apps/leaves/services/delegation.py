@@ -69,7 +69,8 @@ def create_delegation(*, request_obj, deputy_employment,
          company_id=absentee.company_id,
          context={"absentee": absentee.person.display_name,
                   "starts_on": str(starts_on), "ends_on": str(ends_on),
-                  "request_no": request_obj.request_no},
+                  "request_no": request_obj.request_no,
+                    "link_url": "/me/track"},
          actor_person_id=absentee.person_id,
          recipients=[deputy_employment.person_id])
     return d
@@ -113,7 +114,8 @@ def decide_delegation(*, delegation, deputy_employment, accept):
          context={"deputy": delegation.deputy.person.display_name,
                   "starts_on": str(delegation.starts_on),
                   "ends_on": str(delegation.ends_on),
-                  "request_no": delegation.request.request_no},
+                  "request_no": delegation.request.request_no,
+                    "link_url": "/me/track"},
          actor_person_id=delegation.deputy.person_id,
          recipients=[delegation.absentee.person_id])
 

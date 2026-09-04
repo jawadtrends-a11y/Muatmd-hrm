@@ -223,10 +223,12 @@ def _switch_role(employment, new_code):
 
 
 def _ctx(change, **extra):
+    # الإشعار يوصل لا يخبر فقط: يفتح ملف الموظف على تبويب تغييراته
     return {
         "change_type": change.get_change_type_display(),
         "employee": change.employment.person.display_name,
         "effective_from": str(change.effective_from),
+        "link_url": f"/employees/{change.employment_id}",
         **extra,
     }
 

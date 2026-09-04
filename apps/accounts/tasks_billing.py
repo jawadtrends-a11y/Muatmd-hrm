@@ -69,7 +69,7 @@ def send_renewal_alerts():
                      "end_date": str(sub.current_period_end),
                      "cycle": sub.get_cycle_display(),
                      "auto_renew": sub.auto_renew,
-                 },
+                  "link_url": "/settings"},
                  recipients=[])
             sent += 1
     return {"alerts_sent": sent}
@@ -168,7 +168,7 @@ def retry_failed_renewal(subscription_id, account_id, invoice_id, attempt):
                  "amount": str(invoice.total),
                  "attempts": attempt,
                  "reason": payment.failure_message,
-             },
+                  "link_url": "/settings"},
              recipients=[])
         logger.warning("auto_renewal_exhausted", extra={
             "account_id": account_id, "invoice_id": invoice_id})

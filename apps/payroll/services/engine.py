@@ -527,7 +527,9 @@ def submit_run(run, submitted_by_person=None):
          company_id=run.company_id,
          context={"period": f"{run.period_year}-{run.period_month:02d}",
                   "total_net": str(run.total_net),
-                  "employee_count": run.employee_count},
+                  "employee_count": run.employee_count,
+                  # الإشعار يوصل لا يخبر فقط
+                  "link_url": "/payroll"},
          recipients=[])
     return run
 
@@ -567,7 +569,8 @@ def approve_run(run, approved_by_person):
          context={"period": f"{run.period_year}-{run.period_month:02d}",
                   "total_net": str(run.total_net),
                   "approver_name": getattr(approved_by_person,
-                                           "display_name", "")},
+                                           "display_name", ""),
+                  "link_url": "/payroll"},
          recipients=[])
     return run
 

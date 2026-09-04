@@ -261,7 +261,8 @@ def submit_request(request_obj):
          company_id=request_obj.company_id,
          context={"request_no": request_obj.request_no,
                   "request_type": request_obj.get_request_type_display(),
-                  "employee_name": request_obj.employment.person.display_name},
+                  "employee_name": request_obj.employment.person.display_name,
+                    "link_url": "/me/track"},
          recipients=[])
     return request_obj, approvers
 
@@ -305,9 +306,11 @@ def decide(*, request_obj, approver_employment, decision, comment="",
         channel=via)
 
     from apps.notifications.bus import emit
+    # الإشعار يوصل لا يخبر فقط: مقدّم الطلب يفتح «طلباتي»
     ctx = {"request_no": request_obj.request_no,
            "request_type": request_obj.get_request_type_display(),
-           "reason": comment}
+           "reason": comment,
+           "link_url": "/me/track"}
 
     if decision == ApprovalDecision.REJECTED:
         request_obj.status = RequestStatus.REJECTED
@@ -360,7 +363,8 @@ def decide(*, request_obj, approver_employment, decision, comment="",
         request_obj.current_step = next_step
         request_obj.save()
         emit("request.pending_approval", account_id=request_obj.account_id,
-             company_id=request_obj.company_id, context=ctx, recipients=[])
+             company_id=request_obj.company_id,
+             context={**ctx, "link_url": "/leaves"}, recipients=[])
 
     return request_obj
 
