@@ -395,3 +395,50 @@ def pending_for(employment):
 def models_f_current_step():
     from django.db.models import F
     return F("current_step")
+
+
+class CancelError(Exception):
+    """لا يُلغى الطلب — رسالة تخبر بما يُفعل."""
+
+
+@transaction.atomic
+def cancel_request(*, request_obj, by_employment, reason=""):
+    """
+    مقدّم الطلب يسحبه ما لم ينظر فيه أحد (ق-81).
+
+    فالخطأ في التقديم وارد، والرأي يتغيّر. لكن بعد أول قرار يكون
+    معتمِد قد نظر وقرّر — وسحبه بعده يُهدر قراره ويربك السجل.
+
+    والرصيد سليم: الإجازة تُخصم عند الاعتماد لا عند التقديم، فلا
+    شيء يُردّ.
+    """
+    if request_obj.employment_id != by_employment.id:
+        raise CancelError("لا يُلغي الطلب إلا مقدّمه")
+
+    if request_obj.status != RequestStatus.PENDING:
+        raise CancelError(
+            f"الطلب {request_obj.get_status_display()} — لا يُلغى")
+
+    decided = RequestApproval.objects.filter(
+        request=request_obj).exclude(decision="").exists()
+    if decided:
+        raise CancelError(
+            "بدأ الاعتماد — راجع معتمِدك ليرفضه إن أردت التراجع")
+
+    request_obj.status = RequestStatus.CANCELLED
+    request_obj.closed_at = timezone.now()
+    request_obj.save(update_fields=["status", "closed_at", "updated_at"])
+
+    # الدرجات المعلّقة تُغلق فلا تبقى في صناديق المعتمِدين
+    RequestApproval.objects.filter(
+        request=request_obj, decision="").update(
+        decision=ApprovalDecision.DELEGATED, decided_at=timezone.now())
+
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=request_obj, action="update",
+        actor=by_employment.person, label=request_obj.request_no,
+        summary=f"ألغى مقدّمه الطلب{f' — {reason}' if reason else ''}",
+        channel="web")
+
+    return request_obj

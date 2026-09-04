@@ -166,6 +166,8 @@ urlpatterns = [
     path("api/me/notifications/", notifications_api.my_notifications, name="my-notifications"),
     path("api/me/notifications/read/", notifications_api.mark_read, name="notifications-read"),
     path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),
+    # إلغاء الطلب — لمقدّمه قبل أول قرار (ق-81)
+    path("api/requests/<int:request_id>/cancel/", leaves_api.cancel_request_view, name="request-cancel"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

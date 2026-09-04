@@ -71,6 +71,12 @@ const T: Dict = {
   termination_reason: { ar: "سبب الإنهاء", en: "Termination reason" },
   request_date: { ar: "تاريخ الطلب", en: "Request date" },
   deputy: { ar: "النائب أثناء غيابك", en: "Deputy while away" },
+  successor: { ar: "من يخلفك", en: "Successor" },
+  pickSuccessor: { ar: "اختر زميلًا", en: "Pick a colleague" },
+  successorHint: {
+    ar: "يرث مهامك بعد اعتماد الطلب — ويبقى بدوره",
+    en: "Inherits your duties once approved — keeps their own role",
+  },
   noDeputy: { ar: "بلا نائب", en: "No deputy" },
   optional: { ar: "اختياري", en: "optional" },
   // المعاينة
@@ -135,6 +141,9 @@ export default function MyRequestsPage() {
   const [deputies, setDeputies] = useState<
     { employment_id: number; employee_no: string; name_ar: string }[]>([]);
   const [deputyId, setDeputyId] = useState("");
+  /** ق-79: من يشغل موقعًا إداريًا لا يغادر بلا خليفة */
+  const [needsSuccessor, setNeedsSuccessor] = useState(false);
+  const [successorId, setSuccessorId] = useState("");
   const [leaveTypes, setLeaveTypes] = useState<
     { code: string; name_ar: string; requires_attachment?: boolean }[]
   >([]);
@@ -152,8 +161,10 @@ export default function MyRequestsPage() {
 
   useEffect(() => {
     Promise.all([
-      apiGet<{ types: ReqType[] }>("/me/request-types/")
-        .catch(() => { setDenied(true); return { types: [] }; }),
+      apiGet<{ types: ReqType[]; needs_successor?: boolean }>(
+        "/me/request-types/")
+        .catch(() => { setDenied(true);
+                       return { types: [], needs_successor: false }; }),
       apiGet<{ code: string; name_ar: string;
                requires_attachment?: boolean }[]>("/leaves/types/")
         .catch(() => []),
@@ -168,6 +179,7 @@ export default function MyRequestsPage() {
         .catch(() => []),
     ]).then(([t, lt, rs, dp]) => {
       setTypes(t.types || []);
+      setNeedsSuccessor(!!t.needs_successor);
       setLeaveTypes(lt);
       setReasons(rs);
       setDeputies(dp);
@@ -251,6 +263,10 @@ export default function MyRequestsPage() {
 
   async function submit() {
     if (!selected || missing.length > 0) return;
+    // ق-79: لا يُقدَّم إنهاء العقد بلا خليفة لمن يشغل موقعًا إداريًا
+    if (selected.code === "resignation" && needsSuccessor && !successorId) {
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -267,6 +283,11 @@ export default function MyRequestsPage() {
       // مرفقًا وهو مرفوع أمام المستخدم
       const attachment = String(payload.attachment_url ?? "");
       delete payload.attachment_url;
+
+      // ق-79: الخليفة يُسمّى مع الطلب ويسري بالاعتماد
+      if (selected.code === "resignation" && successorId) {
+        payload.successor_employment_id = Number(successorId);
+      }
 
       const res = await apiPost<{ request_no: string; warnings: string[] }>(
         "/requests/", {
@@ -389,6 +410,31 @@ export default function MyRequestsPage() {
                 والعلم من الخادم لا شرط مكتوب هنا. */}
             {/* ق-75: النائب أثناء الغياب — اختياري.
                 الموظف أعرف بمن يقوم بعمله، والنائب يقبل أو يرفض. */}
+            {/* ق-79: الخليفة عند إنهاء العقد — إلزامي لمن يشغل
+                موقعًا إداريًا، ويسري بالاعتماد لا بالتقديم */}
+            {selected.code === "resignation" && needsSuccessor && (
+              <div className="field" style={{ minWidth: 220, maxWidth: 280 }}>
+                <label className="label">
+                  {L("successor")}
+                  <span style={{ color: "var(--danger)" }}> *</span>
+                </label>
+                <select className="select" value={successorId}
+                  onChange={(e) => setSuccessorId(e.target.value)}>
+                  <option value="">— {L("pickSuccessor")} —</option>
+                  {deputies.map((d) => (
+                    <option key={d.employment_id} value={d.employment_id}>
+                      {d.employee_no} — {d.name_ar}
+                    </option>
+                  ))}
+                </select>
+                <div className="muted" style={{
+                  fontSize: ".78rem", marginTop: 4,
+                }}>
+                  {L("successorHint")}
+                </div>
+              </div>
+            )}
+
             {selected.code === "leave" && deputies.length > 0 && (
               <div className="field" style={{ minWidth: 200, maxWidth: 260 }}>
                 <label className="label">
@@ -419,7 +465,10 @@ export default function MyRequestsPage() {
                 leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
             )}
             {selected.optional_fields.filter((f) => {
-              if (f === "note" || f === "attachment_url") return false;
+              // الخليفة له حقله المخصّص أعلاه — والرسم التلقائي
+              // يكرّره باسمه الخام (ق-79)
+              if (f === "note" || f === "attachment_url"
+                  || f === "successor_employment_id") return false;
               // ق-59: حقل الوقت يظهر حسب البصمة المختارة
               if (selected.code === "attendance_fix") {
                 const target = values.fix_target || "";
@@ -640,7 +689,10 @@ export default function MyRequestsPage() {
 
           <div className="row" style={{ marginTop: 16 }}>
             <button className="btn btn-primary" style={{ minWidth: 150 }}
-              disabled={saving || missing.length > 0} onClick={submit}>
+              disabled={saving || missing.length > 0
+                || (selected.code === "resignation"
+                    && needsSuccessor && !successorId)}
+              onClick={submit}>
               <IcCheck size={17} />
               {saving ? L("submitting") : L("submit")}
             </button>

@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { apiGet, apiPost, openForView } from "@/lib/api";
+import { apiGet, apiPost, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc, IcPlus } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -39,6 +39,11 @@ const T: Dict = {
     en: "Asked you to cover while away",
   },
   yourDeputy: { ar: "نائبك", en: "Your deputy" },
+  cancelRequest: { ar: "إلغاء الطلب", en: "Cancel request" },
+  cancelHint: {
+    ar: "ما دام لم ينظر فيه أحد",
+    en: "While no one has decided yet",
+  },
   acceptDeleg: { ar: "أقبل الإنابة", en: "Accept" },
   declineDeleg: { ar: "أعتذر", en: "Decline" },
   empty: { ar: "لم تقدّم أي طلب بعد", en: "No requests yet" },
@@ -114,6 +119,7 @@ export default function TrackRequestsPage() {
   /** ق-75: إنابات تنتظر قراري — أقبل أو أعتذر */
   const [delegs, setDelegs] = useState<Deleg[]>([]);
   const [acting, setActing] = useState(false);
+  const [cancelErr, setCancelErr] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Req | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -142,6 +148,26 @@ export default function TrackRequestsPage() {
       .catch(() => { setDenied(true); setBusy(false); });
     loadDelegs();
   }, []);
+
+  /**
+   * ق-81: مقدّم الطلب يسحبه ما لم ينظر فيه أحد.
+   *
+   * فالخطأ في التقديم وارد والرأي يتغيّر — لكن بعد أول قرار
+   * يكون معتمِد قد نظر، وسحبه بعده يُهدر قراره.
+   */
+  async function cancelRequest(id: number) {
+    setActing(true);
+    try {
+      await apiPost(`/requests/${id}/cancel/`, {});
+      setOpenId(null);
+      apiGet<Req[]>("/me/requests/").then(setRows).catch(() => {});
+    } catch (e) {
+      setCancelErr((e as ApiError).message);
+      setTimeout(() => setCancelErr(""), 5000);
+    } finally {
+      setActing(false);
+    }
+  }
 
   /** ق-75: النائب يقبل الإنابة أو يعتذر — وبالاعتذار تمضي الإجازة */
   async function decideDeleg(id: number, accept: boolean) {
@@ -183,6 +209,16 @@ export default function TrackRequestsPage() {
           {L("newRequest")}
         </Link>
       </div>
+
+      {cancelErr && (
+        <div style={{
+          background: "var(--danger-soft)", color: "var(--danger)",
+          padding: "10px 14px", borderRadius: "var(--radius-sm)",
+          fontSize: ".88rem",
+        }}>
+          {cancelErr}
+        </div>
+      )}
 
       {/* ق-75: إنابات تنتظر قرارك — أول ما يُرى، فهي تنتظر إجراءً */}
       {delegs.length > 0 && (
@@ -377,6 +413,29 @@ export default function TrackRequestsPage() {
                               </div>
                             )}
                             <ApprovalChain rows={detail.approvals ?? []} />
+
+                            {/* ق-81: السحب ما لم ينظر فيه أحد */}
+                            {detail.status === "pending"
+                             && !(detail.approvals || []).some(
+                                  (a) => a.decision) && (
+                              <div style={{
+                                paddingTop: 10,
+                                borderTop: "1px solid var(--line)",
+                              }}>
+                                <button className="btn btn-sm btn-ghost"
+                                  disabled={acting}
+                                  style={{ color: "var(--danger)" }}
+                                  onClick={() => cancelRequest(detail.id)}>
+                                  {L("cancelRequest")}
+                                </button>
+                                <span className="muted" style={{
+                                  fontSize: ".78rem",
+                                  marginInlineStart: 8,
+                                }}>
+                                  {L("cancelHint")}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="muted">{L("loadFailed")}</span>

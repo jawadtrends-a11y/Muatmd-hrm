@@ -205,6 +205,17 @@ def leave_requests(request):
         qs = qs.filter(company_id=company_id).select_related(
             "employment__person")
 
+        # ق-81: الملغى يظهر لمقدّمه وحده.
+        #
+        # فسحبه صاحبه قبل أن ينظر فيه أحد — ولا شأن للمعتمِدين بما
+        # لم يصلهم. والمرفوض يبقى ظاهرًا: هو قرارهم.
+        from django.db.models import Q
+        me = _my_employment(request)
+        if request.GET.get("status") != RequestStatus.CANCELLED:
+            cancelled = Q(status=RequestStatus.CANCELLED)
+            qs = (qs.exclude(cancelled & ~Q(employment=me)) if me
+                  else qs.exclude(cancelled))
+
         if request.GET.get("status"):
             qs = qs.filter(status=request.GET["status"])
         if request.GET.get("employment_id"):
@@ -502,11 +513,17 @@ def request_types(request):
             return Response({"detail": "لا ملف موظف مرتبط بحسابك"},
                             status=404)
 
+    # ق-79: الواجهة تحتاج معرفة من يلزمه بديل قبل أن يقدّم — لا
+    # أن يصطدم برسالة رفض بلا حقل يملؤه
+    from apps.leaves.services.delegation import (holds_admin_position,
+                                                 successor_of)
     return Response({
         "employee_no": emp.employee_no,
         "employment_id": emp.id,
         "name_ar": emp.person.display_name,
         "is_saudi": emp.person.nationality_code == "SA",
+        "needs_successor": (holds_admin_position(emp)
+                            and successor_of(emp) is None),
         "types": eligible_types(emp),
     })
 
@@ -1055,3 +1072,31 @@ def decide_delegation_view(request, delegation_id):
 
     return Response({"id": d.id, "status": d.status,
                      "status_label": d.get_status_display()})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancel_request_view(request, request_id):
+    """
+    إلغاء طلب — لمقدّمه وحده، وما لم يقرّر فيه معتمِد.
+    """
+    from apps.leaves.services.approvals import CancelError, cancel_request
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    # معزول ذاتيًا: مقيَّد بـemployment=emp — لا يُلغي إلا مقدّمه
+    r = Request.objects.filter(id=request_id, employment=emp).first()
+    if r is None:
+        return Response({"detail": "الطلب غير موجود"}, status=404)
+
+    try:
+        r = cancel_request(request_obj=r, by_employment=emp,
+                           reason=request.data.get("reason", ""))
+    except CancelError as e:
+        return Response({"detail": str(e), "code": "cannot_cancel"},
+                        status=409)
+
+    return Response({"id": r.id, "status": r.status,
+                     "status_label": r.get_status_display()})

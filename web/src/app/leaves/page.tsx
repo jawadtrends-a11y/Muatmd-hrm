@@ -423,7 +423,6 @@ export default function LeavesPage() {
 
   const [approvals, setApprovals] = useState<Req[]>([]);
   const [all, setAll] = useState<Req[]>([]);
-  const [mine, setMine] = useState<Req[]>([]);
   /** ق-75: إنابات تنتظر قراري — أقبل أو أعتذر */
   const [delegations, setDelegations] = useState<Deleg[]>([]);
   const [canApprove, setCanApprove] = useState(false);
@@ -449,11 +448,6 @@ export default function LeavesPage() {
         .catch(() => setCanViewAll(false)),
     );
 
-    jobs.push(
-      apiGet<Req[]>("/me/requests/")
-        .then(setMine)
-        .catch(() => setMine([])),
-    );
     // ق-75: إنابات تنتظر قراري
     jobs.push(
       apiGet<{ incoming: Deleg[] }>("/me/delegations/")
@@ -632,16 +626,8 @@ export default function LeavesPage() {
             </section>
           )}
 
-          {/* ══ طلباتي ══ */}
-          <section className="stack" style={{ gap: 10 }}>
-            <div className="row">
-              <IcLeave size={18} />
-              <h2 style={{ fontSize: "1.05rem" }}>{L("myRequests")}</h2>
-            </div>
-            <div className="card" style={{ overflow: "hidden" }}>
-              <RequestsTable rows={mine} L={L} showEmployee={false} />
-            </div>
-          </section>
+          {/* «طلباتي» لها شاشتها (/me/track) — وتكرارها هنا يخلط
+              بين ما تعتمده وما قدّمته */}
         </>
       )}
     </div>

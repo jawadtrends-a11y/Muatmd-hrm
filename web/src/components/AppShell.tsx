@@ -88,6 +88,11 @@ type NavItem = {
    * والافتراضي "department": البنود العامة لمدير الإدارة فما فوق.
    */
   minScope?: "team" | "department";
+  /**
+   * عدّاد أحمر على البند — ما ينتظر قرارك يُرى من القائمة بلا
+   * فتح الشاشة. ويظهر على الأب أيضًا حين تُطوى القائمة.
+   */
+  badge?: "approvals";
   /** يظهر لمن يملك إحدى هذه الصلاحيات — فارغ يعني للجميع */
   perms?: string[];
   /**
@@ -118,7 +123,7 @@ const NAV: NavItem[] = [
       { href: "/team/attendance", key: "teamAttendance", icon: IcClock,
         perms: ["attendance.view"] },
       { href: "/team/requests", key: "teamRequests", icon: IcLeave,
-        perms: ["requests.approve"] },
+        perms: ["requests.approve"], badge: "approvals" },
       { href: "/team/assign", key: "teamAssign", icon: IcDoc,
         perms: ["requests.manage"] },
     ],
@@ -151,6 +156,28 @@ const NAV: NavItem[] = [
   { href: "/me/account", key: "myAccount", icon: IcUser },
 ];
 
+/** دائرة حمراء بعدد ما ينتظر قرارًا */
+function Badge({ n }: { n: number }) {
+  return (
+    <span className="num" style={{
+      minWidth: 19, height: 19, padding: "0 5px", borderRadius: 10,
+      background: "var(--danger)", color: "#fff",
+      fontSize: ".7rem", fontWeight: 700, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+
+/** هل يحمل هذا البند أو أحد أبنائه عدّادًا؟ */
+function hasBadge(item: NavItem): boolean {
+  return item.badge === "approvals"
+    || (item.children || []).some((c) => c.badge === "approvals");
+}
+
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -159,6 +186,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const [ready, setReady] = useState(false);
   const [ws, setWs] = useState<Workspace | null>(null);
+  /** ق-68: عدد ما ينتظر قرارك — يُحدَّث كل دقيقة */
+  const [pendingCount, setPendingCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   /** أي المجموعات مفتوحة — والافتراضي مفتوحة إن كنا داخلها */
@@ -266,6 +295,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
    *
    * والخادم يحمي البيانات أصلًا — هذا يمنع الارتباك لا التسرّب.
    */
+  // ق-68: ما ينتظر قرارك يُرى من القائمة بلا فتح الشاشة
+  useEffect(() => {
+    if (!ready || isPublic || !ws) return;
+    const load = () => {
+      apiGet<unknown[]>("/me/approvals/")
+        .then((d) => setPendingCount(Array.isArray(d) ? d.length : 0))
+        .catch(() => setPendingCount(0));
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [ready, isPublic, ws]);
+
   useEffect(() => {
     if (!ready || isPublic || !ws) return;
 
@@ -369,6 +411,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   >
                     <Icon size={19} />
                     <span style={{ flex: 1 }}>{L(item.key)}</span>
+                    {hasBadge(item) && pendingCount > 0 && (
+                      <Badge n={pendingCount} />
+                    )}
                     <svg
                       width="15" height="15" viewBox="0 0 24 24"
                       fill="none" stroke="currentColor" strokeWidth="2.2"
@@ -403,7 +448,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         }}
                       >
                         <KidIcon size={16} />
-                        {L(kid.key)}
+                        <span style={{ flex: 1 }}>{L(kid.key)}</span>
+                        {kid.badge === "approvals" && pendingCount > 0 && (
+                          <Badge n={pendingCount} />
+                        )}
                       </Link>
                     );
                   })}
@@ -426,7 +474,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 }}
               >
                 <Icon size={19} />
-                {L(item.key)}
+                <span style={{ flex: 1 }}>{L(item.key)}</span>
+                {item.badge === "approvals" && pendingCount > 0 && (
+                  <Badge n={pendingCount} />
+                )}
               </Link>
             );
           })}
