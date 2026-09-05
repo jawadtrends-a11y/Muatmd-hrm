@@ -10,6 +10,7 @@ from apps.payroll import api as payroll_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
 from apps.payroll import api_outputs as outputs_api
+from apps.attendance import api_ingest as ingest_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
 from apps.core import api_audit as audit_api
@@ -67,6 +68,9 @@ urlpatterns = [
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
     # أجهزة البصمة
+    # استقبال البصمات من الأجهزة (ق-84) — يصادق بمفتاح الجهاز
+    path("api/attendance/ingest/", ingest_api.ingest_punches, name="punch-ingest"),
+    path("api/attendance/ingest/ping/", ingest_api.device_ping, name="device-ping"),
     path("api/attendance/devices/", attendance_api.punch_devices, name="punch-devices"),
     path("api/attendance/devices/<int:device_id>/", attendance_api.punch_device_detail, name="punch-device-detail"),
     path("api/attendance/punch/", attendance_api.punch, name="punch"),
