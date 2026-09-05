@@ -31,6 +31,10 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
+      # ملفات BioTime المرفوعة عبر SFTP (ق-85):
+      # المجلد على الخادم لأن SFTP يكتب فيه،
+      # والحاوية تقرأه لتُدخل بصماته.
+      - /srv/biotime:/srv/biotime
     ports:
       - "127.0.0.1:8000:8000"
     env_file: .env
@@ -46,6 +50,10 @@ services:
     command: celery -A config worker -l info -Q realtime,payroll,exports,attendance,maintenance
     volumes:
       - .:/app
+      # ملفات BioTime المرفوعة عبر SFTP (ق-85):
+      # المجلد على الخادم لأن SFTP يكتب فيه،
+      # والحاوية تقرأه لتُدخل بصماته.
+      - /srv/biotime:/srv/biotime
     env_file: .env
     depends_on:
       - db
@@ -57,6 +65,10 @@ services:
     command: celery -A config beat -l info
     volumes:
       - .:/app
+      # ملفات BioTime المرفوعة عبر SFTP (ق-85):
+      # المجلد على الخادم لأن SFTP يكتب فيه،
+      # والحاوية تقرأه لتُدخل بصماته.
+      - /srv/biotime:/srv/biotime
     env_file: .env
     depends_on:
       - db

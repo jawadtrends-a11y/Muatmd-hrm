@@ -221,3 +221,25 @@ def test_batch_cap(env):
             for i in range(600)]
     r = _send("ZK-T", key, rows)
     assert r.status_code == 413
+
+@pytest.mark.django_db(transaction=True)
+def test_two_punches_same_device_same_batch(env):
+    """
+    ⚠️ بصمتان من الجهاز نفسه في دفعة واحدة تمرّان.
+
+    فـexternal_ref فريد لكل شركة: وضع رقم الجهاز فيه يجعل البصمة
+    الثانية تصطدم بقيد القاعدة — فيسقط الرفع كله بخطأ تقني لا
+    برسالة مفهومة.
+    """
+    key = _make_device(env)
+    r = _send("ZK-T", key, [
+        {"employee_no": "E1", "punched_at": "2026-09-05T08:00:00",
+         "external_ref": "SN-SAME"},
+        {"employee_no": "E1", "punched_at": "2026-09-05T16:00:00",
+         "external_ref": "SN-SAME"},
+    ])
+    assert r.status_code == 200, r.content.decode()[:200]
+    assert r.json()["accepted"] == 2, r.json()
+
+    with account_scope(env["account_id"]):
+        assert AttendancePunch.objects.count() == 2

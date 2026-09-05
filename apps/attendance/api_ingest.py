@@ -126,7 +126,11 @@ def ingest_punches(request):
                 device_id=device.device_code,
                 defaults={
                     "source": PunchSource.DEVICE,
-                    "external_ref": str(row.get("external_ref") or ""),
+                    # external_ref فريد لكل شركة — فهو معرّف البصمة
+                    # لا معرّف الجهاز، وإلا رُفضت الثانية من الجهاز
+                    # نفسه بخطأ قاعدة لا برسالة مفهومة.
+                    "external_ref": (
+                        f"{device.device_code}:{no}:{at.isoformat()}"),
                     "raw_payload": row,
                 })
             if created:

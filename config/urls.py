@@ -71,6 +71,7 @@ urlpatterns = [
     # استقبال البصمات من الأجهزة (ق-84) — يصادق بمفتاح الجهاز
     path("api/attendance/ingest/", ingest_api.ingest_punches, name="punch-ingest"),
     path("api/attendance/ingest/ping/", ingest_api.device_ping, name="device-ping"),
+    path("api/attendance/devices/guide/", attendance_api.device_setup_guide, name="device-guide"),
     path("api/attendance/devices/", attendance_api.punch_devices, name="punch-devices"),
     path("api/attendance/devices/<int:device_id>/", attendance_api.punch_device_detail, name="punch-device-detail"),
     path("api/attendance/punch/", attendance_api.punch, name="punch"),

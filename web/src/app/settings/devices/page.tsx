@@ -55,6 +55,17 @@ const T: Dict = {
   copy: { ar: "نسخ", en: "Copy" },
   copied: { ar: "نُسخ", en: "Copied" },
   close: { ar: "إغلاق", en: "Close" },
+  showGuide: { ar: "دليل الربط", en: "Integration guide" },
+  hideGuide: { ar: "إخفاء الدليل", en: "Hide guide" },
+  guideTitle: {
+    ar: "ربط الأجهزة بالنظام",
+    en: "Connecting devices",
+  },
+  ingestUrl: { ar: "رابط إرسال البصمات", en: "Ingest URL" },
+  pingUrl: { ar: "رابط فحص الاتصال", en: "Ping URL" },
+  headers: { ar: "الترويسات", en: "Headers" },
+  bodyExample: { ar: "مثال الجسم", en: "Body example" },
+  notes: { ar: "ملاحظات", en: "Notes" },
 };
 
 type Device = {
@@ -68,6 +79,15 @@ type Device = {
 };
 
 type Site = { id: number; name_ar: string };
+
+type Guide = {
+  ingest_url: string;
+  ping_url: string;
+  headers: Record<string, string>;
+  body_example: unknown;
+  max_batch: number;
+  notes_ar: string[];
+};
 
 export default function DevicesPage() {
   const { L } = useT(T);
@@ -83,6 +103,9 @@ export default function DevicesPage() {
   const [askDel, setAskDel] = useState<number | null>(null);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
+  /** دليل الربط: من يشتري جهازًا يحتاج الرابط والترويسات */
+  const [guide, setGuide] = useState<Guide | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   const load = useCallback(() => {
     apiGet<Device[]>("/attendance/devices/")
@@ -101,6 +124,8 @@ export default function DevicesPage() {
         setCanEdit((d.permissions || []).includes("sites.manage")))
       .catch(() => setCanEdit(false));
     apiGet<Site[]>("/sites/").then(setSites).catch(() => setSites([]));
+    apiGet<Guide>("/attendance/devices/guide/")
+      .then(setGuide).catch(() => setGuide(null));
   }, []);
 
   async function save() {
@@ -217,6 +242,13 @@ export default function DevicesPage() {
             {L("subtitle")}
           </div>
         </div>
+        <div className="row" style={{ gap: 8 }}>
+        {guide && (
+          <button className="btn btn-ghost btn-sm"
+            onClick={() => setShowGuide((v) => !v)}>
+            {showGuide ? L("hideGuide") : L("showGuide")}
+          </button>
+        )}
         {canEdit && editing === null && (
           <button className="btn btn-primary" onClick={() => {
             setDraft({ device_code: "", name_ar: "", site_id: "",
@@ -228,7 +260,78 @@ export default function DevicesPage() {
             {L("add")}
           </button>
         )}
+        </div>
       </div>
+
+      {/* دليل الربط — الرابط والترويسات وشكل الجسم في مكان واحد */}
+      {showGuide && guide && (
+        <div className="card" style={{ padding: 20 }}>
+          <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>
+            {L("guideTitle")}
+          </h3>
+
+          <div className="stack" style={{ gap: 10 }}>
+            <div>
+              <div className="label">{L("ingestUrl")}</div>
+              <div className="num" style={{
+                background: "var(--paper-2)", padding: "9px 12px",
+                borderRadius: "var(--radius-sm)", wordBreak: "break-all",
+                fontSize: ".85rem",
+              }}>
+                {guide.ingest_url}
+              </div>
+            </div>
+
+            <div>
+              <div className="label">{L("pingUrl")}</div>
+              <div className="num" style={{
+                background: "var(--paper-2)", padding: "9px 12px",
+                borderRadius: "var(--radius-sm)", wordBreak: "break-all",
+                fontSize: ".85rem",
+              }}>
+                {guide.ping_url}
+              </div>
+            </div>
+
+            <div>
+              <div className="label">{L("headers")}</div>
+              <div style={{
+                background: "var(--paper-2)", padding: "9px 12px",
+                borderRadius: "var(--radius-sm)", fontSize: ".84rem",
+              }}>
+                {Object.entries(guide.headers).map(([k, v]) => (
+                  <div key={k} style={{ marginBottom: 3 }}>
+                    <span className="num">{k}</span>
+                    <span className="muted">{" — "}{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="label">{L("bodyExample")}</div>
+              <pre className="num" style={{
+                background: "var(--paper-2)", padding: "10px 12px",
+                borderRadius: "var(--radius-sm)", fontSize: ".8rem",
+                overflowX: "auto", margin: 0, direction: "ltr",
+                textAlign: "left",
+              }}>
+{JSON.stringify(guide.body_example, null, 2)}
+              </pre>
+            </div>
+
+            <div>
+              <div className="label">{L("notes")}</div>
+              <ul style={{
+                paddingInlineStart: 18, fontSize: ".86rem",
+                lineHeight: 1.9, color: "var(--ink-2)",
+              }}>
+                {guide.notes_ar.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {err && (
         <div style={{

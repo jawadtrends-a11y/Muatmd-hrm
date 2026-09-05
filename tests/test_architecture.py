@@ -151,6 +151,21 @@ def test_no_hardcoded_permission_strings_outside_catalog():
     from apps.core.access.catalog import PERMISSION_KEYS
     from apps.notifications.catalog import EVENT_KEYS
 
+    # أسماء مهام Celery تشبه مفاتيح الصلاحيات شكلًا ولا تخصّها:
+    # نقطة تفصل مجالًا عن فعل في الحالين. والمرجع هو ما سُجّل
+    # فعلًا في Celery لا ما جُدول منه.
+    import re as _re
+
+    task_names = set()
+    for path in _python_files("tasks.py", "tasks/*.py", "tasks_*.py"):
+        src_t = path.read_text(encoding="utf-8")
+        task_names |= set(
+            _re.findall(r'shared_task\(\s*name\s*=\s*["\']([^"\']+)',
+                        src_t))
+        task_names |= set(
+            _re.findall(r'app\.task\(\s*name\s*=\s*["\']([^"\']+)',
+                        src_t))
+
     # النظام يحمل كتالوجين بنفس النمط <وحدة>.<فعل>:
     #   الصلاحيات (employees.view) وأحداث الإشعارات (leave.approved).
     # المفتاح المشروع هو المسجّل في أيٍّ منهما؛ ما عداه يتيم.
@@ -162,7 +177,7 @@ def test_no_hardcoded_permission_strings_outside_catalog():
     for caps in ROLE_CAPABILITIES.values():
         platform_caps |= caps
 
-    known = PERMISSION_KEYS | EVENT_KEYS | platform_caps
+    known = PERMISSION_KEYS | EVENT_KEYS | platform_caps | task_names
     modules = sorted({k.split(".")[0] for k in known})
     pattern = re.compile(r'["\'](' + "|".join(modules) + r')\.[a-z_]+["\']')
 

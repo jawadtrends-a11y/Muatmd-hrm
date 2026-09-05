@@ -1123,3 +1123,57 @@ def punch_device_detail(request, device_id):
         "site_id": d.site_id, "last_seen_at": d.last_seen_at,
         "is_active": d.is_active,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def device_setup_guide(request):
+    """
+    دليل ربط الأجهزة (ق-84).
+
+    فمن يشتري جهازًا يحتاج الرابط والترويسات وشكل الجسم — لا أن
+    يبحث في وثيقة منفصلة أو يسأل الدعم.
+    """
+    Gate.require(request.user, "sites.view")
+
+    base = request.build_absolute_uri("/").rstrip("/")
+
+    return Response({
+        "ingest_url": f"{base}/api/attendance/ingest/",
+        "ping_url": f"{base}/api/attendance/ingest/ping/",
+        "headers": {
+            "X-Device-Code": "رمز الجهاز كما أُنشئ في النظام",
+            "X-Device-Key": "المفتاح الذي عُرض مرة واحدة عند الإنشاء",
+            "Content-Type": "application/json",
+        },
+        "body_example": {
+            "punches": [
+                {"employee_no": "1007",
+                 "punched_at": "2026-09-05T08:01:33"},
+            ],
+        },
+        "fields_ar": {
+            "employee_no": "الرقم الوظيفي — مطلوب",
+            "punched_at": "وقت البصمة بصيغة ISO — مطلوب",
+            "external_ref": "أي حقل إضافي يُحفظ في البيانات الخام "
+                            "للمراجعة، ولا يُعتمد عليه في منع "
+                            "التكرار",
+        },
+        "response_example": {
+            "accepted": 1, "duplicated": 0,
+            "unknown_employees": [], "invalid": [], "received": 1,
+        },
+        "max_batch": 500,
+        "notes_ar": [
+            "رقم الموظف على الجهاز هو الرقم الوظيفي في النظام.",
+            "البصمة تُسجَّل بوقتها الأصلي لا بوقت وصولها — فارفع "
+            "المتأخرة بتواريخها.",
+            "الرفع المتكرّر آمن: البصمة نفسها لا تُحتسب مرتين، "
+            "فأعِد رفع ما لم تتأكد من وصوله.",
+            "والبصمة تُميَّز بالجهاز والموظف والوقت بالثانية — لا "
+            "بمعرّف ترسله أنت، فلا يضرّك اختلافه بين الرفعات.",
+            "أقصى دفعة 500 بصمة — قسّم ما زاد.",
+            "جرّب ping أولًا: يؤكّد أن الرمز والمفتاح صحيحان قبل "
+            "أن تبدأ.",
+        ],
+    })
