@@ -134,13 +134,16 @@ class PunchDevice(CompanyScopedModel):
 
     device_code = models.CharField(_("رمز الجهاز"), max_length=60)
     name_ar = models.CharField(_("الاسم"), max_length=120)
+    # الموقع اختياري: الجهاز مثبَّت في مكانه والبصمة عليه دليل
+    # الحضور. والنطاق يخصّ البصمة من الجوال بالـGPS (ق-62).
     site = models.ForeignKey(
-        WorkSite, on_delete=models.CASCADE, related_name="devices",
-        verbose_name=_("الموقع"))
+        WorkSite, on_delete=models.SET_NULL, related_name="devices",
+        null=True, blank=True, verbose_name=_("الموقع"))
 
     api_key_hash = models.CharField(
-        _("مفتاح الجهاز"), max_length=64, blank=True, db_index=True,
-        help_text=_("مجزَّأ — الجهاز يرسل به بصماته"))
+        _("مفتاح الجهاز"), max_length=128, blank=True, db_index=True,
+        help_text=_("مجزَّأ — الجهاز يرسل به بصماته. والتجزئة تتجاوز "
+                    "64 حرفًا، فالطول يتّسع لها"))
 
     last_seen_at = models.DateTimeField(_("آخر اتصال"), null=True, blank=True)
     is_active = models.BooleanField(_("نشط"), default=True)

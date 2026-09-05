@@ -20,6 +20,11 @@ const T: Dict = {
     ar: "الاستحقاقات والاستقطاعات وأعلامها",
     en: "Earnings, deductions and flags",
   },
+  devices: { ar: "أجهزة البصمة", en: "Punch devices" },
+  devicesHint: {
+    ar: "الأجهزة المصرَّح لها بإرسال البصمات",
+    en: "Devices allowed to submit punches",
+  },
   shifts: { ar: "الورديات", en: "Shifts" },
   shiftsHint: {
     ar: "أوقات الدوام وأيامه وفترات السماح",
@@ -289,6 +294,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("payComponents")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("payComponentsHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("sites.view") && (
+        <Link href="/settings/devices" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("devices")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("devicesHint")}
           </span>
         </Link>
         )}

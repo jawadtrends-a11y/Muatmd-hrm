@@ -66,6 +66,9 @@ urlpatterns = [
     path("api/me/job-changes/", employees_api.my_job_changes, name="my-job-changes"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
+    # أجهزة البصمة
+    path("api/attendance/devices/", attendance_api.punch_devices, name="punch-devices"),
+    path("api/attendance/devices/<int:device_id>/", attendance_api.punch_device_detail, name="punch-device-detail"),
     path("api/attendance/punch/", attendance_api.punch, name="punch"),
     path("api/attendance/<int:employment_id>/punches/", attendance_api.punches, name="punches"),
     path("api/attendance/<int:employment_id>/days/", attendance_api.attendance_days, name="attendance-days"),

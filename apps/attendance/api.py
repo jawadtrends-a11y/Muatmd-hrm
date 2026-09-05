@@ -992,3 +992,134 @@ def shift_detail(request, shift_id):
         "crosses_midnight": s.crosses_midnight,
         "is_flexible": s.is_flexible, "is_active": s.is_active,
     })
+
+
+# ══════════ أجهزة البصمة ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def punch_devices(request):
+    """
+    أجهزة البصمة — قائمة وإضافة.
+
+    والمفتاح يُعرض مرة واحدة عند الإنشاء ثم يُخزَّن مجزّأً: من
+    يقرأ القاعدة لا ينتحل جهازًا.
+    """
+    import secrets
+
+    from django.contrib.auth.hashers import make_password
+
+    from apps.attendance.models_sites import PunchDevice, WorkSite
+
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "GET":
+        Gate.require(request.user, "sites.view")
+        qs = Gate.filter_queryset(request.user, "sites.view",
+                                  PunchDevice.objects.all())
+        return Response([{
+            "id": d.id, "device_code": d.device_code,
+            "name_ar": d.name_ar,
+            "site": d.site.name_ar if d.site_id else None,
+            "site_id": d.site_id,
+            "last_seen_at": d.last_seen_at,
+            "is_active": d.is_active,
+        } for d in qs.filter(company_id=company_id).select_related("site")])
+
+    Gate.require(request.user, "sites.manage")
+
+    code = (request.data.get("device_code") or "").strip().upper()
+    if not code:
+        return Response({"detail": "رمز الجهاز مطلوب"}, status=400)
+
+    # معزول ذاتيًا: مقيَّد بالشركة النشطة للمنفّذ
+    if PunchDevice.objects.filter(company_id=_company_id(request), device_code=code).exists():
+        return Response({"detail": f"الرمز مستخدم: {code}"}, status=409)
+
+    site = None
+    if request.data.get("site_id"):
+        site = Gate.filter_queryset(
+            request.user, "sites.view", WorkSite.objects.all()
+        ).filter(id=request.data["site_id"],
+                 company_id=company_id).first()
+        if site is None:
+            return Response({"detail": "الموقع غير موجود"}, status=400)
+
+    from apps.accounts.models import Company
+    # معزول ذاتيًا: مقيَّد بالشركة النشطة للمنفّذ
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    raw_key = secrets.token_urlsafe(32)
+    d = PunchDevice.objects.create(
+        account_id=comp.account_id, company_id=company_id,
+        device_code=code, name_ar=request.data.get("name_ar", ""),
+        site=site, api_key_hash=make_password(raw_key))
+
+    from apps.core.services.audit import log_create
+    log_create(instance=d, actor=getattr(request.user, "person", None),
+               label=d.device_code,
+               summary=f"جهاز بصمة جديد: {d.name_ar}", channel="web")
+
+    return Response({
+        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar,
+        # المفتاح يُعرض هنا وحدها — ولا يُسترجع بعدها
+        "api_key": raw_key,
+        "api_key_note": "احفظ المفتاح الآن — لا يُعرض مرة أخرى",
+    }, status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def punch_device_detail(request, device_id):
+    """
+    تعديل جهاز أو حذفه — والرمز لا يُعدَّل، فالجهاز يُصادق به.
+    """
+    from apps.attendance.models_sites import PunchDevice, WorkSite
+
+    Gate.require(request.user, "sites.manage")
+
+    # معزول ذاتيًا: مقيَّد بالشركة النشطة للمنفّذ
+    d = PunchDevice.objects.filter(id=device_id, company_id=_company_id(request)).first()
+    if d is None:
+        return Response({"detail": "الجهاز غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        from apps.core.services.audit import log_delete
+        log_delete(instance=d, actor=getattr(request.user, "person", None),
+                   label=d.device_code,
+                   summary=f"حُذف جهاز البصمة {d.name_ar}", channel="web")
+        d.delete()
+        return Response({"deleted": True})
+
+    if "name_ar" in request.data:
+        d.name_ar = request.data["name_ar"]
+    if "is_active" in request.data:
+        d.is_active = bool(request.data["is_active"])
+    if "site_id" in request.data:
+        if request.data["site_id"]:
+            site = Gate.filter_queryset(
+                request.user, "sites.view", WorkSite.objects.all()
+            ).filter(id=request.data["site_id"],
+                     company_id=d.company_id).first()
+            if site is None:
+                return Response({"detail": "الموقع غير موجود"}, status=400)
+            d.site = site
+        else:
+            d.site = None
+    d.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=d, action="update",
+               actor=getattr(request.user, "person", None),
+               label=d.device_code,
+               summary=f"عُدّل جهاز البصمة {d.name_ar}", channel="web")
+    return Response({
+        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar,
+        "site": d.site.name_ar if d.site_id else None,
+        "site_id": d.site_id, "last_seen_at": d.last_seen_at,
+        "is_active": d.is_active,
+    })
