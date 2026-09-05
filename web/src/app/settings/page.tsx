@@ -15,6 +15,11 @@ const T: Dict = {
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
+  leaveTypes: { ar: "أنواع الإجازات", en: "Leave types" },
+  leaveTypesHint: {
+    ar: "سياسات الاستحقاق والأجر والترحيل",
+    en: "Entitlement and pay policies",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -165,11 +170,22 @@ function PayrollPanel({
   L: (k: string, f?: string) => string;
 }) {
   const [data, setData] = useState<PayrollSettings | null>(null);
+  /**
+   * البند الذي يظهر ثم يُمنع عند الدخول يوهم بقدرة لا يملكها
+   * المستخدم — فما لا يملكه لا يراه.
+   */
+  const [perms, setPerms] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [denied, setDenied] = useState(false);
 
+
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setPerms(new Set(d.permissions || [])))
+      .catch(() => setPerms(new Set()));
+  }, []);
   useEffect(() => {
     apiGet<PayrollSettings>("/payroll/settings/")
       .then((d) => { setData(d); setBusy(false); })
@@ -242,14 +258,29 @@ function PayrollPanel({
         }}>
           {L("general")}
         </h3>
+        {perms.has("access.view") && (
         <Link href="/settings/users" className="spread" style={{
           padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
         }}>
           <span style={{ fontWeight: 500 }}>{L("users")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("usersHint")}
           </span>
         </Link>
+        )}
+        {/* البنود تظهر لمن يقرأ — والوجود ثابت، والقدرة
+            على التعديل هي المتغيّرة (ق-76) */}
+        {perms.has("leaves.view") && (
+        <Link href="/settings/leave-types" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("leaveTypes")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("leaveTypesHint")}
+          </span>
+        </Link>
+        )}
       </div>
 
       <div className="card" style={{ padding: 20 }}>
@@ -343,10 +374,12 @@ function PayrollPanel({
       </div>
 
       <div className="row">
+        {perms.has("company.edit") && (
         <button className="btn btn-primary" onClick={save} disabled={saving}>
           <IcCheck size={17} />
           {saving ? L("saving") : L("save")}
         </button>
+        )}
         {msg && <span className="badge badge-ok">{msg}</span>}
       </div>
     </div>

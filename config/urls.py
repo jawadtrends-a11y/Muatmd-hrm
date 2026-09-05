@@ -129,6 +129,9 @@ urlpatterns = [
     path("api/auth/sessions/", client_auth.sessions_view, name="auth-sessions"),
     # الإجازات والطلبات
     path("api/leaves/types/", leaves_api.leave_types, name="leave-types"),
+    # إدارة أنواع الإجازات (ق-83)
+    path("api/leaves/types/new/", leaves_api.leave_type_create, name="leave-type-create"),
+    path("api/leaves/types/<int:type_id>/", leaves_api.leave_type_detail, name="leave-type-detail"),
     path("api/leaves/balances/", leaves_api.leave_balances, name="leave-balances"),
     path("api/leaves/requests/", leaves_api.leave_requests, name="leave-requests"),
     path("api/leaves/requests/<int:request_id>/", leaves_api.request_detail, name="request-detail"),

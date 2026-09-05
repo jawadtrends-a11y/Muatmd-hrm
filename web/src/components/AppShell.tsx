@@ -512,8 +512,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* ق-58: إعدادات الشركة لمن يملك صلاحيتها — والموظف له «حسابي».
-            ق-68: تُحجب عن المشرف، فهو لا يملك company.edit. */}
-        {perms.has("company.edit") && (
+            ق-76: يراها المدير العام قراءةً — فالوجود ثابت،
+            والقدرة على التعديل هي المتغيّرة. */}
+        {perms.has("company.view") && (
           <div style={{ padding: 12, borderTop: "1px solid var(--line)" }}>
             <Link
               href="/settings"

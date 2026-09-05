@@ -1105,3 +1105,152 @@ def cancel_request_view(request, request_id):
 
     return Response({"id": r.id, "status": r.status,
                      "status_label": r.get_status_display()})
+
+
+# ══════════ إدارة أنواع الإجازات (ق-83) ══════════
+
+def _num(v):
+    """رقم للعرض — والفارغ صفر لا نص None."""
+    return str(v) if v is not None else "0"
+
+
+def _leave_type_json(t):
+    return {
+        "id": t.id, "code": t.code,
+        "name_ar": t.name_ar, "name_en": t.name_en, "name_ur": t.name_ur,
+        "is_paid": t.is_paid,
+        "pay_percentage": str(t.pay_percentage),
+        "accrual_method": t.accrual_method,
+        "days_per_year": str(t.days_per_year),
+        "days_after_five_years": str(t.days_after_five_years),
+        "days_per_event": str(t.days_per_event),
+        "statutory_min_days": str(t.statutory_min_days),
+        "carry_forward_policy": t.carry_forward_policy,
+        "max_carry_forward_days": str(t.max_carry_forward_days),
+        "requires_attachment": getattr(t, "requires_attachment", False),
+        "is_active": getattr(t, "is_active", True),
+        # ق-83: التحذير لا المنع — والقرار لمدير الموارد
+        "below_statutory": (
+            t.days_per_year < t.statutory_min_days
+            if t.statutory_min_days else False),
+    }
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def leave_type_create(request):
+    """
+    نوع إجازة جديد — تنشئه الشركة بسياستها (ق-83).
+    """
+    from apps.leaves.models import LeaveType
+
+    Gate.require(request.user, "leaves.manage")
+    company_id = _company_id(request)
+    d = request.data
+
+    code = (d.get("code") or "").strip().upper()
+    if not code or not d.get("name_ar"):
+        return Response({"detail": "الرمز والاسم مطلوبان"}, status=400)
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    if LeaveType.objects.filter(company_id=company_id, code=code).exists():
+        return Response({"detail": f"الرمز {code} مستخدم"}, status=400)
+
+    from apps.accounts.models import Company
+    # معزول ذاتيًا: مقيَّد بالشركة النشطة للمنفّذ
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    t = LeaveType.objects.create(
+        account_id=comp.account_id, company_id=company_id, code=code,
+        name_ar=d["name_ar"], name_en=d.get("name_en", ""),
+        name_ur=d.get("name_ur", ""),
+        is_paid=bool(d.get("is_paid", True)),
+        pay_percentage=_dec(d.get("pay_percentage"), 100),
+        accrual_method=d.get("accrual_method", "annual"),
+        days_per_year=_dec(d.get("days_per_year"), 0),
+        days_after_five_years=_dec(d.get("days_after_five_years"), 0),
+        days_per_event=_dec(d.get("days_per_event"), 0),
+        statutory_min_days=_dec(d.get("statutory_min_days"), 0),
+        carry_forward_policy=d.get("carry_forward_policy", "none"),
+        max_carry_forward_days=_dec(d.get("max_carry_forward_days"), 0))
+
+    from apps.core.services.audit import log_create
+    log_create(instance=t, actor=getattr(request.user, "person", None),
+               label=t.code, summary=f"نوع إجازة جديد: {t.name_ar}",
+               channel="web")
+    return Response(_leave_type_json(t), status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def leave_type_detail(request, type_id):
+    """
+    تعديل نوع إجازة أو حذفه (ق-83).
+
+    والرمز لا يُعدَّل: المنطق يستدعيه، وتغييره يقطع سلاسل الاعتماد
+    والاحتساب.
+    """
+    from apps.leaves.models import LeaveType
+
+    Gate.require(request.user, "leaves.manage")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    t = LeaveType.objects.filter(id=type_id, company_id=_company_id(request)).first()
+    if t is None:
+        return Response({"detail": "النوع غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        from apps.leaves.models import Request as LeaveRequest
+        # معزول ذاتيًا: مقيَّد بشركة النوع الذي مرّ بالفلترة
+        used = LeaveRequest.objects.filter(company_id=t.company_id, payload__leave_type=t.code).exists()
+        if used:
+            return Response(
+                {"detail": "النوع مستخدم في طلبات قائمة — عطّله بدل حذفه",
+                 "code": "in_use"}, status=409)
+
+        name = t.name_ar
+        from apps.core.services.audit import log_delete
+        log_delete(instance=t, actor=getattr(request.user, "person", None),
+                   label=t.code, summary=f"حُذف نوع الإجازة {name}",
+                   channel="web")
+        t.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "name_en", "name_ur", "accrual_method",
+              "carry_forward_policy"):
+        if f in d:
+            setattr(t, f, d[f])
+    if "is_paid" in d:
+        t.is_paid = bool(d["is_paid"])
+    for f in ("pay_percentage", "days_per_year", "days_after_five_years",
+              "days_per_event", "statutory_min_days",
+              "max_carry_forward_days"):
+        if f in d:
+            setattr(t, f, _dec(d[f], getattr(t, f)))
+    t.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=t, action="update",
+               actor=getattr(request.user, "person", None),
+               label=t.code, summary=f"عُدّل نوع الإجازة {t.name_ar}",
+               channel="web")
+    return Response(_leave_type_json(t))
+
+
+def _dec(value, default):
+    """
+    عدد عشري — والفراغ يعود للقيمة السابقة.
+
+    والنص "None" يصل من واجهة تعرض قيمة فارغة، فيُعامل فراغًا لا
+    خطأً يُسقط الحفظ كله.
+    """
+    from decimal import Decimal, InvalidOperation
+    if value in (None, "", "None", "null", "undefined"):
+        return Decimal(str(default or 0))
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(str(default or 0))

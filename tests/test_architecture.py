@@ -85,6 +85,9 @@ def test_no_raw_queryset_in_api_views():
                     "company_id=emp.company_id",
                     # مقيَّد بشركة المنفّذ النشطة
                     "company_id=_company_id(request)",
+                    "id=_company_id(request)",
+                    # النوع مرّ بالفلترة، وشركته هي القيد
+                    "company_id=t.company_id",
                     # دوال الملكية تتلقّى الحساب من مسار فحصه
                     "account_id=account_id",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:

@@ -97,6 +97,8 @@ export default function UserPage() {
   const [scopes, setScopes] = useState<ScopeType[]>([]);
   const [scopeOn, setScopeOn] = useState<Set<string>>(new Set());
   const [savingScopes, setSavingScopes] = useState(false);
+  /** ق-76: المدير العام يرى ولا يعدّل — فالزر يختفي */
+  const [canEdit, setCanEdit] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [on, setOn] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
@@ -122,6 +124,9 @@ export default function UserPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setCanEdit((d.permissions || []).includes("access.manage")))
+      .catch(() => setCanEdit(false));
     apiGet<{ types: ScopeType[] }>(
       `/access/members/${id}/approver-scopes/`)
       .then((d) => {
@@ -330,6 +335,7 @@ export default function UserPage() {
                                   )}
                                 </span>
                                 <input type="checkbox" checked={isOn}
+                                  disabled={!canEdit}
                                   onChange={() => setOn((s) => {
                                     const n = new Set(s);
                                     if (n.has(p.key)) n.delete(p.key);
@@ -378,6 +384,7 @@ export default function UserPage() {
                             </span>
                             <input type="checkbox"
                               checked={scopeOn.has(t.code)}
+                              disabled={!canEdit}
                               onChange={() => setScopeOn((v) => {
                                 const n = new Set(v);
                                 if (n.has(t.code)) n.delete(t.code);
@@ -392,10 +399,12 @@ export default function UserPage() {
                       </div>
 
                       <div style={{ padding: "10px 18px" }}>
+                        {canEdit && (
                         <button className="btn btn-sm btn-primary"
                           disabled={savingScopes} onClick={saveScopes}>
                           {savingScopes ? L("saving") : L("saveScopes")}
                         </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -403,11 +412,13 @@ export default function UserPage() {
                   <div style={{
                     padding: "12px 18px", borderTop: "1px solid var(--line)",
                   }}>
+                    {canEdit && (
                     <button className="btn btn-primary" disabled={saving}
                       onClick={save}>
                       <IcCheck size={17} />
                       {saving ? L("saving") : L("save")}
                     </button>
+                    )}
                   </div>
                 </>
               )}

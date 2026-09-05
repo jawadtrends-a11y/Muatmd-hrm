@@ -137,12 +137,16 @@ def member_permissions(request, employment_id):
     from apps.core.access.catalog import PERMISSION_KEYS, validate_keys
     from apps.employees.models import Employment
 
-    Gate.require(request.user, "access.manage")
+    # ق-76: القراءة لمن يملك access.view — فالمدير العام يرى من
+    # يملك ماذا. والتعديل يبقى لمن يملك access.manage.
+    Gate.require(request.user, "access.view")
+    if request.method == "PUT":
+        Gate.require(request.user, "access.manage")
 
     company_id = getattr(getattr(request, "account_ctx", None),
                          "active_company_id", None)
     emp = Gate.filter_queryset(
-        request.user, "access.manage", Employment.objects.all()
+        request.user, "access.view", Employment.objects.all()
     ).filter(id=employment_id, company_id=company_id).first()
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
@@ -227,12 +231,14 @@ def member_list(request):
     """
     from apps.employees.models import Employment, EmploymentStatus
 
-    Gate.require(request.user, "access.manage")
+    # ق-76: المدير العام يرى من يملك ماذا — فمن يعتمد الطلبات
+    # يحتاج معرفة من يقرّر. والإدارة لمن يملك access.manage.
+    Gate.require(request.user, "access.view")
     company_id = getattr(getattr(request, "account_ctx", None),
                          "active_company_id", None)
 
     qs = Gate.filter_queryset(
-        request.user, "access.manage", Employment.objects.all()
+        request.user, "access.view", Employment.objects.all()
     ).filter(company_id=company_id,
              status=EmploymentStatus.ACTIVE).select_related(
         "person__user", "department").order_by("employee_no")
