@@ -915,3 +915,80 @@ def my_punch(request):
         "site": site.name_ar if site else "",
         "distance_m": distance,
     }, status=201)
+
+
+# ══════════ تعديل الوردية وحذفها ══════════
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def shift_detail(request, shift_id):
+    """
+    تعديل وردية أو تعطيلها.
+
+    والرمز لا يُعدَّل: الإسنادات تشير إليه، وتغييره يفصلها عنها.
+    والوردية المُسندة تُعطَّل لا تُحذف — فحذفها يترك موظفين بلا
+    دوام محدَّد.
+    """
+    from apps.attendance.models import Shift, ShiftAssignment
+
+    Gate.require(request.user, "attendance.shifts")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    s = Shift.objects.filter(id=shift_id, company_id=_company_id(request)).first()
+    if s is None:
+        return Response({"detail": "الوردية غير موجودة"}, status=404)
+
+    if request.method == "DELETE":
+        assigned = ShiftAssignment.objects.filter(shift=s).exists()
+        if assigned:
+            s.is_active = False
+            s.save(update_fields=["is_active", "updated_at"])
+            from apps.core.services.audit import log_action
+            log_action(instance=s, action="update",
+                       actor=getattr(request.user, "person", None),
+                       label=s.code,
+                       summary=f"عُطّلت الوردية {s.name_ar} (مُسندة لموظفين)",
+                       channel="web")
+            return Response({"deactivated": True,
+                             "detail": "الوردية مُسندة لموظفين — عُطّلت "
+                                       "ولم تُحذف"})
+
+        from apps.core.services.audit import log_delete
+        log_delete(instance=s, actor=getattr(request.user, "person", None),
+                   label=s.code, summary=f"حُذفت الوردية {s.name_ar}",
+                   channel="web")
+        s.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "name_en", "name_ur", "start_time", "end_time"):
+        if f in d and d[f] not in (None, ""):
+            setattr(s, f, d[f])
+    for f in ("break_minutes", "grace_in_minutes", "grace_out_minutes"):
+        if f in d:
+            try:
+                setattr(s, f, int(d[f] or 0))
+            except (TypeError, ValueError):
+                pass
+    if "working_days" in d:
+        s.working_days = d["working_days"]
+    for f in ("crosses_midnight", "is_flexible", "is_active"):
+        if f in d:
+            setattr(s, f, bool(d[f]))
+    s.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=s, action="update",
+               actor=getattr(request.user, "person", None),
+               label=s.code, summary=f"عُدّلت الوردية {s.name_ar}",
+               channel="web")
+    return Response({
+        "id": s.id, "code": s.code, "name_ar": s.name_ar,
+        "start_time": s.start_time, "end_time": s.end_time,
+        "break_minutes": s.break_minutes,
+        "grace_in_minutes": s.grace_in_minutes,
+        "grace_out_minutes": s.grace_out_minutes,
+        "working_days": s.working_days,
+        "crosses_midnight": s.crosses_midnight,
+        "is_flexible": s.is_flexible, "is_active": s.is_active,
+    })

@@ -140,7 +140,15 @@ def payroll_settings(request):
                       "company_bears_employee_gosi",
                       "merge_supplementary_into_regular",
                       "terminated_pay_in_regular_run",
-                      "exclude_zero_net_from_wps", "variance_threshold_percent"):
+                      "exclude_zero_net_from_wps",
+                      "variance_threshold_percent",
+                      # حدود السلف — كانت في الشاشة ولا تُحفظ،
+                      # فيمرّ طلب يتجاوز الحد بلا مانع (ق-69)
+                      "advances_enabled", "advance_max_amount",
+                      "advance_max_months_of_salary",
+                      "advance_block_if_outstanding",
+                      "advance_max_installments",
+                      "retro_method", "retro_reopen_hours"):
             if field in request.data:
                 setattr(s, field, request.data[field])
         s.save()
@@ -162,6 +170,18 @@ def payroll_settings(request):
         "terminated_pay_in_regular_run": s.terminated_pay_in_regular_run,
         "exclude_zero_net_from_wps": s.exclude_zero_net_from_wps,
         "variance_threshold_percent": str(s.variance_threshold_percent),
+
+        # حدود السلف والتسويات — تُعرض وتُحفظ من الشاشة نفسها
+        "advances_enabled": s.advances_enabled,
+        "advance_max_amount": (str(s.advance_max_amount)
+                               if s.advance_max_amount is not None else None),
+        "advance_max_months_of_salary": (
+            str(s.advance_max_months_of_salary)
+            if s.advance_max_months_of_salary is not None else None),
+        "advance_block_if_outstanding": s.advance_block_if_outstanding,
+        "advance_max_installments": s.advance_max_installments,
+        "retro_method": s.retro_method,
+        "retro_reopen_hours": s.retro_reopen_hours,
     })
 
 
@@ -571,3 +591,89 @@ def retro_decide(request, adjustment_id):
 
     return Response({"id": a.id, "status": a.status,
                      "status_label": a.get_status_display()})
+
+
+# ══════════ تعديل بند الأجر وتعطيله ══════════
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def component_detail(request, component_id):
+    """
+    تعديل بند أجر أو تعطيله.
+
+    والبند النظامي (is_system) لا يُحذف: الاحتساب يستدعيه بالرمز —
+    الأساسي والسكن أساس المكافأة والتأمينات وحماية الأجور. ويُعدَّل
+    اسمه وأعلامه لا رمزه.
+
+    والبند المستخدَم في هيكل راتب يُعطَّل لا يُحذف — فحذفه يترك
+    هياكل تشير لبند لا وجود له.
+    """
+    from apps.payroll.models import PayComponent
+
+    Gate.require(request.user, "payroll.structures")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    c = PayComponent.objects.filter(id=component_id, company_id=_company_id(request)).first()
+    if c is None:
+        return Response({"detail": "البند غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        if c.is_system:
+            return Response(
+                {"detail": "بند نظامي — الاحتساب يستدعيه، عطّله بدل حذفه",
+                 "code": "system_component"}, status=409)
+
+        from apps.employees.models import SalaryLine
+        used = SalaryLine.objects.filter(component=c).exists()
+        if used:
+            c.is_active = False
+            c.save(update_fields=["is_active", "updated_at"])
+            from apps.core.services.audit import log_action
+            log_action(instance=c, action="update",
+                       actor=getattr(request.user, "person", None),
+                       label=c.code,
+                       summary=f"عُطّل البند {c.name_ar} (مستخدم في هياكل)",
+                       channel="web")
+            return Response({"deactivated": True,
+                             "detail": "البند مستخدم في هياكل رواتب — "
+                                       "عُطّل ولم يُحذف"})
+
+        from apps.core.services.audit import log_delete
+        log_delete(instance=c, actor=getattr(request.user, "person", None),
+                   label=c.code, summary=f"حُذف بند الأجر {c.name_ar}",
+                   channel="web")
+        c.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "name_en", "name_ur", "component_type"):
+        if f in d and d[f] not in (None, ""):
+            setattr(c, f, d[f])
+    for f in ("is_gosi_subject", "is_eosb_subject", "is_overtime_base",
+              "is_wps_subject", "is_absence_base", "is_taxable",
+              "is_active"):
+        if f in d:
+            setattr(c, f, bool(d[f]))
+    if "display_order" in d:
+        try:
+            c.display_order = int(d["display_order"] or 0)
+        except (TypeError, ValueError):
+            pass
+    c.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=c, action="update",
+               actor=getattr(request.user, "person", None),
+               label=c.code, summary=f"عُدّل بند الأجر {c.name_ar}",
+               channel="web")
+    return Response({
+        "id": c.id, "code": c.code, "name_ar": c.name_ar,
+        "component_type": c.component_type,
+        "is_gosi_subject": c.is_gosi_subject,
+        "is_eosb_subject": c.is_eosb_subject,
+        "is_overtime_base": c.is_overtime_base,
+        "is_wps_subject": c.is_wps_subject,
+        "is_absence_base": c.is_absence_base,
+        "is_system": c.is_system, "is_active": c.is_active,
+        "display_order": c.display_order,
+    })

@@ -15,6 +15,16 @@ const T: Dict = {
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
+  payComponents: { ar: "بنود الأجر", en: "Pay components" },
+  payComponentsHint: {
+    ar: "الاستحقاقات والاستقطاعات وأعلامها",
+    en: "Earnings, deductions and flags",
+  },
+  shifts: { ar: "الورديات", en: "Shifts" },
+  shiftsHint: {
+    ar: "أوقات الدوام وأيامه وفترات السماح",
+    en: "Working hours, days and grace",
+  },
   leaveTypes: { ar: "أنواع الإجازات", en: "Leave types" },
   leaveTypesHint: {
     ar: "سياسات الاستحقاق والأجر والترحيل",
@@ -271,6 +281,28 @@ function PayrollPanel({
         )}
         {/* البنود تظهر لمن يقرأ — والوجود ثابت، والقدرة
             على التعديل هي المتغيّرة (ق-76) */}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/pay-components" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("payComponents")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("payComponentsHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("attendance.view") && (
+        <Link href="/settings/shifts" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("shifts")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("shiftsHint")}
+          </span>
+        </Link>
+        )}
         {perms.has("leaves.view") && (
         <Link href="/settings/leave-types" className="spread" style={{
           padding: "13px 20px", color: "var(--ink-2)",

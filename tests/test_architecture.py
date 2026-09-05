@@ -88,6 +88,10 @@ def test_no_raw_queryset_in_api_views():
                     "id=_company_id(request)",
                     # النوع مرّ بالفلترة، وشركته هي القيد
                     "company_id=t.company_id",
+                    # فحص الاستخدام بكائن مرّ بالفلترة — القيد
+                    # هو الكائن نفسه لا حقل حساب
+                    "shift=s)",
+                    "component=c)",
                     # دوال الملكية تتلقّى الحساب من مسار فحصه
                     "account_id=account_id",
                     # الكائن الأب مرّ بالبوابة، والاستعلام مقيَّد به:

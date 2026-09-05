@@ -306,18 +306,29 @@ def _pre_checks(employment, request_type, payload):
     warnings = []
 
     if request_type == RequestType.ADVANCE:
-        from apps.employees.services.advances import check_advance_eligibility
+        from apps.employees.services.advances import check_eligibility
         from apps.payroll.models import PayrollSettings
         st = PayrollSettings.objects.filter(
             company_id=employment.company_id).first()
         if st and not st.advances_enabled:
             raise RequestError("نظام السلف غير مفعّل في شركتك")
         try:
-            ok, reason = check_advance_eligibility(
+            res = check_eligibility(
                 employment=employment, amount=D(str(payload["amount"])),
                 settings_obj=st)
-            if not ok:
-                raise RequestError(reason)
+            if not res.allowed:
+                raise RequestError("، ".join(res.reasons)
+                                   if res.reasons
+                                   else "السلفة تتجاوز الحد المسموح")
+
+            # عدد الأقساط يُفحص هنا لا عند الإنشاء وحده — فالموظف
+            # يطلب بعدد يختاره، ومن يتجاوز الحد يُردّ عند طلبه
+            n = int(payload.get("installments")
+                    or payload.get("installments_count") or 0)
+            cap = getattr(st, "advance_max_installments", 0) or 0
+            if n and cap and n > cap:
+                raise RequestError(
+                    f"عدد الأقساط ({n}) يتجاوز الحد الأقصى ({cap})")
         except RequestError:
             raise
         except Exception:
