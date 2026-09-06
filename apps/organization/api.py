@@ -55,7 +55,7 @@ def branches(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", Branch.objects.all())
         return Response([
-            {"id": b.id, "code": b.code, "name_ar": b.name_ar,
+            {"id": b.id, "code": b.code, "name_ar": b.name_ar, "name_en": getattr(b, "name_en", ""),
              "city": b.city, "is_active": b.is_active,
              "mol_establishment_no": b.mol_establishment_no,
              "gosi_establishment_no": b.gosi_establishment_no}
@@ -69,6 +69,8 @@ def branches(request):
             company=comp,
             code=request.data.get("code", ""),
             name_ar=request.data.get("name_ar", ""),
+            # ق-92: الاسمان معًا — والواجهة تعرض بلغة المستخدم
+            name_en=request.data.get("name_en", ""),
             city=request.data.get("city", ""),
             mol_establishment_no=request.data.get("mol_establishment_no", ""),
             gosi_establishment_no=request.data.get("gosi_establishment_no", ""),
@@ -83,7 +85,7 @@ def branches(request):
         )
     except StructureError as e:
         return _err(e)
-    return Response({"id": b.id, "code": b.code, "name_ar": b.name_ar}, status=201)
+    return Response({"id": b.id, "code": b.code, "name_ar": b.name_ar, "name_en": getattr(b, "name_en", "")}, status=201)
 
 
 @api_view(["GET", "POST"])
@@ -97,7 +99,7 @@ def departments(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", Department.objects.all())
         return Response([
-            {"id": d.id, "code": d.code, "name_ar": d.name_ar,
+            {"id": d.id, "code": d.code, "name_ar": d.name_ar, "name_en": getattr(d, "name_en", ""),
              "parent_id": d.parent_id, "branch_id": d.branch_id,
              "path": d.path, "depth": d.depth, "is_active": d.is_active}
             for d in qs.filter(company_id=company_id)
@@ -115,6 +117,8 @@ def departments(request):
         d = create_department(
             company=comp, code=request.data.get("code", ""),
             name_ar=request.data.get("name_ar", ""), parent=parent,
+            # ق-92: الاسمان معًا — والواجهة تعرض بلغة المستخدم
+            name_en=request.data.get("name_en", ""),
         )
     except StructureError as e:
         return _err(e)
@@ -170,7 +174,7 @@ def holidays(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", Holiday.objects.all())
         return Response([
-            {"id": h.id, "name_ar": h.name_ar, "start_date": h.start_date,
+            {"id": h.id, "name_ar": h.name_ar, "name_en": getattr(h, "name_en", ""), "start_date": h.start_date,
              "end_date": h.end_date, "days": h.days, "is_paid": h.is_paid,
              "branch_id": h.branch_id}
             for h in qs.filter(company_id=company_id)
@@ -186,13 +190,15 @@ def holidays(request):
         h = create_holiday(
             company=comp, branch=branch,
             name_ar=request.data.get("name_ar", ""),
+            # ق-92: الاسمان معًا — والواجهة تعرض بلغة المستخدم
+            name_en=request.data.get("name_en", ""),
             start_date=request.data.get("start_date"),
             end_date=request.data.get("end_date"),
             is_paid=request.data.get("is_paid", True),
         )
     except StructureError as e:
         return _err(e, "holiday_conflict", status.HTTP_409_CONFLICT)
-    return Response({"id": h.id, "name_ar": h.name_ar, "days": h.days}, status=201)
+    return Response({"id": h.id, "name_ar": h.name_ar, "name_en": getattr(h, "name_en", ""), "days": h.days}, status=201)
 
 
 @api_view(["GET", "POST"])
@@ -206,7 +212,7 @@ def job_titles(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", JobTitle.objects.all())
         return Response([
-            {"id": j.id, "name_ar": j.name_ar,
+            {"id": j.id, "name_ar": j.name_ar, "name_en": getattr(j, "name_en", ""),
              "mol_occupation_code": j.mol_occupation_code,
              "is_saudization_reserved": j.is_saudization_reserved}
             for j in qs.filter(company_id=company_id)
@@ -221,4 +227,4 @@ def job_titles(request):
         mol_occupation_code=request.data.get("mol_occupation_code", ""),
         is_saudization_reserved=request.data.get("is_saudization_reserved", False),
     )
-    return Response({"id": j.id, "name_ar": j.name_ar}, status=201)
+    return Response({"id": j.id, "name_ar": j.name_ar, "name_en": getattr(j, "name_en", "")}, status=201)

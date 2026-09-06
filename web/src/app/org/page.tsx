@@ -12,6 +12,7 @@ import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcOrg, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
+  nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
   title: { ar: "الهيكل التنظيمي", en: "Organization" },
   subtitle: {
     ar: "الفروع والأقسام والمسميات — تُعرَّف قبل إضافة الموظفين",
@@ -63,24 +64,24 @@ const TABS = ["branches", "departments", "jobTitles", "holidays"] as const;
 type Tab = (typeof TABS)[number];
 
 type Branch = {
-  id: number; code: string; name_ar: string; city: string;
+  id: number; code: string; name_ar: string; name_en?: string; city: string;
   is_active: boolean;
   mol_establishment_no: string; gosi_establishment_no: string;
 };
 
 type Department = {
-  id: number; code: string; name_ar: string;
+  id: number; code: string; name_ar: string; name_en?: string;
   branch_id: number | null; parent_id: number | null;
   depth: number; is_active: boolean;
 };
 
 type JobTitle = {
-  id: number; name_ar: string; mol_occupation_code: string;
+  id: number; name_ar: string; name_en?: string; mol_occupation_code: string;
   is_saudization_reserved: boolean; is_active: boolean;
 };
 
 type Holiday = {
-  id: number; name_ar: string; start_date: string; days: number;
+  id: number; name_ar: string; name_en?: string; start_date: string; days: number;
 };
 
 
@@ -306,6 +307,9 @@ export default function OrgPage() {
     branches: [
       { key: "code", label: L("code"), required: true },
       { key: "name_ar", label: L("nameAr"), required: true },
+      // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
+      // عربيًّا إن نقص المقابل
+      { key: "name_en", label: L("nameEn"), required: true },
       { key: "city", label: L("city") },
       { key: "mol_establishment_no", label: L("molNo") },
       { key: "gosi_establishment_no", label: L("gosiNo") },
@@ -313,6 +317,9 @@ export default function OrgPage() {
     departments: [
       { key: "code", label: L("code"), required: true },
       { key: "name_ar", label: L("nameAr"), required: true },
+      // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
+      // عربيًّا إن نقص المقابل
+      { key: "name_en", label: L("nameEn"), required: true },
       { key: "branch_id", label: L("branch"), kind: "select",
         options: [{ value: "", label: L("none") },
                   ...branches.map((b) => ({ value: String(b.id),
@@ -324,11 +331,17 @@ export default function OrgPage() {
     ],
     jobTitles: [
       { key: "name_ar", label: L("nameAr"), required: true },
+      // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
+      // عربيًّا إن نقص المقابل
+      { key: "name_en", label: L("nameEn"), required: true },
       { key: "mol_occupation_code", label: L("molCode") },
       { key: "is_saudization_reserved", label: L("saudiOnly"), kind: "bool" },
     ],
     holidays: [
       { key: "name_ar", label: L("nameAr"), required: true },
+      // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
+      // عربيًّا إن نقص المقابل
+      { key: "name_en", label: L("nameEn"), required: true },
       { key: "start_date", label: L("date"), kind: "date", required: true },
       { key: "days", label: L("days"), kind: "number", required: true },
     ],

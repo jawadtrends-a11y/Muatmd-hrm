@@ -8,6 +8,7 @@ API الموظفين: الأشخاص، الارتباطات، وهياكل ال�
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from apps.core.i18n import localized, request_locale
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -29,6 +30,7 @@ PERSON_SHARED_FIELDS = (
 )
 
 
+
 def _company_id(request):
     ctx = getattr(request, "account_ctx", None)
     return getattr(ctx, "active_company_id", None)
@@ -41,13 +43,20 @@ def _dec(v, field):
         raise ValueError(f"قيمة غير صالحة في {field}: {v}")
 
 
-def _employment_brief(e):
+def _employment_brief(e, lang="ar"):
+    """
+    ملخّص الارتباط الوظيفي.
+
+    واللغة تُمرَّر لا تُقرأ من الطلب: الدالة تُستدعى من مواضع لا
+    طلب فيها (المهام والخدمات) — فقراءته هنا تكسرها.
+    """
     return {
         "id": e.id, "employee_no": e.employee_no,
         "person_id": e.person_id,
         "name_ar": e.person.display_name,
-        "job_title": e.job_title.name_ar if e.job_title else None,
-        "department": e.department.name_ar if e.department else None,
+        # localized ترتدّ للعربية إن لم يُملأ الإنجليزي (ق-i18n)
+        "job_title": localized(e.job_title, locale=lang),
+        "department": localized(e.department, locale=lang),
         "status": e.status, "join_date": e.join_date,
         # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته تُنجز وهو
         # نشط (المخالصة وإخلاء الطرف وإرجاع العهد)
@@ -78,7 +87,7 @@ def employees(request):
         if request.GET.get("q"):
             q = request.GET["q"]
             qs = qs.filter(person__family_name_ar__icontains=q)
-        return Response([_employment_brief(e) for e in qs])
+        return Response([_employment_brief(e, request_locale(request)) for e in qs])
 
     Gate.require(request.user, "employees.create")
     from apps.accounts.models import Company
@@ -191,7 +200,7 @@ def employee_detail(request, employment_id):
     payload = {
         "person": {f: getattr(p, f) for f in PERSON_SHARED_FIELDS},
         "employment": {
-            **_employment_brief(emp),
+            **_employment_brief(emp, request_locale(request)),
             "service_start_date": emp.effective_service_start,
             "contract_type": emp.contract_type,
             "probation_end_date": emp.probation_end_date,

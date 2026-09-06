@@ -19,6 +19,22 @@ from apps.leaves.models import (
 )
 
 
+def _type_en(code):
+    """اسم نوع الطلب بالإنجليزية من كتالوج الأنواع."""
+    from apps.leaves.services.requests import SPECS
+
+    spec = SPECS.get(code)
+    return getattr(spec, "name_en", "") if spec else ""
+
+
+def _type_en(code):
+    """اسم نوع الطلب بالإنجليزية من كتالوج الأنواع."""
+    from apps.leaves.services.requests import SPECS
+
+    spec = SPECS.get(code)
+    return getattr(spec, "name_en", "") if spec else ""
+
+
 def _company_id(request):
     return getattr(getattr(request, "account_ctx", None),
                    "active_company_id", None)
@@ -132,6 +148,10 @@ def _serialize_request(r, include_chain=False):
         "request_no": r.request_no,
         "type": r.request_type,
         "type_label": r.get_request_type_display(),
+        # الاسم الإنجليزي — التطبيق والويب يعرضان بلغة المستخدم
+        "type_label_en": _type_en(r.request_type),
+        # الاسم الإنجليزي — التطبيق والويب يعرضان بلغة المستخدم
+        "type_label_en": _type_en(r.request_type),
         "employee_no": r.employment.employee_no,
         "employee_name": r.employment.person.display_name,
         "status": r.status,
@@ -663,7 +683,7 @@ def my_leaves_detail(request):
         ]
         balances.append({
             "code": lt.code,
-            "name_ar": lt.name_ar,
+            "name_ar": lt.name_ar, "name_en": getattr(lt, "name_en", ""),
             "is_paid": lt.is_paid,
             "days_per_year": str(lt.days_per_year),
             "opening": str(b.opening_balance),
@@ -677,7 +697,7 @@ def my_leaves_detail(request):
     # أنواع بلا رصيد (تُصرف بالحدث لا بالرصيد)
     coded = {b["code"] for b in balances}
     event_types = [
-        {"code": t.code, "name_ar": t.name_ar,
+        {"code": t.code, "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""),
          "days_per_event": str(t.days_per_event),
          "is_paid": t.is_paid,
          "once_per_service": t.once_per_service}
@@ -1117,7 +1137,7 @@ def _num(v):
 def _leave_type_json(t):
     return {
         "id": t.id, "code": t.code,
-        "name_ar": t.name_ar, "name_en": t.name_en, "name_ur": t.name_ur,
+        "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""), "name_ur": t.name_ur,
         "is_paid": t.is_paid,
         "pay_percentage": str(t.pay_percentage),
         "accrual_method": t.accrual_method,
@@ -1264,7 +1284,7 @@ def _chain_json(c):
         "id": c.id,
         "request_type": c.request_type,
         "request_type_label": c.get_request_type_display(),
-        "name_ar": c.name_ar,
+        "name_ar": c.name_ar, "name_en": getattr(c, "name_en", ""),
         "condition": c.condition_json or {},
         "priority": c.priority,
         "is_active": c.is_active,

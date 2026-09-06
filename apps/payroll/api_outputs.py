@@ -93,7 +93,7 @@ def bank_templates(request):
                               BankTemplate.objects.all())
     return Response([
         {
-            "id": t.id, "code": t.code, "name_ar": t.name_ar,
+            "id": t.id, "code": t.code, "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""),
             "bank_name_ar": t.bank_name_ar, "swift_prefix": t.swift_prefix,
             "is_builtin": t.is_builtin, "is_active": t.is_active,
             "column_count": t.columns.count(),
@@ -285,7 +285,7 @@ def my_payslips(request):
 
 def _template_json(t):
     return {
-        "id": t.id, "code": t.code, "name_ar": t.name_ar,
+        "id": t.id, "code": t.code, "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""),
         "bank_name_ar": t.bank_name_ar,
         "swift_prefix": t.swift_prefix,
         "file_format": t.file_format,
@@ -476,6 +476,7 @@ def bank_template_clone(request, template_id):
         account_id=src.account_id, company_id=src.company_id,
         code=code,
         name_ar=request.data.get("name_ar") or f"{src.name_ar} (نسخة)",
+        name_en=request.data.get("name_en", ""),
         bank_name_ar=src.bank_name_ar, swift_prefix=src.swift_prefix,
         file_format=src.file_format, delimiter=src.delimiter,
         include_header=src.include_header, line_ending=src.line_ending,

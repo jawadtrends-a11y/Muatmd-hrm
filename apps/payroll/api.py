@@ -42,7 +42,7 @@ def components(request):
                                   PayComponent.objects.all())
         return Response([
             {
-                "id": c.id, "code": c.code, "name_ar": c.name_ar,
+                "id": c.id, "code": c.code, "name_ar": c.name_ar, "name_en": getattr(c, "name_en", ""),
                 "component_type": c.component_type,
                 "is_gosi_subject": c.is_gosi_subject,
                 "is_eosb_subject": c.is_eosb_subject,
@@ -506,7 +506,7 @@ def bank_lookup(request):
     iban = request.GET.get("iban", "")
     if not iban:
         return Response([
-            {"code": b.iban_code, "name_ar": b.name_ar,
+            {"code": b.iban_code, "name_ar": b.name_ar, "name_en": getattr(b, "name_en", ""),
              "short_ar": b.short_ar, "kind": b.kind}
             for b in Bank.objects.filter(is_active=True)
         ])
@@ -667,7 +667,7 @@ def component_detail(request, component_id):
                label=c.code, summary=f"عُدّل بند الأجر {c.name_ar}",
                channel="web")
     return Response({
-        "id": c.id, "code": c.code, "name_ar": c.name_ar,
+        "id": c.id, "code": c.code, "name_ar": c.name_ar, "name_en": getattr(c, "name_en", ""),
         "component_type": c.component_type,
         "is_gosi_subject": c.is_gosi_subject,
         "is_eosb_subject": c.is_eosb_subject,

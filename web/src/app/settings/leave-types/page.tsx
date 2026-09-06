@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcLeave, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
+  nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
   title: { ar: "أنواع الإجازات", en: "Leave types" },
   subtitle: {
     ar: "سياسات الاستحقاق والأجر والترحيل",
@@ -70,6 +71,7 @@ type LeaveType = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   is_paid: boolean;
   pay_percentage: string;
   accrual_method: string;
@@ -236,6 +238,11 @@ export default function LeaveTypesPage() {
               <label className="label">{L("name")}</label>
               <input className="input" value={f("name_ar")}
                 onChange={(e) => set("name_ar", e.target.value)} />
+            </div>
+            <div className="field" style={{ minWidth: 190 }}>
+              <label className="label">{L("nameEn")}</label>
+              <input className="input" value={f("name_en")}
+                onChange={(e) => set("name_en", e.target.value)} />
             </div>
 
             <div className="field" style={{ minWidth: 130 }}>

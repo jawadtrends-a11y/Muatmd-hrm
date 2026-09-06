@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcClock, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
+  nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
   title: { ar: "أجهزة البصمة", en: "Punch devices" },
   subtitle: {
     ar: "الأجهزة المصرَّح لها بإرسال البصمات",

@@ -65,7 +65,7 @@ def shifts(request):
         qs = Gate.filter_queryset(request.user, "attendance.view",
                                   Shift.objects.all())
         return Response([
-            {"id": s.id, "code": s.code, "name_ar": s.name_ar,
+            {"id": s.id, "code": s.code, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""),
              "start_time": s.start_time, "end_time": s.end_time,
              "break_minutes": s.break_minutes,
              "grace_in_minutes": s.grace_in_minutes,
@@ -91,6 +91,7 @@ def shifts(request):
     s = Shift.objects.create(
         account=comp.account, company=comp, code=code,
         name_ar=request.data.get("name_ar", ""),
+        name_en=request.data.get("name_en", ""),
         start_time=request.data.get("start_time", "08:00"),
         end_time=request.data.get("end_time", "16:00"),
         break_minutes=int(request.data.get("break_minutes", 60)),
@@ -685,7 +686,7 @@ def work_sites(request):
         ).filter(company_id=company_id).select_related("site_manager__person")
 
         return Response([{
-            "id": s.id, "code": s.code, "name_ar": s.name_ar,
+            "id": s.id, "code": s.code, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""),
             "city": s.city, "address": s.address,
             "latitude": str(s.latitude) if s.latitude else None,
             "longitude": str(s.longitude) if s.longitude else None,
@@ -890,7 +891,7 @@ def my_punch(request):
                 "direction": (p.raw_payload or {}).get("direction", ""),
             } for p in punches],
             "sites": [{
-                "id": s.id, "name_ar": s.name_ar, "code": s.code,
+                "id": s.id, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""), "code": s.code,
                 "latitude": str(s.latitude) if s.latitude else None,
                 "longitude": str(s.longitude) if s.longitude else None,
                 "radius": s.effective_radius,
@@ -985,7 +986,7 @@ def shift_detail(request, shift_id):
                label=s.code, summary=f"عُدّلت الوردية {s.name_ar}",
                channel="web")
     return Response({
-        "id": s.id, "code": s.code, "name_ar": s.name_ar,
+        "id": s.id, "code": s.code, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""),
         "start_time": s.start_time, "end_time": s.end_time,
         "break_minutes": s.break_minutes,
         "grace_in_minutes": s.grace_in_minutes,
@@ -1023,7 +1024,7 @@ def punch_devices(request):
                                   PunchDevice.objects.all())
         return Response([{
             "id": d.id, "device_code": d.device_code,
-            "name_ar": d.name_ar,
+            "name_ar": d.name_ar, "name_en": getattr(d, "name_en", ""),
             "site": d.site.name_ar if d.site_id else None,
             "site_id": d.site_id,
             "last_seen_at": d.last_seen_at,
@@ -1067,7 +1068,7 @@ def punch_devices(request):
                summary=f"جهاز بصمة جديد: {d.name_ar}", channel="web")
 
     return Response({
-        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar,
+        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar, "name_en": getattr(d, "name_en", ""),
         # المفتاح يُعرض هنا وحدها — ولا يُسترجع بعدها
         "api_key": raw_key,
         "api_key_note": "احفظ المفتاح الآن — لا يُعرض مرة أخرى",
@@ -1120,7 +1121,7 @@ def punch_device_detail(request, device_id):
                label=d.device_code,
                summary=f"عُدّل جهاز البصمة {d.name_ar}", channel="web")
     return Response({
-        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar,
+        "id": d.id, "device_code": d.device_code, "name_ar": d.name_ar, "name_en": getattr(d, "name_en", ""),
         "site": d.site.name_ar if d.site_id else None,
         "site_id": d.site_id, "last_seen_at": d.last_seen_at,
         "is_active": d.is_active,

@@ -232,7 +232,7 @@ def assets(request):
 
         return Response([
             {
-                "id": a.id, "asset_no": a.asset_no, "name_ar": a.name_ar,
+                "id": a.id, "asset_no": a.asset_no, "name_ar": a.name_ar, "name_en": getattr(a, "name_en", ""),
                 "category": a.category,
                 "category_label": a.get_category_display(),
                 "serial_number": a.serial_number, "value": str(a.value),
@@ -496,7 +496,7 @@ def settlement_preview(request, employment_id):
         "service_days": result.service_days,
         "service_years": str(result.service_years),
         "lines": [
-            {"code": l.code, "name_ar": l.name_ar, "kind": l.kind,
+            {"code": l.code, "name_ar": l.name_ar, "name_en": getattr(l, "name_en", ""), "kind": l.kind,
              "amount": str(l.amount), "explanation": l.explanation}
             for l in sorted(result.lines, key=lambda x: x.order)
         ],
@@ -578,13 +578,13 @@ def termination_reasons_list(request):
 
 def _grade_json(g):
     return {
-        "id": g.id, "code": g.code, "name_ar": g.name_ar,
+        "id": g.id, "code": g.code, "name_ar": g.name_ar, "name_en": getattr(g, "name_en", ""),
         "level": g.level,
         "min_salary": str(g.min_salary) if g.min_salary else None,
         "max_salary": str(g.max_salary) if g.max_salary else None,
         "is_active": g.is_active,
         "steps": [{
-            "id": s.id, "code": s.code, "name_ar": s.name_ar,
+            "id": s.id, "code": s.code, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""),
             "step_number": s.step_number,
             "salary": str(s.salary) if s.salary else None,
             "is_active": s.is_active,

@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcPayroll, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
+  nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
   title: { ar: "بنود الأجر", en: "Pay components" },
   subtitle: {
     ar: "الاستحقاقات والاستقطاعات وأعلامها النظامية",
@@ -239,6 +240,11 @@ export default function PayComponentsPage() {
               <label className="label">{L("name")}</label>
               <input className="input" value={f("name_ar")}
                 onChange={(e) => set("name_ar", e.target.value)} />
+            </div>
+            <div className="field" style={{ minWidth: 190 }}>
+              <label className="label">{L("nameEn")}</label>
+              <input className="input" value={f("name_en")}
+                onChange={(e) => set("name_en", e.target.value)} />
             </div>
 
             <div className="field" style={{ minWidth: 150 }}>

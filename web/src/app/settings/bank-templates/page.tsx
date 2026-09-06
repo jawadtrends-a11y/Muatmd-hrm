@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcPlus, IcWallet, IcX } from "@/components/Icons";
 
 const T: Dict = {
+  nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
   title: { ar: "قوالب البنوك", en: "Bank templates" },
   subtitle: {
     ar: "صيغة ملف الرواتب لكل بنك",
@@ -224,6 +225,11 @@ export default function BankTemplatesPage() {
               <label className="label">{L("name")}</label>
               <input className="input" value={f("name_ar")}
                 onChange={(e) => set("name_ar", e.target.value)} />
+            </div>
+            <div className="field" style={{ minWidth: 190 }}>
+              <label className="label">{L("nameEn")}</label>
+              <input className="input" value={f("name_en")}
+                onChange={(e) => set("name_en", e.target.value)} />
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label className="label">{L("bank")}</label>
