@@ -184,6 +184,8 @@ urlpatterns = [
     path("api/me/password/", employees_api.change_my_password, name="my-password"),
     path("api/me/avatar/", employees_api.my_avatar, name="my-avatar"),
     path("api/files/", employees_api.upload_attachment, name="upload-attachment"),
+    # رفع base64 للتطبيق (ق-70)
+    path("api/files/base64/", employees_api.upload_attachment_b64, name="upload-attachment-b64"),
     path("api/files/<int:file_id>/", employees_api.serve_file, name="serve-file"),
     path("api/sites/", attendance_api.work_sites, name="work-sites"),
     path("api/sites/<int:site_id>/", attendance_api.work_site_detail, name="site-detail"),

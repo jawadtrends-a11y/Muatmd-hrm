@@ -1323,3 +1323,62 @@ def my_job_changes(request):
                       if c.successor_id else None),
         "created_at": c.created_at,
     } for c in qs.order_by("-created_at")])
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def upload_attachment_b64(request):
+    """
+    رفع مرفق مُرمَّزًا base64 (ق-70).
+
+    React Native الحديث لا يقبل صيغة {uri,name,type} في FormData،
+    وResponse.blob() يمرّ بـbase64 فيفسد الثنائيّات. فالتطبيق
+    يرمّز الملف بنفسه ويرسله JSON — والخادم يفكّه ويمرّره على
+    الفحوص نفسها بلا استثناء.
+    """
+    import base64
+    import binascii
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.core.models_files import FileKind
+    from apps.core.services.files import UploadError, store
+
+    person = getattr(request.user, "person", None)
+    if person is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"}, status=404)
+
+    raw = request.data.get("content_base64") or ""
+    name = (request.data.get("name") or "file").strip()
+    mime = request.data.get("mime") or "application/octet-stream"
+
+    if not raw:
+        return Response({"detail": "لم يُرسل محتوى"}, status=400)
+
+    # بعض العملاء يرسل بادئة data:image/jpeg;base64,
+    if "," in raw[:64]:
+        raw = raw.split(",", 1)[1]
+
+    try:
+        blob = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        return Response({"detail": "المحتوى ليس base64 صالحًا"},
+                        status=400)
+
+    uploaded = SimpleUploadedFile(name, blob, content_type=mime)
+
+    try:
+        obj, dup = store(
+            uploaded=uploaded, kind=FileKind.ATTACHMENT,
+            account=person.account, person=person, uploaded_by=person)
+    except UploadError as e:
+        return Response({"detail": str(e), "code": "upload_error"},
+                        status=400)
+
+    return Response({
+        "id": obj.id,
+        "url": f"/files/{obj.id}/",
+        "name": obj.original_name,
+        "size": obj.size_label,
+        "was_duplicate": dup,
+    }, status=201)
