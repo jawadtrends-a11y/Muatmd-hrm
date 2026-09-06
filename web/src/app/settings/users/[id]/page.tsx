@@ -7,6 +7,7 @@
  * المفتاح بلا خطوة ثانية. والموروث من الدور مميّز عن الاستثناء
  * الشخصي، فيعرف ما غيّره بيده.
  */
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -26,6 +27,12 @@ const T: Dict = {
   search: { ar: "بحث", en: "Search" },
   save: { ar: "حفظ", en: "Save" },
   saving: { ar: "جارٍ الحفظ…", en: "Saving…" },
+  revokeAll: { ar: "نزع الكل", en: "Revoke all" },
+  confirmRevokeAll: {
+    ar: "لم تختر أي صلاحية — هذا يُلغي كل صلاحيات المستخدم فلا يرى "
+        + "شيئًا في النظام. أكّد إن كنت تقصده.",
+    en: "No permission selected — this revokes everything.",
+  },
   saved: { ar: "حُفظت الصلاحيات", en: "Permissions saved" },
   inherited: { ar: "من الدور", en: "From role" },
   added: { ar: "مُضافة", en: "Added" },
@@ -99,6 +106,8 @@ export default function UserPage() {
   const [savingScopes, setSavingScopes] = useState(false);
   /** ق-76: المدير العام يرى ولا يعدّل — فالزر يختفي */
   const [canEdit, setCanEdit] = useState(false);
+  /** نزع كل الصلاحيات قرار جسيم — يُؤكَّد صراحةً */
+  const [askRevoke, setAskRevoke] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [on, setOn] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
@@ -151,11 +160,20 @@ export default function UserPage() {
     }
   }
 
-  async function save() {
+  async function save(confirmRevokeAll = false) {
+    // نزع كل الصلاحيات يُردّ بـ409 حتى يُؤكَّد: من يحفظ قبل أن
+    // تُحمَّل المفاتيح يمحوها كلها فلا يرى المستخدم شيئًا
+    if (on.size === 0 && !confirmRevokeAll) {
+      setAskRevoke(true);
+      return;
+    }
+
     setSaving(true);
     try {
-      await apiPut(`/access/members/${id}/permissions/`,
-                   { permissions: [...on] });
+      await apiPut(`/access/members/${id}/permissions/`, {
+        permissions: [...on],
+        ...(confirmRevokeAll ? { confirm_revoke_all: true } : {}),
+      });
       setToast(L("saved"));
       load();
     } catch (e) {
@@ -189,6 +207,18 @@ export default function UserPage() {
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={askRevoke}
+        tone="danger"
+        confirmLabel={L("revokeAll")}
+        message={L("confirmRevokeAll")}
+        onCancel={() => setAskRevoke(false)}
+        onConfirm={() => {
+          setAskRevoke(false);
+          save(true);
+        }}
+      />
+
       <Link href="/settings/users" className="muted"
         style={{ fontSize: ".88rem" }}>
         {L("back")}
@@ -414,7 +444,7 @@ export default function UserPage() {
                   }}>
                     {canEdit && (
                     <button className="btn btn-primary" disabled={saving}
-                      onClick={save}>
+                      onClick={() => save()}>
                       <IcCheck size={17} />
                       {saving ? L("saving") : L("save")}
                     </button>
