@@ -45,13 +45,26 @@ log = logging.getLogger("muatmd.agent")
 
 
 def setup_logging():
-    """سجل في ملف وعلى الشاشة — فمن يشكّ يقرأ الملف."""
+    """
+    سجل في ملف وعلى الشاشة — فمن يشكّ يقرأ الملف.
+
+    والترميز يُفرض utf-8: طرفية ويندوز الافتراضية (cp1252) لا
+    تطبع العربية، فتسقط الرسالة بـUnicodeEncodeError ويضيع الخطأ
+    الحقيقي تحتها.
+    """
+    stream = sys.stdout
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:      # noqa: BLE001
+            pass
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-7s  %(message)s",
         handlers=[
             logging.FileHandler(LOG_PATH, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(stream),
         ],
     )
 
