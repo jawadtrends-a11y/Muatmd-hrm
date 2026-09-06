@@ -887,6 +887,7 @@ def my_punch(request):
                 "at": timezone.localtime(p.punched_at).strftime("%H:%M"),
                 "source": p.source,
                 "site": (p.raw_payload or {}).get("site_code", ""),
+                "direction": (p.raw_payload or {}).get("direction", ""),
             } for p in punches],
             "sites": [{
                 "id": s.id, "name_ar": s.name_ar, "code": s.code,
@@ -903,7 +904,8 @@ def my_punch(request):
             latitude=request.data.get("latitude"),
             longitude=request.data.get("longitude"),
             accuracy_m=request.data.get("accuracy"),
-            method=PunchMethod.MOBILE_GPS)
+            method=PunchMethod.MOBILE_GPS,
+            direction=request.data.get("direction", ""))
     except GeofenceError as e:
         return Response({"detail": str(e), "code": "outside_geofence"},
                         status=400)

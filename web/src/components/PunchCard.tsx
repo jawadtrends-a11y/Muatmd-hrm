@@ -101,6 +101,9 @@ export default function PunchCard() {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracy: Math.round(pos.coords.accuracy),
+        // الزرّان يقولان دخولًا وخروجًا — فيُرسل ما قاله الموظف
+        // بدل أن يُهمَل ويُستنتج
+        direction: kind,
       });
 
       setOk(

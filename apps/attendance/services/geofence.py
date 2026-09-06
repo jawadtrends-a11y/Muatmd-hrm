@@ -101,7 +101,7 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
 
 def record_punch(*, employment, latitude=None, longitude=None,
                  method="mobile_gps", device_code="", accuracy_m=None,
-                 punched_at=None, skip_geofence=False):
+                 punched_at=None, skip_geofence=False, direction=""):
     """
     يسجّل بصمة بعد التحقق.
 
@@ -145,6 +145,11 @@ def record_punch(*, employment, latitude=None, longitude=None,
             "site_code": site.code if site else "",
             "distance_m": distance,
             "accuracy_m": accuracy_m,
+            # الاتجاه كما صرّح به الموظف: الزرّان في الويب
+            # والتطبيق يقولان دخولًا وخروجًا، فيُحفظ ما قاله.
+            # والاحتساب يبقى على استنتاجه من التسلسل — فهذا
+            # للمراجعة حين يختلفان.
+            "direction": direction or "",
         })
 
     logger.info("punch_recorded", extra={
