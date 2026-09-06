@@ -25,7 +25,13 @@ try:
 except ImportError:
     sys.exit("ينقص requests — ثبّته: pip install requests")
 
-APP_DIR = Path(__file__).resolve().parent
+# مجلد الملف التنفيذي لا مجلد الاستخراج المؤقّت: PyInstaller
+# يفكّ المحتوى في مجلد مؤقّت، و__file__ يشير إليه — فلا يجد
+# البرنامج إعداده ولا يكتب سجلّه بجانب نفسه.
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys.executable).resolve().parent
+else:
+    APP_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = APP_DIR / "config.json"
 STATE_PATH = APP_DIR / "state.json"
 LOG_PATH = APP_DIR / "agent.log"
