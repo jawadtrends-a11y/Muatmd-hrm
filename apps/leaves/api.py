@@ -1254,3 +1254,202 @@ def _dec(value, default):
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
         return Decimal(str(default or 0))
+
+
+# ══════════ سلاسل الاعتماد (ق-71) ══════════
+
+def _chain_json(c):
+    steps = c.steps.select_related("approver_person").order_by("step_order")
+    return {
+        "id": c.id,
+        "request_type": c.request_type,
+        "request_type_label": c.get_request_type_display(),
+        "name_ar": c.name_ar,
+        "condition": c.condition_json or {},
+        "priority": c.priority,
+        "is_active": c.is_active,
+        "steps": [{
+            "id": s.id,
+            "step_order": s.step_order,
+            "approver_type": s.approver_type,
+            "approver_type_label": s.get_approver_type_display(),
+            "approver_role_code": s.approver_role_code,
+            "approver_person_id": s.approver_person_id,
+            "approver_person_name": (
+                s.approver_person.display_name
+                if s.approver_person_id else None),
+            "is_mandatory": s.is_mandatory,
+            "same_department": s.same_department,
+            "is_acknowledgement": s.is_acknowledgement,
+        } for s in steps],
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def approval_chains(request):
+    """
+    سلاسل الاعتماد بدرجاتها (ق-71).
+
+    والسلسلة تُختار بنوع الطلب ودور مُقدِّمه: مدير الإدارة لا
+    يعتمد طلبه بنفسه، والمشرف لا يمرّ بمن دونه.
+    """
+    from apps.leaves.models import ApprovalChain
+
+    Gate.require(request.user, "leaves.view")
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    qs = Gate.filter_queryset(request.user, "leaves.view",
+                              ApprovalChain.objects.all())
+    chains = qs.filter(company_id=company_id).prefetch_related(
+        "steps__approver_person").order_by(
+            "request_type", "-priority", "id")
+
+    return Response([_chain_json(c) for c in chains])
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def approval_chain_detail(request, chain_id):
+    """
+    تفعيل سلسلة أو تعطيلها، وتغيير اسمها وأولويتها.
+
+    والدرجات لا تُعدَّل من هنا: تغيير من يعتمد ماذا يمسّ طلبات
+    قائمة في منتصف سلسلتها — فيُبنى مسارًا خاصًّا بحرّاسه.
+    """
+    from apps.leaves.models import ApprovalChain
+
+    Gate.require(request.user, "leaves.manage")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    c = ApprovalChain.objects.filter(id=chain_id, company_id=_company_id(request)).first()
+    if c is None:
+        return Response({"detail": "السلسلة غير موجودة"}, status=404)
+
+    if "name_ar" in request.data and request.data["name_ar"]:
+        c.name_ar = request.data["name_ar"]
+    if "is_active" in request.data:
+        c.is_active = bool(request.data["is_active"])
+    if "priority" in request.data:
+        try:
+            c.priority = int(request.data["priority"] or 0)
+        except (TypeError, ValueError):
+            pass
+    c.save()
+
+    from apps.core.services.audit import log_action
+    log_action(instance=c, action="update",
+               actor=getattr(request.user, "person", None),
+               label=c.request_type,
+               summary=f"عُدّلت سلسلة الاعتماد {c.name_ar}",
+               channel="web")
+    return Response(_chain_json(c))
+
+
+@api_view(["PUT", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def chain_steps(request, chain_id):
+    """
+    تعديل درجات السلسلة (ق-88).
+
+    من يعتمد ماذا قرار إداري خالص — والنظام يضع إعدادًا افتراضيًّا
+    ولا يصادره. فالدرجات تُضاف وتُحذف ويُعاد ترتيبها.
+
+    والطلبات القائمة تُكمل بسلسلتها كما بدأت: درجاتها منسوخة في
+    RequestApproval عند التقديم، فلا يُقفز عن من اعتمد.
+    """
+    from django.db import transaction
+
+    from apps.leaves.models import ApprovalChain, ApprovalStep
+
+    Gate.require(request.user, "leaves.manage")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    chain = ApprovalChain.objects.filter(id=chain_id, company_id=_company_id(request)).first()
+    if chain is None:
+        return Response({"detail": "السلسلة غير موجودة"}, status=404)
+
+    if request.method == "DELETE":
+        # المعرّف من المسار أو الجسم — فبعض العملاء لا يرسل جسمًا
+        # مع DELETE
+        step_id = request.GET.get("step_id") or request.data.get("step_id")
+        step = chain.steps.filter(id=step_id).first()
+        if step is None:
+            return Response({"detail": "الدرجة غير موجودة"}, status=404)
+
+        order = step.step_order
+        step.delete()
+        # الترتيب يُرصّ بعد الحذف: فجوة في الأرقام تربك القراءة
+        for s in chain.steps.filter(step_order__gt=order).order_by(
+                "step_order"):
+            s.step_order -= 1
+            s.save(update_fields=["step_order"])
+
+        _log_chain(request, chain, f"حُذفت درجة من {chain.name_ar}")
+        return Response(_chain_json(chain))
+
+    if request.method == "POST":
+        last = chain.steps.order_by("-step_order").first()
+        # الدرجة ترث عزلها من سلسلتها — فلا حقل حساب فيها
+        ApprovalStep.objects.create(
+            chain=chain,
+            step_order=(last.step_order + 1) if last else 1,
+            approver_type=request.data.get("approver_type", "direct_manager"),
+            approver_role_code=request.data.get("approver_role_code", ""),
+            approver_person_id=request.data.get("approver_person_id") or None,
+            is_mandatory=bool(request.data.get("is_mandatory", True)),
+            same_department=bool(request.data.get("same_department", False)),
+            is_acknowledgement=bool(
+                request.data.get("is_acknowledgement", False)),
+        )
+        _log_chain(request, chain, f"أُضيفت درجة إلى {chain.name_ar}")
+        return Response(_chain_json(chain), status=201)
+
+    # PUT: تعديل درجة قائمة أو إعادة ترتيب
+    step_id = request.data.get("step_id")
+    step = chain.steps.filter(id=step_id).first()
+    if step is None:
+        return Response({"detail": "الدرجة غير موجودة"}, status=404)
+
+    d = request.data
+    with transaction.atomic():
+        if "move" in d:
+            # النقل يبادل الترتيب مع المجاورة — لا يفتح فجوة
+            delta = -1 if d["move"] == "up" else 1
+            other = chain.steps.filter(
+                step_order=step.step_order + delta).first()
+            if other is not None:
+                # الترتيب فريد لكل سلسلة، فالمبادلة المباشرة
+                # تصطدم بالقيد لحظة التساوي — ونمرّ بموضع مؤقّت
+                # خارج المدى
+                mine, theirs = step.step_order, other.step_order
+                step.step_order = 0
+                step.save(update_fields=["step_order"])
+                other.step_order = mine
+                other.save(update_fields=["step_order"])
+                step.step_order = theirs
+                step.save(update_fields=["step_order"])
+        else:
+            if "approver_type" in d:
+                step.approver_type = d["approver_type"]
+            if "approver_role_code" in d:
+                step.approver_role_code = d["approver_role_code"] or ""
+            if "approver_person_id" in d:
+                step.approver_person_id = d["approver_person_id"] or None
+            for f in ("is_mandatory", "same_department",
+                      "is_acknowledgement"):
+                if f in d:
+                    setattr(step, f, bool(d[f]))
+            step.save()
+
+    _log_chain(request, chain, f"عُدّلت درجة في {chain.name_ar}")
+    return Response(_chain_json(chain))
+
+
+def _log_chain(request, chain, summary):
+    from apps.core.services.audit import log_action
+    log_action(instance=chain, action="update",
+               actor=getattr(request.user, "person", None),
+               label=chain.request_type, summary=summary, channel="web")

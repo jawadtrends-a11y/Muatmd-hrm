@@ -30,6 +30,11 @@ const T: Dict = {
     ar: "أوقات الدوام وأيامه وفترات السماح",
     en: "Working hours, days and grace",
   },
+  chains: { ar: "سلاسل الاعتماد", en: "Approval chains" },
+  chainsHint: {
+    ar: "من يعتمد كل نوع من الطلبات",
+    en: "Who approves each request type",
+  },
   leaveTypes: { ar: "أنواع الإجازات", en: "Leave types" },
   leaveTypesHint: {
     ar: "سياسات الاستحقاق والأجر والترحيل",
@@ -316,6 +321,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("shifts")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("shiftsHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("leaves.view") && (
+        <Link href="/settings/approval-chains" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("chains")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("chainsHint")}
           </span>
         </Link>
         )}
