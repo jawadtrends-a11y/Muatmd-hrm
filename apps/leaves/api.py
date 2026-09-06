@@ -1281,6 +1281,8 @@ def _chain_json(c):
             "is_mandatory": s.is_mandatory,
             "same_department": s.same_department,
             "is_acknowledgement": s.is_acknowledgement,
+            # ق-87: صفر يعني بلا تصعيد
+            "escalate_after_hours": s.escalate_after_hours,
         } for s in steps],
     }
 
@@ -1442,6 +1444,12 @@ def chain_steps(request, chain_id):
                       "is_acknowledgement"):
                 if f in d:
                     setattr(step, f, bool(d[f]))
+            if "escalate_after_hours" in d:
+                try:
+                    step.escalate_after_hours = int(
+                        d["escalate_after_hours"] or 0)
+                except (TypeError, ValueError):
+                    pass
             step.save()
 
     _log_chain(request, chain, f"عُدّلت درجة في {chain.name_ar}")

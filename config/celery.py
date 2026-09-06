@@ -19,6 +19,14 @@ app.conf.task_default_queue = "maintenance"
 
 # ══ المهام المجدولة (ق-48، ق-49) ══
 app.conf.beat_schedule = {
+    # تصعيد الطلبات المتأخرة كل ساعة (ق-87).
+    #
+    # المهل بالساعات: فحصها كل دقيقة إسراف، وكل يوم تأخير.
+    "escalate-overdue-requests": {
+        "task": "leaves.escalate_overdue",
+        "schedule": crontab(minute=10),
+        "options": {"queue": "maintenance"},
+    },
     # ملفات BioTime كل خمس دقائق (ق-85).
     #
     # فالجهاز يصدّرها دوريًّا، والانتظار ساعة يعني موظفًا يبصم

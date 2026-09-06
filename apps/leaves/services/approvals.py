@@ -15,8 +15,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.leaves.models import (
-    ApprovalChain, ApprovalDecision, ApproverType, Request, RequestApproval,
-    RequestStatus,
+    ApprovalChain, ApprovalDecision, ApprovalStep, ApproverType, Request,
+    RequestApproval, RequestStatus,
 )
 
 
@@ -476,3 +476,120 @@ def can_decide_type(employment, request_type, company_id=None):
     if not types:
         return True      # بلا تخصيص — يعتمد الكل
     return request_type in types
+
+
+# ══════════ التصعيد عند التأخر (ق-87) ══════════
+
+#: الأدوار التي لا تُتجاوَز — قرارها لا ينوب عنه الوقت
+NO_SKIP_ROLES = {"hr_manager", "ceo", "owner"}
+
+
+def _can_skip(step):
+    """
+    هل تُتجاوَز هذه الدرجة؟ (ق-87)
+
+    التصعيد يحرّك ما يُعطَّل بغياب مدير مباشر — لا ينوب عن قرار.
+    فلا يُتجاوز مدير الموارد ولا المدير العام ولا مالك الحساب.
+    """
+    if step.approver_role_code in NO_SKIP_ROLES:
+        return False
+    if step.approver_person_id:
+        # الشخص المسمّى بعينه قُصد بذاته — لا يُتجاوز
+        return False
+    return True
+
+
+def escalate_overdue(now=None):
+    """
+    ينقل الطلبات المتأخرة للدرجة التالية.
+
+    والقيد الحاكم: **آخر درجة لا تُتجاوَز أيًّا كانت**. فمن وصل
+    الطلب عنده وهو الأخير يبقى حتى يقرّر — وإلا صار الصمت
+    اعتمادًا، ومسير رواتب يُعتمد بلا أن يراه أحد.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    now = now or timezone.now()
+    moved = []
+
+    pending = Request.objects.filter(
+        status=RequestStatus.PENDING).select_related("employment")
+
+    for req in pending:
+        records = RequestApproval.objects.filter(
+            request=req, step_order=req.current_step, decision="")
+        if not records.exists():
+            continue
+
+        step = ApprovalStep.objects.filter(
+            chain__request_type=req.request_type,
+            chain__company_id=req.company_id,
+            step_order=req.current_step).first()
+        if step is None or not step.escalate_after_hours:
+            continue
+
+        if not _can_skip(step):
+            continue
+
+        # آخر درجة لا تُتجاوَز: لا تالية تنتقل إليها
+        has_next = ApprovalStep.objects.filter(
+            chain=step.chain, step_order__gt=step.step_order).exists()
+        if not has_next:
+            continue
+
+        started = records.order_by("created_at").first().created_at
+        due = started + timedelta(hours=step.escalate_after_hours)
+        if now < due:
+            continue
+
+        # الدرجة تُوسم مُصعَّدة لا معتمَدة: السجل يفرّق بين من
+        # قرّر ومن مضى الطلب دونه (ق-44)
+        records.update(escalated=True, decided_at=now)
+
+        req.current_step += 1
+        req.save(update_fields=["current_step", "updated_at"])
+
+        _notify_escalation(req, step, records)
+        moved.append(req.id)
+
+    return {"escalated": len(moved), "requests": moved[:20]}
+
+
+def _notify_escalation(req, step, records):
+    """
+    يُخطر الطرفين: المتجاوَز ومن وصله الطلب.
+
+    فالتصعيد لا يقع صامتًا — المتجاوَز يعرف أن الطلب مضى دونه،
+    ومن وصله يعرف أنه صار مسؤولًا عنه.
+    """
+    from apps.notifications.bus import emit
+
+    try:
+        skipped = [
+            r.approver_employment.person_id
+            for r in records.select_related("approver_employment")
+            if r.approver_employment_id]
+        if skipped:
+            emit("request.escalated_from",
+                 account_id=req.account_id, company_id=req.company_id,
+                 context={"request_no": req.request_no},
+                 recipients=skipped)
+
+        nxt = [
+            r.approver_employment.person_id
+            for r in RequestApproval.objects.filter(
+                request=req, step_order=req.current_step, decision=""
+            ).select_related("approver_employment")
+            if r.approver_employment_id]
+        if nxt:
+            emit("request.escalated_to",
+                 account_id=req.account_id, company_id=req.company_id,
+                 context={"request_no": req.request_no},
+                 recipients=nxt)
+    except Exception:      # noqa: BLE001
+        # فشل الإخطار لا يُبطل التصعيد — والطلب مضى فعلًا
+        log = __import__("logging").getLogger("muatmd.leaves")
+        log.exception("escalation_notify_failed",
+                      extra={"request": req.id})

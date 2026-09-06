@@ -169,6 +169,28 @@ TEMPLATES = {
         "آپ کی درخواست منظور",
         "آپ کی {{request_type}} درخواست نمبر {{request_no}} منظور ہوئی۔",
     ),
+    "request.escalated_from": (
+        "تجاوزك طلب متأخر",
+        "مضى طلب {{request_type}} رقم {{request_no}} للدرجة التالية "
+        "بعد انقضاء مهلتك.",
+        "A request moved past you",
+        "{{request_type}} request #{{request_no}} moved to the next "
+        "step after your deadline passed.",
+        "ایک درخواست آپ سے آگے بڑھ گئی",
+        "{{request_type}} درخواست نمبر {{request_no}} آپ کی مہلت "
+        "ختم ہونے پر اگلے مرحلے میں چلی گئی۔",
+    ),
+    "request.escalated_to": (
+        "وصلك طلب بالتصعيد",
+        "وصلك طلب {{request_type}} رقم {{request_no}} بعد تأخر الدرجة "
+        "السابقة — صار قراره إليك.",
+        "An escalated request reached you",
+        "{{request_type}} request #{{request_no}} reached you after "
+        "the previous step was overdue.",
+        "ایک درخواست آپ تک پہنچی",
+        "{{request_type}} درخواست نمبر {{request_no}} پچھلے مرحلے کی "
+        "تاخیر کے بعد آپ تک پہنچی۔",
+    ),
     "request.rejected": (
         "رُفض طلبك",
         "رُفض طلب {{request_type}} رقم {{request_no}}. السبب: {{reason}}.",

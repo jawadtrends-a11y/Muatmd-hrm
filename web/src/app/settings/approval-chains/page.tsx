@@ -43,6 +43,13 @@ const T: Dict = {
         + "كما بدأت",
     en: "Changes apply to new requests; existing ones keep their chain",
   },
+  hours: { ar: "ساعة", en: "h" },
+  escalateHint: {
+    ar: "التصعيد بعد كم ساعة — صفر يعني بلا تصعيد. ولا يُتجاوز "
+        + "مدير الموارد ولا المدير العام ولا آخر درجة",
+    en: "Escalate after N hours — 0 disables. HR, CEO and the last "
+        + "step are never skipped",
+  },
   moveUp: { ar: "لأعلى", en: "Move up" },
   moveDown: { ar: "لأسفل", en: "Move down" },
   del: { ar: "حذف", en: "Delete" },
@@ -89,6 +96,7 @@ type Step = {
   is_mandatory: boolean;
   same_department: boolean;
   is_acknowledgement: boolean;
+  escalate_after_hours: number;
 };
 
 type Chain = {
@@ -512,6 +520,25 @@ export default function ApprovalChainsPage() {
                           {s.is_mandatory
                             ? L("mandatory") : L("optional")}
                         </span>
+
+                        {canEdit && (
+                          <div className="row" style={{ gap: 4 }}
+                            title={L("escalateHint")}>
+                            <input className="input num"
+                              style={{ width: 62, fontSize: ".82rem" }}
+                              value={String(s.escalate_after_hours || "")}
+                              placeholder="0"
+                              onChange={(e) => stepAction(c.id, "PUT", {
+                                step_id: s.id,
+                                escalate_after_hours: e.target.value,
+                              })} />
+                            <span className="muted" style={{
+                              fontSize: ".74rem",
+                            }}>
+                              {L("hours")}
+                            </span>
+                          </div>
+                        )}
 
                         {canEdit && (
                           <div className="row" style={{ gap: 3 }}>

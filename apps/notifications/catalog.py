@@ -45,6 +45,12 @@ EVENTS = [
        ("in_app", "email")),
     _e("request.approved", "requests", "اعتماد طلب", ("in_app", "whatsapp")),
     _e("request.rejected", "requests", "رفض طلب", ("in_app", "whatsapp")),
+    # ق-87: التصعيد لا يقع صامتًا — المتجاوَز يعرف أن الطلب مضى
+    # دونه، ومن وصله يعرف أنه صار مسؤولًا
+    _e("request.escalated_from", "requests",
+       "تجاوزك طلب متأخر", ("in_app",)),
+    _e("request.escalated_to", "requests",
+       "وصلك طلب بالتصعيد", ("in_app",)),
     _e("request.sla_breached", "requests", "تأخر اعتماد عن المدة المحددة",
        ("in_app", "email")),
 
