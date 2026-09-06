@@ -279,3 +279,213 @@ def my_payslips(request):
         }
         for s in slips
     ])
+
+
+# ══════════ إدارة قوالب البنوك ══════════
+
+def _template_json(t):
+    return {
+        "id": t.id, "code": t.code, "name_ar": t.name_ar,
+        "bank_name_ar": t.bank_name_ar,
+        "swift_prefix": t.swift_prefix,
+        "file_format": t.file_format,
+        "delimiter": t.delimiter,
+        "include_header": t.include_header,
+        "encoding": t.encoding,
+        "filename_pattern": t.filename_pattern,
+        "note": t.note,
+        "is_builtin": t.is_builtin,
+        "is_active": t.is_active,
+        "columns": [{
+            "id": c.id, "position": c.position, "header": c.header,
+            "source": c.source, "source_label": c.get_source_display(),
+            "constant_value": c.constant_value,
+            "number_format": c.number_format,
+        } for c in t.columns.order_by("position")],
+    }
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def bank_template_create(request):
+    """
+    قالب بنك جديد.
+
+    فكل بنك له صيغة ملف رواتب خاصة، والشركة قد تتعامل مع بنك لم
+    نبنِ قالبه — فتبنيه بنفسها.
+    """
+    from apps.accounts.models import Company
+    from apps.payroll.models import BankTemplate
+
+    Gate.require(request.user, "payroll.structures")
+    company_id = _company_id(request)
+
+    code = (request.data.get("code") or "").strip().upper()
+    if not code or not request.data.get("name_ar"):
+        return Response({"detail": "الرمز والاسم مطلوبان"}, status=400)
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    if BankTemplate.objects.filter(company_id=_company_id(request), code=code).exists():
+        return Response({"detail": f"الرمز مستخدم: {code}"}, status=409)
+
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    t = BankTemplate.objects.create(
+        account_id=comp.account_id, company_id=company_id,
+        code=code, name_ar=request.data["name_ar"],
+        bank_name_ar=request.data.get("bank_name_ar", ""),
+        swift_prefix=request.data.get("swift_prefix", ""),
+        delimiter=request.data.get("delimiter", ","),
+        include_header=bool(request.data.get("include_header", True)),
+        note=request.data.get("note", ""))
+
+    from apps.core.services.audit import log_create
+    log_create(instance=t, actor=getattr(request.user, "person", None),
+               label=t.code, summary=f"قالب بنك جديد: {t.name_ar}",
+               channel="web")
+    return Response(_template_json(t), status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def bank_template_detail(request, template_id):
+    """
+    تعديل قالب أو حذفه.
+
+    والقالب المدمج (is_builtin) لا يُحذف: نبنيه ونحدّثه بتغيّر
+    متطلبات البنك. ويُعطَّل من لا يستعمله، ويُنسخ من يريد تعديله.
+    """
+    from apps.payroll.models import BankTemplate
+
+    Gate.require(request.user, "payroll.structures")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    t = BankTemplate.objects.filter(id=template_id, company_id=_company_id(request)).first()
+    if t is None:
+        return Response({"detail": "القالب غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        # المدمج يُحذف كغيره: البنك يغيّر متطلباته، والشركة تواكبه
+        # الآن لا حين نحدّث القالب (ق-88)
+        t.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    # المدمج المعدَّل يفقد وسمه: صار قالب الشركة لا قالبنا، فلا
+    # يُستبدل بتحديث منّا
+    if t.is_builtin:
+        t.is_builtin = False
+    for f in ("name_ar", "bank_name_ar", "swift_prefix", "delimiter",
+              "encoding", "filename_pattern", "note"):
+        if f in d:
+            setattr(t, f, d[f] or "")
+    for f in ("include_header", "is_active"):
+        if f in d:
+            setattr(t, f, bool(d[f]))
+    t.save()
+    return Response(_template_json(t))
+
+
+@api_view(["POST", "PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def bank_template_columns(request, template_id):
+    """أعمدة القالب — تُضاف وتُعدَّل وتُحذف."""
+    from apps.payroll.models import BankColumn, BankTemplate
+
+    Gate.require(request.user, "payroll.structures")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    t = BankTemplate.objects.filter(id=template_id, company_id=_company_id(request)).first()
+    if t is None:
+        return Response({"detail": "القالب غير موجود"}, status=404)
+
+    # أعمدة المدمج تُعدَّل كغيرها: من يغيّر بنكه ترتيب الأعمدة
+    # يحتاج تعديلها اليوم — و«مدمج» وسم لا قيد
+    if request.method == "DELETE":
+        cid = request.GET.get("column_id") or request.data.get("column_id")
+        col = t.columns.filter(id=cid).first()
+        if col is None:
+            return Response({"detail": "العمود غير موجود"}, status=404)
+        pos = col.position
+        col.delete()
+        for c in t.columns.filter(position__gt=pos).order_by("position"):
+            c.position -= 1
+            c.save(update_fields=["position"])
+        return Response(_template_json(t))
+
+    if t.is_builtin:
+        t.is_builtin = False
+        t.save(update_fields=["is_builtin"])
+
+    if request.method == "POST":
+        last = t.columns.order_by("-position").first()
+        BankColumn.objects.create(
+            template=t,
+            position=(last.position + 1) if last else 1,
+            header=request.data.get("header", ""),
+            source=request.data.get("source", "constant"),
+            constant_value=request.data.get("constant_value", ""),
+            number_format=request.data.get("number_format", ""))
+        return Response(_template_json(t), status=201)
+
+    col = t.columns.filter(id=request.data.get("column_id")).first()
+    if col is None:
+        return Response({"detail": "العمود غير موجود"}, status=404)
+
+    if "move" in request.data:
+        delta = -1 if request.data["move"] == "up" else 1
+        other = t.columns.filter(position=col.position + delta).first()
+        if other is not None:
+            # الترتيب فريد لكل قالب — نمرّ بموضع مؤقّت
+            mine, theirs = col.position, other.position
+            col.position = 0
+            col.save(update_fields=["position"])
+            other.position = mine
+            other.save(update_fields=["position"])
+            col.position = theirs
+            col.save(update_fields=["position"])
+    else:
+        for f in ("header", "source", "constant_value", "number_format"):
+            if f in request.data:
+                setattr(col, f, request.data[f] or "")
+        col.save()
+
+    return Response(_template_json(t))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def bank_template_clone(request, template_id):
+    """
+    ينسخ قالبًا — فمن يريد تعديل المدمج ينسخه ويعدّل نسخته.
+    """
+    from apps.payroll.models import BankColumn, BankTemplate
+
+    Gate.require(request.user, "payroll.structures")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    src = BankTemplate.objects.filter(id=template_id, company_id=_company_id(request)).first()
+    if src is None:
+        return Response({"detail": "القالب غير موجود"}, status=404)
+
+    code = (request.data.get("code") or f"{src.code}-COPY").upper()
+    if BankTemplate.objects.filter(
+            company_id=src.company_id, code=code).exists():
+        return Response({"detail": f"الرمز مستخدم: {code}"}, status=409)
+
+    new = BankTemplate.objects.create(
+        account_id=src.account_id, company_id=src.company_id,
+        code=code,
+        name_ar=request.data.get("name_ar") or f"{src.name_ar} (نسخة)",
+        bank_name_ar=src.bank_name_ar, swift_prefix=src.swift_prefix,
+        file_format=src.file_format, delimiter=src.delimiter,
+        include_header=src.include_header, line_ending=src.line_ending,
+        encoding=src.encoding, filename_pattern=src.filename_pattern,
+        note=src.note, is_builtin=False)
+
+    BankColumn.objects.bulk_create([
+        BankColumn(template=new, position=c.position, header=c.header,
+                   source=c.source, constant_value=c.constant_value,
+                   number_format=c.number_format)
+        for c in src.columns.order_by("position")])
+
+    return Response(_template_json(new), status=201)

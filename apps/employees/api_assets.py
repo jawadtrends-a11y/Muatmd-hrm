@@ -572,3 +572,157 @@ def termination_reasons_list(request):
         }
         for code, label in ALL_REASONS.items()
     ])
+
+
+# ══════════ المراتب والدرجات (ق-63) ══════════
+
+def _grade_json(g):
+    return {
+        "id": g.id, "code": g.code, "name_ar": g.name_ar,
+        "level": g.level,
+        "min_salary": str(g.min_salary) if g.min_salary else None,
+        "max_salary": str(g.max_salary) if g.max_salary else None,
+        "is_active": g.is_active,
+        "steps": [{
+            "id": s.id, "code": s.code, "name_ar": s.name_ar,
+            "step_number": s.step_number,
+            "salary": str(s.salary) if s.salary else None,
+            "is_active": s.is_active,
+        } for s in g.steps.order_by("step_number", "id")],
+    }
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def job_grades(request):
+    """
+    السلّم الوظيفي — اختياري (ق-63).
+
+    تُملأ إن كانت الشركة تستخدم سلّمًا، وتُترك فارغة إن لم تكن.
+    """
+    from apps.employees.models import JobGrade
+
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "GET":
+        Gate.require(request.user, "employees.view")
+        qs = Gate.filter_queryset(request.user, "employees.view",
+                                  JobGrade.objects.all())
+        grades = qs.filter(company_id=company_id).prefetch_related(
+            "steps").order_by("level", "id")
+        return Response([_grade_json(g) for g in grades])
+
+    Gate.require(request.user, "employees.edit")
+
+    code = (request.data.get("code") or "").strip().upper()
+    if not code or not request.data.get("name_ar"):
+        return Response({"detail": "الرمز والاسم مطلوبان"}, status=400)
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    if JobGrade.objects.filter(company_id=_company_id(request), code=code).exists():
+        return Response({"detail": f"الرمز مستخدم: {code}"}, status=409)
+
+    from apps.accounts.models import Company
+    comp = Company.objects.filter(id=_company_id(request)).first()
+
+    g = JobGrade.objects.create(
+        account_id=comp.account_id, company_id=company_id,
+        code=code, name_ar=request.data["name_ar"],
+        name_en=request.data.get("name_en", ""),
+        level=int(request.data.get("level") or 0),
+        min_salary=request.data.get("min_salary") or None,
+        max_salary=request.data.get("max_salary") or None)
+
+    from apps.core.services.audit import log_create
+    log_create(instance=g, actor=getattr(request.user, "person", None),
+               label=g.code, summary=f"مرتبة جديدة: {g.name_ar}",
+               channel="web")
+    return Response(_grade_json(g), status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def job_grade_detail(request, grade_id):
+    """
+    تعديل مرتبة أو حذفها.
+
+    والمرتبة المستخدَمة في عقد موظف تُعطَّل لا تُحذف — فحذفها
+    يترك عقدًا يشير لمرتبة لا وجود لها.
+    """
+    from apps.employees.models import Employment, JobGrade
+
+    Gate.require(request.user, "employees.edit")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    g = JobGrade.objects.filter(id=grade_id, company_id=_company_id(request)).first()
+    if g is None:
+        return Response({"detail": "المرتبة غير موجودة"}, status=404)
+
+    if request.method == "DELETE":
+        used = Employment.objects.filter(job_grade=g).exists()
+        if used:
+            g.is_active = False
+            g.save(update_fields=["is_active", "updated_at"])
+            return Response({"deactivated": True,
+                             "detail": "المرتبة مستخدمة في عقود — "
+                                       "عُطّلت ولم تُحذف"})
+        name = g.name_ar
+        g.delete()
+        from apps.core.services.audit import log_action
+        log_action(instance=None, action="delete",
+                   actor=getattr(request.user, "person", None),
+                   label=str(grade_id),
+                   summary=f"حُذفت المرتبة {name}", channel="web")
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "name_en"):
+        if f in d and d[f]:
+            setattr(g, f, d[f])
+    if "level" in d:
+        try:
+            g.level = int(d["level"] or 0)
+        except (TypeError, ValueError):
+            pass
+    for f in ("min_salary", "max_salary"):
+        if f in d:
+            setattr(g, f, d[f] or None)
+    if "is_active" in d:
+        g.is_active = bool(d["is_active"])
+    g.save()
+    return Response(_grade_json(g))
+
+
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def grade_steps(request, grade_id):
+    """درجات المرتبة — تُضاف وتُحذف."""
+    from apps.employees.models import JobGrade, JobStep
+
+    Gate.require(request.user, "employees.edit")
+
+    # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
+    g = JobGrade.objects.filter(id=grade_id, company_id=_company_id(request)).first()
+    if g is None:
+        return Response({"detail": "المرتبة غير موجودة"}, status=404)
+
+    if request.method == "DELETE":
+        step_id = request.GET.get("step_id") or request.data.get("step_id")
+        s = g.steps.filter(id=step_id).first()
+        if s is None:
+            return Response({"detail": "الدرجة غير موجودة"}, status=404)
+        s.delete()
+        return Response(_grade_json(g))
+
+    code = (request.data.get("code") or "").strip().upper()
+    if not code:
+        return Response({"detail": "رمز الدرجة مطلوب"}, status=400)
+
+    JobStep.objects.create(
+        account_id=g.account_id, company_id=g.company_id, grade=g,
+        code=code, name_ar=request.data.get("name_ar", code),
+        step_number=int(request.data.get("step_number") or 0),
+        salary=request.data.get("salary") or None)
+    return Response(_grade_json(g), status=201)

@@ -83,6 +83,10 @@ urlpatterns = [
     path("api/payroll/runs/<int:run_id>/overview/", outputs_api.run_overview, name="run-overview"),
     path("api/payroll/runs/<int:run_id>/tab/<str:tab>/", outputs_api.run_tab, name="run-tab"),
     path("api/payroll/bank-templates/", outputs_api.bank_templates, name="bank-templates"),
+    path("api/payroll/bank-templates/new/", outputs_api.bank_template_create, name="bank-template-create"),
+    path("api/payroll/bank-templates/<int:template_id>/", outputs_api.bank_template_detail, name="bank-template-detail"),
+    path("api/payroll/bank-templates/<int:template_id>/columns/", outputs_api.bank_template_columns, name="bank-template-columns"),
+    path("api/payroll/bank-templates/<int:template_id>/clone/", outputs_api.bank_template_clone, name="bank-template-clone"),
     path("api/payroll/runs/<int:run_id>/bank/<int:template_id>/preview/", outputs_api.bank_file_preview, name="bank-preview"),
     path("api/payroll/runs/<int:run_id>/bank/<int:template_id>/download/", outputs_api.bank_file_download, name="bank-download"),
     path("api/payroll/runs/<int:run_id>/wps/preview/", outputs_api.wps_preview, name="wps-preview"),
@@ -93,6 +97,10 @@ urlpatterns = [
     path("api/advances/<int:advance_id>/approve/", assets_api.advance_approve, name="advance-approve"),
     path("api/advances/<int:advance_id>/schedule/", assets_api.advance_schedule, name="advance-schedule"),
     path("api/employees/<int:employment_id>/advance-eligibility/", assets_api.advance_eligibility, name="advance-eligibility"),
+    # السلّم الوظيفي (ق-63)
+    path("api/job-grades/", assets_api.job_grades, name="job-grades"),
+    path("api/job-grades/<int:grade_id>/", assets_api.job_grade_detail, name="job-grade-detail"),
+    path("api/job-grades/<int:grade_id>/steps/", assets_api.grade_steps, name="grade-steps"),
     path("api/assets/", assets_api.assets, name="assets"),
     path("api/assets/<int:asset_id>/return/", assets_api.asset_return, name="asset-return"),
     path("api/documents/", assets_api.documents, name="documents"),
@@ -190,6 +198,9 @@ urlpatterns = [
     path("api/me/deputies/", leaves_api.eligible_deputies_view, name="eligible-deputies"),
     path("api/me/delegations/", leaves_api.my_delegations, name="my-delegations"),
     # الإشعارات — جرس المستخدم
+    # قوالب الإشعارات
+    path("api/notifications/templates/", notifications_api.notification_templates, name="notification-templates"),
+    path("api/notifications/templates/<int:template_id>/", notifications_api.notification_template_detail, name="notification-template-detail"),
     path("api/me/notifications/", notifications_api.my_notifications, name="my-notifications"),
     path("api/me/notifications/read/", notifications_api.mark_read, name="notifications-read"),
     path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),

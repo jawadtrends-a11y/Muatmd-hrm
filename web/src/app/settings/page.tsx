@@ -15,6 +15,21 @@ const T: Dict = {
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
+  notifTpl: { ar: "قوالب الإشعارات", en: "Notification templates" },
+  notifTplHint: {
+    ar: "نصّ كل إشعار في قنواته",
+    en: "Text of each notification",
+  },
+  bankTpl: { ar: "قوالب البنوك", en: "Bank templates" },
+  bankTplHint: {
+    ar: "صيغة ملف الرواتب لكل بنك",
+    en: "Payroll file format per bank",
+  },
+  grades: { ar: "السلّم الوظيفي", en: "Job scale" },
+  gradesHint: {
+    ar: "المراتب ودرجاتها — اختياري",
+    en: "Grades and steps — optional",
+  },
   payComponents: { ar: "بنود الأجر", en: "Pay components" },
   payComponentsHint: {
     ar: "الاستحقاقات والاستقطاعات وأعلامها",
@@ -291,6 +306,39 @@ function PayrollPanel({
         )}
         {/* البنود تظهر لمن يقرأ — والوجود ثابت، والقدرة
             على التعديل هي المتغيّرة (ق-76) */}
+        {perms.has("company.view") && (
+        <Link href="/settings/notification-templates" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("notifTpl")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("notifTplHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/bank-templates" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("bankTpl")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("bankTplHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("employees.view") && (
+        <Link href="/settings/job-grades" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("grades")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("gradesHint")}
+          </span>
+        </Link>
+        )}
         {perms.has("payroll.view") && (
         <Link href="/settings/pay-components" className="spread" style={{
           padding: "13px 20px", color: "var(--ink-2)",
