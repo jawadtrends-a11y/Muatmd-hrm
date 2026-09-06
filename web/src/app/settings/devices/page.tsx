@@ -67,7 +67,111 @@ const T: Dict = {
   bodyExample: { ar: "مثال الجسم", en: "Body example" },
   notes: { ar: "ملاحظات", en: "Notes" },
   wayBiotime: { ar: "عبر BioTime", en: "Via BioTime" },
+  wayAgent: { ar: "برمجية معتمد", en: "Muatmd agent" },
+
+  // ق-84: النصوص هنا لا في الخادم — فالواجهة تعرف لغة المستخدم
+  bt1: {
+    ar: "في BioTime: النظام ← إعدادات ← إعدادات FTP ← أضف",
+    en: "In BioTime: System → Settings → FTP settings → Add",
+  },
+  bt2: {
+    ar: "اختر SFTP، وأدخل المضيف والمنفذ واسم المستخدم وكلمة المرور",
+    en: "Choose SFTP, then enter host, port, username and password",
+  },
+  bt3: {
+    ar: "ثم: النظام ← تكامل ← تصدير تلقائي ← أضف",
+    en: "Then: System → Integration → Auto export → Add",
+  },
+  bt4: {
+    ar: "الشكل CSV، والتاريخ yyyy-MM-DD، والوقت HH:mm:ss",
+    en: "Format CSV, date yyyy-MM-DD, time HH:mm:ss",
+  },
+  bt5: {
+    ar: "قالب البيانات (مفصولًا بـTab):",
+    en: "Data template (Tab separated):",
+  },
+  bt6: {
+    ar: "في تبويب الوقت: فترة 5 دقائق أو أقل",
+    en: "In the time tab: interval of 5 minutes or less",
+  },
+  bt7: {
+    ar: "في مسار التصدير: اكتب upload",
+    en: "In the export path: enter upload",
+  },
+  btNote: {
+    ar: "كلمة المرور تُسلَّم عند إنشاء الحساب — راجع مزوّد الخدمة إن فقدتها",
+    en: "The password is issued when the account is created",
+  },
+
+  ag1: {
+    ar: "نزّل حزمة الوسيط، وفكّها في مجلد على جهاز يعمل دائمًا داخل شبكتك",
+    en: "Download the agent package to an always-on machine on your network",
+  },
+  ag2: {
+    ar: "شغّل muatmd-agent-setup.exe",
+    en: "Run muatmd-agent-setup.exe",
+  },
+  ag3: {
+    ar: "أدخل رمز الجهاز ومفتاحه من هذه الشاشة، وعنوان جهاز البصمة في شبكتك",
+    en: "Enter the device code and key from this screen, and the device address",
+  },
+  ag4: {
+    ar: "اضغط «فحص الاتصال» — لا تكمل حتى يقول «سليم بالطرفين»",
+    en: "Press Test connection — do not continue until both sides pass",
+  },
+  ag5: {
+    ar: "اضغط «حفظ» ثم أغلق النافذة",
+    en: "Press Save, then close the window",
+  },
+  ag6: {
+    ar: "افتح PowerShell بصلاحية مسؤول في مجلد الحزمة ونفّذ install-service.ps1",
+    en: "Open PowerShell as admin in the package folder and run install-service.ps1",
+  },
+  ag7: {
+    ar: "يعمل الوسيط خدمةً تبدأ مع الجهاز — ولا يحتاج فتحه كل صباح",
+    en: "The agent runs as a service that starts with the machine",
+  },
+  agN1: {
+    ar: "الوسيط يقرأ من الجهاز كل خمس دقائق ويرفع الجديد وحده.",
+    en: "The agent reads every five minutes and uploads only what is new.",
+  },
+  agN2: {
+    ar: "ولا تضيع بصمة بانقطاع: ما تراكم يُرفع عند عودة الاتصال.",
+    en: "No punch is lost: what accumulates is uploaded when connectivity returns.",
+  },
+  agN3: {
+    ar: "والسجل في agent.log بجانب الوسيط — منه تعرف ما جرى.",
+    en: "The log is in agent.log next to the agent.",
+  },
+
+  hN1: {
+    ar: "رقم الموظف على الجهاز هو الرقم الوظيفي في النظام.",
+    en: "The employee number on the device is the one in the system.",
+  },
+  hN2: {
+    ar: "البصمة تُسجَّل بوقتها الأصلي لا بوقت وصولها — فارفع المتأخرة بتواريخها.",
+    en: "Punches are stored at their own time, not arrival time.",
+  },
+  hN3: {
+    ar: "الرفع المتكرّر آمن: البصمة نفسها لا تُحتسب مرتين.",
+    en: "Re-uploading is safe: the same punch is never counted twice.",
+  },
+  hN4: {
+    ar: "والبصمة تُميَّز بالجهاز والموظف والوقت بالثانية لا بمعرّف ترسله أنت.",
+    en: "A punch is identified by device, employee and time to the second.",
+  },
+  hN5: {
+    ar: "جرّب ping أولًا: يؤكّد أن الرمز والمفتاح صحيحان قبل أن تبدأ.",
+    en: "Try ping first: it confirms the code and key before you start.",
+  },
+  maxBatch: { ar: "أقصى دفعة", en: "Max batch" },
+  punch: { ar: "بصمة", en: "punches" },
+  template: { ar: "قالب البيانات", en: "Data template" },
   wayHttp: { ar: "ربط مباشر", en: "Direct" },
+  agentTitle: {
+    ar: "الربط ببرمجية معتمد — لمن لا BioTime عنده",
+    en: "Muatmd agent — for those without BioTime",
+  },
   biotimeTitle: {
     ar: "الربط عبر BioTime (SFTP)",
     en: "Connecting via BioTime (SFTP)",
@@ -97,20 +201,17 @@ type Site = { id: number; name_ar: string };
 type Guide = {
   ingest_url: string;
   ping_url: string;
-  headers: Record<string, string>;
-  body_example: unknown;
   max_batch: number;
-  notes_ar: string[];
-  fields_ar?: Record<string, string>;
+  fields: string[];
+  body_example: unknown;
+  biotime_template: string;
   sftp?: {
     host: string;
     port: number;
     username: string;
     upload_path: string;
     protocol: string;
-    note_ar: string;
   };
-  biotime_steps_ar?: string[];
 };
 
 export default function DevicesPage() {
@@ -134,7 +235,8 @@ export default function DevicesPage() {
    * الطريقتان منفصلتان: من عنده BioTime لا يعنيه HTTP،
    * وعرضهما معًا يربك من يبحث عن إعداده.
    */
-  const [way, setWay] = useState<"biotime" | "http">("biotime");
+  const [way, setWay] = useState<"biotime" | "agent" | "http">(
+    "biotime");
 
   const load = useCallback(() => {
     apiGet<Device[]>("/attendance/devices/")
@@ -309,11 +411,76 @@ export default function DevicesPage() {
             </button>
             <button
               className={`btn btn-sm ${
+                way === "agent" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setWay("agent")}>
+              {L("wayAgent")}
+            </button>
+            <button
+              className={`btn btn-sm ${
                 way === "http" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setWay("http")}>
               {L("wayHttp")}
             </button>
           </div>
+
+          {/* ق-86: لمن لا BioTime عنده — برمجية على شبكته */}
+          {way === "agent" && (
+            <div style={{
+              background: "var(--paper-2)", padding: 16,
+              borderRadius: "var(--radius-sm)",
+            }}>
+              <div style={{
+                fontWeight: 600, color: "var(--teal)", marginBottom: 10,
+              }}>
+                {L("agentTitle")}
+              </div>
+
+              {guide.sftp && (
+                <table className="table" style={{ marginBottom: 12 }}>
+                  <tbody>
+                    <tr>
+                      <td className="muted" style={{ width: 130 }}>
+                        {L("code")}
+                      </td>
+                      <td>
+                        <span className="num">
+                          {rows[0]?.device_code || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="muted">{L("ingestUrl")}</td>
+                      <td>
+                        <span className="num" style={{ fontSize: ".82rem" }}>
+                          {guide.ingest_url.replace(
+                            "/api/attendance/ingest/", "")}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              <ol style={{
+                paddingInlineStart: 20, fontSize: ".86rem",
+                lineHeight: 2, color: "var(--ink-2)", margin: 0,
+              }}>
+                {["ag1", "ag2", "ag3", "ag4", "ag5", "ag6", "ag7"].map((k) => (
+                  <li key={k}>{L(k)}</li>
+                ))}
+              </ol>
+
+              <ul style={{
+                  paddingInlineStart: 18, fontSize: ".84rem",
+                  lineHeight: 1.9, color: "var(--ink-3)",
+                  marginTop: 12, marginBottom: 0,
+                }}>
+                  {["agN1", "agN2", "agN3"].map((k) => (
+                    <li key={k}>{L(k)}</li>
+                  ))}
+                </ul>
+            </div>
+          )}
 
           {way === "biotime" && guide.sftp && (
             <div style={{
@@ -354,19 +521,31 @@ export default function DevicesPage() {
               <div className="muted" style={{
                 fontSize: ".82rem", marginBottom: 12,
               }}>
-                {guide.sftp.note_ar}
+                {L("btNote")}
               </div>
 
-              {guide.biotime_steps_ar && (
-                <ol style={{
+              <ol style={{
                   paddingInlineStart: 20, fontSize: ".86rem",
                   lineHeight: 2, color: "var(--ink-2)", margin: 0,
                 }}>
-                  {guide.biotime_steps_ar.map((st, i) => (
-                    <li key={i}>{st}</li>
+                  {["bt1", "bt2", "bt3", "bt4"].map((k) => (
+                    <li key={k}>{L(k)}</li>
+                  ))}
+                  <li>
+                    {L("bt5")}
+                    <div className="num" style={{
+                      fontSize: ".78rem", marginTop: 4, direction: "ltr",
+                      textAlign: "left", background: "var(--paper)",
+                      padding: "6px 9px",
+                      borderRadius: "var(--radius-sm)",
+                    }}>
+                      {guide.biotime_template}
+                    </div>
+                  </li>
+                  {["bt6", "bt7"].map((k) => (
+                    <li key={k}>{L(k)}</li>
                   ))}
                 </ol>
-              )}
             </div>
           )}
 
@@ -400,10 +579,9 @@ export default function DevicesPage() {
                 background: "var(--paper-2)", padding: "9px 12px",
                 borderRadius: "var(--radius-sm)", fontSize: ".84rem",
               }}>
-                {Object.entries(guide.headers).map(([k, v]) => (
-                  <div key={k} style={{ marginBottom: 3 }}>
-                    <span className="num">{k}</span>
-                    <span className="muted">{" — "}{v}</span>
+                {["X-Device-Code", "X-Device-Key", "Content-Type"].map((h) => (
+                  <div key={h} style={{ marginBottom: 3 }}>
+                    <span className="num">{h}</span>
                   </div>
                 ))}
               </div>
@@ -427,7 +605,9 @@ export default function DevicesPage() {
                 paddingInlineStart: 18, fontSize: ".86rem",
                 lineHeight: 1.9, color: "var(--ink-2)",
               }}>
-                {guide.notes_ar.map((n, i) => <li key={i}>{n}</li>)}
+                {["hN1", "hN2", "hN3", "hN4", "hN5"].map((k) => (
+                  <li key={k}>{L(k)}</li>
+                ))}
               </ul>
             </div>
           </div>

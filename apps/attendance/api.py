@@ -1139,65 +1139,27 @@ def device_setup_guide(request):
     base = request.build_absolute_uri("/").rstrip("/")
 
     return Response({
+        # البيانات وحدها من الخادم — والنصوص المعروضة في
+        # الواجهة، فهي التي تعرف لغة المستخدم (ق-84).
         "ingest_url": f"{base}/api/attendance/ingest/",
         "ping_url": f"{base}/api/attendance/ingest/ping/",
-        "headers": {
-            "X-Device-Code": "رمز الجهاز كما أُنشئ في النظام",
-            "X-Device-Key": "المفتاح الذي عُرض مرة واحدة عند الإنشاء",
-            "Content-Type": "application/json",
-        },
+        "max_batch": 500,
+        "fields": ["employee_no", "punched_at", "external_ref"],
         "body_example": {
             "punches": [
                 {"employee_no": "1007",
                  "punched_at": "2026-09-05T08:01:33"},
             ],
         },
-        "fields_ar": {
-            "employee_no": "الرقم الوظيفي — مطلوب",
-            "punched_at": "وقت البصمة بصيغة ISO — مطلوب",
-            "external_ref": "أي حقل إضافي يُحفظ في البيانات الخام "
-                            "للمراجعة، ولا يُعتمد عليه في منع "
-                            "التكرار",
-        },
-        "response_example": {
-            "accepted": 1, "duplicated": 0,
-            "unknown_employees": [], "invalid": [], "received": 1,
-        },
-        "max_batch": 500,
-
-        # ق-85: بيانات حساب SFTP لهذه الشركة — من يستخدم BioTime
-        # يضبطها فيه ولا يسأل الدعم
         "sftp": {
             "host": request.get_host().split(":")[0],
             "port": 22,
             "username": f"bt{_company_id(request)}",
             "upload_path": "/upload",
             "protocol": "SFTP",
-            "note_ar": "كلمة المرور تُسلَّم عند إنشاء الحساب — "
-                       "راجع مزوّد الخدمة إن فقدتها",
         },
-        "biotime_steps_ar": [
-            "في BioTime: النظام ← إعدادات ← إعدادات FTP ← أضف",
-            "اختر SFTP، وأدخل المضيف والمنفذ 22 واسم المستخدم "
-            "وكلمة المرور",
-            "ثم: النظام ← تكامل ← تصدير تلقائي ← أضف",
-            "الشكل CSV، والتاريخ yyyy-MM-DD، والوقت HH:mm:ss",
-            "قالب البيانات: emp_code ثم punch_time ثم punch_state "
-            "ثم work_code ثم card_number ثم area_name ثم "
-            "terminal_alias ثم terminal_sn — مفصولة بـTab",
-            "في تبويب الوقت: فترة 5 دقائق أو أقل",
-            "في مسار التصدير: اكتب upload",
-        ],
-        "notes_ar": [
-            "رقم الموظف على الجهاز هو الرقم الوظيفي في النظام.",
-            "البصمة تُسجَّل بوقتها الأصلي لا بوقت وصولها — فارفع "
-            "المتأخرة بتواريخها.",
-            "الرفع المتكرّر آمن: البصمة نفسها لا تُحتسب مرتين، "
-            "فأعِد رفع ما لم تتأكد من وصوله.",
-            "والبصمة تُميَّز بالجهاز والموظف والوقت بالثانية — لا "
-            "بمعرّف ترسله أنت، فلا يضرّك اختلافه بين الرفعات.",
-            "أقصى دفعة 500 بصمة — قسّم ما زاد.",
-            "جرّب ping أولًا: يؤكّد أن الرمز والمفتاح صحيحان قبل "
-            "أن تبدأ.",
-        ],
+        "biotime_template": (
+            "emp_code · punch_time · punch_state · work_code · "
+            "card_number · area_name · terminal_alias · terminal_sn"
+        ),
     })
