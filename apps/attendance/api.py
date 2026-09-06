@@ -1164,6 +1164,30 @@ def device_setup_guide(request):
             "unknown_employees": [], "invalid": [], "received": 1,
         },
         "max_batch": 500,
+
+        # ق-85: بيانات حساب SFTP لهذه الشركة — من يستخدم BioTime
+        # يضبطها فيه ولا يسأل الدعم
+        "sftp": {
+            "host": request.get_host().split(":")[0],
+            "port": 22,
+            "username": f"bt{_company_id(request)}",
+            "upload_path": "/upload",
+            "protocol": "SFTP",
+            "note_ar": "كلمة المرور تُسلَّم عند إنشاء الحساب — "
+                       "راجع مزوّد الخدمة إن فقدتها",
+        },
+        "biotime_steps_ar": [
+            "في BioTime: النظام ← إعدادات ← إعدادات FTP ← أضف",
+            "اختر SFTP، وأدخل المضيف والمنفذ 22 واسم المستخدم "
+            "وكلمة المرور",
+            "ثم: النظام ← تكامل ← تصدير تلقائي ← أضف",
+            "الشكل CSV، والتاريخ yyyy-MM-DD، والوقت HH:mm:ss",
+            "قالب البيانات: emp_code ثم punch_time ثم punch_state "
+            "ثم work_code ثم card_number ثم area_name ثم "
+            "terminal_alias ثم terminal_sn — مفصولة بـTab",
+            "في تبويب الوقت: فترة 5 دقائق أو أقل",
+            "في مسار التصدير: اكتب upload",
+        ],
         "notes_ar": [
             "رقم الموظف على الجهاز هو الرقم الوظيفي في النظام.",
             "البصمة تُسجَّل بوقتها الأصلي لا بوقت وصولها — فارفع "

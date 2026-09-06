@@ -1,0 +1,2 @@
+requests>=2.31
+pyzk>=0.9

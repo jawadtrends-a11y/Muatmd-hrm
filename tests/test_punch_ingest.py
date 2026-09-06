@@ -243,3 +243,49 @@ def test_two_punches_same_device_same_batch(env):
 
     with account_scope(env["account_id"]):
         assert AttendancePunch.objects.count() == 2
+
+@pytest.mark.django_db(transaction=True)
+def test_device_authenticates_without_account_scope(env):
+    """
+    ⚠️ الجهاز يصادق نفسه قبل أن يُعرف حسابه.
+
+    فلا نطاق في السياق بعد، والعزل يحجب صفّه عن مصادقته — فكل
+    جهاز يُردّ «غير معروف» ولا تصل بصمة واحدة من الإنترنت.
+
+    والدالة app_device_for_auth تحلّها بصلاحية مالكها: ترجع صفًّا
+    واحدًا يُطابَق برمزه، ولا تقرأ بصمة ولا موظفًا.
+    """
+    from django.db import connection
+
+    from apps.attendance.api_ingest import _authenticate
+
+    key = _make_device(env)
+
+    class _Req:
+        headers = {"X-Device-Code": "ZK-T", "X-Device-Key": key}
+        data = {}
+
+    device, err = _authenticate(_Req())
+    assert device is not None, f"فشلت المصادقة بلا نطاق: {err}"
+
+    # الاختبارات تعمل بمستخدم يتجاوز العزل، فنجاح المصادقة هنا لا
+    # يثبت نجاحها في الإنتاج. والذي يثبتها وجود الدالة بصلاحية
+    # مالكها: بدونها يُردّ كل جهاز «غير معروف» ولا تصل بصمة.
+    with connection.cursor() as cur:
+        cur.execute("""
+            SELECT p.prosecdef
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE p.proname = 'app_device_for_auth'
+        """)
+        row = cur.fetchone()
+
+    assert row is not None, (
+        "دالة app_device_for_auth غير موجودة — والعزل يحجب الجهاز "
+        "عن مصادقته في الإنتاج")
+    assert row[0] is True, (
+        "الدالة بلا SECURITY DEFINER — فهي تخضع للعزل ولا تحلّ شيئًا")
+
+    src = open("apps/attendance/api_ingest.py", encoding="utf-8").read()
+    assert "app_device_for_auth" in src, (
+        "المصادقة لا تستدعي الدالة — استعلام مباشر يفشل في الإنتاج")

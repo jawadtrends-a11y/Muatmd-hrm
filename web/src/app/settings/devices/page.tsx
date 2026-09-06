@@ -66,6 +66,20 @@ const T: Dict = {
   headers: { ar: "الترويسات", en: "Headers" },
   bodyExample: { ar: "مثال الجسم", en: "Body example" },
   notes: { ar: "ملاحظات", en: "Notes" },
+  wayBiotime: { ar: "عبر BioTime", en: "Via BioTime" },
+  wayHttp: { ar: "ربط مباشر", en: "Direct" },
+  biotimeTitle: {
+    ar: "الربط عبر BioTime (SFTP)",
+    en: "Connecting via BioTime (SFTP)",
+  },
+  httpTitle: {
+    ar: "الربط المباشر (HTTP)",
+    en: "Direct integration (HTTP)",
+  },
+  sftpHost: { ar: "المضيف", en: "Host" },
+  sftpPort: { ar: "المنفذ", en: "Port" },
+  sftpUser: { ar: "المستخدم", en: "Username" },
+  sftpPath: { ar: "مسار الرفع", en: "Upload path" },
 };
 
 type Device = {
@@ -87,6 +101,16 @@ type Guide = {
   body_example: unknown;
   max_batch: number;
   notes_ar: string[];
+  fields_ar?: Record<string, string>;
+  sftp?: {
+    host: string;
+    port: number;
+    username: string;
+    upload_path: string;
+    protocol: string;
+    note_ar: string;
+  };
+  biotime_steps_ar?: string[];
 };
 
 export default function DevicesPage() {
@@ -106,6 +130,11 @@ export default function DevicesPage() {
   /** دليل الربط: من يشتري جهازًا يحتاج الرابط والترويسات */
   const [guide, setGuide] = useState<Guide | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  /**
+   * الطريقتان منفصلتان: من عنده BioTime لا يعنيه HTTP،
+   * وعرضهما معًا يربك من يبحث عن إعداده.
+   */
+  const [way, setWay] = useState<"biotime" | "http">("biotime");
 
   const load = useCallback(() => {
     apiGet<Device[]>("/attendance/devices/")
@@ -270,6 +299,78 @@ export default function DevicesPage() {
             {L("guideTitle")}
           </h3>
 
+          {/* ق-85: تبويبان لا قسمان — كلٌّ يرى إعداد طريقته */}
+          <div className="row" style={{ gap: 6, marginBottom: 16 }}>
+            <button
+              className={`btn btn-sm ${
+                way === "biotime" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setWay("biotime")}>
+              {L("wayBiotime")}
+            </button>
+            <button
+              className={`btn btn-sm ${
+                way === "http" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setWay("http")}>
+              {L("wayHttp")}
+            </button>
+          </div>
+
+          {way === "biotime" && guide.sftp && (
+            <div style={{
+              background: "var(--paper-2)", padding: 16,
+              borderRadius: "var(--radius-sm)", marginBottom: 16,
+            }}>
+              <div style={{
+                fontWeight: 600, color: "var(--teal)", marginBottom: 10,
+              }}>
+                {L("biotimeTitle")}
+              </div>
+
+              <table className="table" style={{ marginBottom: 12 }}>
+                <tbody>
+                  <tr>
+                    <td className="muted" style={{ width: 130 }}>
+                      {L("sftpHost")}
+                    </td>
+                    <td><span className="num">{guide.sftp.host}</span></td>
+                  </tr>
+                  <tr>
+                    <td className="muted">{L("sftpPort")}</td>
+                    <td><span className="num">{guide.sftp.port}</span></td>
+                  </tr>
+                  <tr>
+                    <td className="muted">{L("sftpUser")}</td>
+                    <td><span className="num">{guide.sftp.username}</span></td>
+                  </tr>
+                  <tr>
+                    <td className="muted">{L("sftpPath")}</td>
+                    <td>
+                      <span className="num">{guide.sftp.upload_path}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="muted" style={{
+                fontSize: ".82rem", marginBottom: 12,
+              }}>
+                {guide.sftp.note_ar}
+              </div>
+
+              {guide.biotime_steps_ar && (
+                <ol style={{
+                  paddingInlineStart: 20, fontSize: ".86rem",
+                  lineHeight: 2, color: "var(--ink-2)", margin: 0,
+                }}>
+                  {guide.biotime_steps_ar.map((st, i) => (
+                    <li key={i}>{st}</li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {way === "http" && (
           <div className="stack" style={{ gap: 10 }}>
             <div>
               <div className="label">{L("ingestUrl")}</div>
@@ -330,6 +431,7 @@ export default function DevicesPage() {
               </ul>
             </div>
           </div>
+          )}
         </div>
       )}
 

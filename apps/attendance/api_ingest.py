@@ -39,15 +39,33 @@ def _authenticate(request):
     if not key or not code:
         return None, "رمز الجهاز ومفتاحه مطلوبان"
 
-    # الجهاز يصادق نفسه — لا مستخدم في السياق ولا نطاق يُفلتر به
-    device = PunchDevice.objects.filter(
-        device_code=code, is_active=True).first()
-    if device is None:
+    # الجهاز يصادق نفسه قبل أن يُعرف حسابه — ولا نطاق في السياق
+    # بعد، فالعزل يحجب صفّه عن مصادقته.
+    #
+    # فيُقرأ صفّ الجهاز وحده باستعلام مباشر، ثم يُفتح نطاق حسابه
+    # لكل ما بعده. والتجاوز محصور في صفّ واحد يُطابَق برمزه
+    # ومفتاحه — لا يقرأ بصمة ولا موظفًا.
+    from django.db import connection
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT * FROM app_device_for_auth(%s)", [code])
+        row = cur.fetchone()
+
+    if row is None:
         return None, "جهاز غير معروف أو معطّل"
 
-    if not check_password(key, device.api_key_hash):
+    if not check_password(key, row[3]):
         log.warning("device_auth_failed", extra={"device": code})
         return None, "مفتاح غير صحيح"
+
+    # وبعد المصادقة يُقرأ الكائن داخل نطاقه — فما بعدها معزول
+    from apps.core.tenancy.context import account_scope
+
+    with account_scope(row[1]):
+        device = PunchDevice.objects.filter(id=row[0]).first()
+
+    if device is None:
+        return None, "جهاز غير معروف أو معطّل"
 
     return device, None
 
