@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from apps.core.i18n import request_locale
 from rest_framework.response import Response
 
 from apps.core.access.gate import Gate
@@ -142,7 +143,7 @@ def leave_balances(request):
 
 # ══════════ الطلبات ══════════
 
-def _serialize_request(r, include_chain=False):
+def _serialize_request(r, include_chain=False, lang="ar"):
     data = {
         "id": r.id,
         "request_no": r.request_no,
@@ -150,10 +151,8 @@ def _serialize_request(r, include_chain=False):
         "type_label": r.get_request_type_display(),
         # الاسم الإنجليزي — التطبيق والويب يعرضان بلغة المستخدم
         "type_label_en": _type_en(r.request_type),
-        # الاسم الإنجليزي — التطبيق والويب يعرضان بلغة المستخدم
-        "type_label_en": _type_en(r.request_type),
         "employee_no": r.employment.employee_no,
-        "employee_name": r.employment.person.display_name,
+        "employee_name": r.employment.person.name_for(lang),
         "status": r.status,
         "status_label": r.get_status_display(),
         "current_step": r.current_step,
@@ -187,7 +186,7 @@ def _serialize_request(r, include_chain=False):
                 state = "upcoming"          # لم يصله بعد
             rows.append({
                 "step": a.step_order,
-                "approver": (a.approver_employment.person.display_name
+                "approver": (a.approver_employment.person.name_for(lang)
                              if a.approver_employment else "—"),
                 "decision": a.decision,
                 "decision_label": a.get_decision_display(),
@@ -201,7 +200,7 @@ def _serialize_request(r, include_chain=False):
         # ق-75: الغائب يرى حالة نائبه — وإلا بقي لا يدري من يغطّيه
         d = getattr(r, "delegation", None)
         data["delegation"] = None if d is None else {
-            "deputy": d.deputy.person.display_name,
+            "deputy": d.deputy.person.name_for(request_locale(request)),
             "status": d.status,
             "status_label": d.get_status_display(),
             "starts_on": d.starts_on,
@@ -243,7 +242,7 @@ def leave_requests(request):
         if request.GET.get("type"):
             qs = qs.filter(request_type=request.GET["type"])
 
-        return Response([_serialize_request(r)
+        return Response([_serialize_request(r, lang=request_locale(request))
                          for r in qs.order_by("-created_at")[:200]])
 
     # ── إنشاء طلب ──
@@ -323,7 +322,7 @@ def request_detail(request, request_id):
     if r is None:
         return Response({"detail": "الطلب غير موجود"}, status=404)
 
-    return Response(_serialize_request(r, include_chain=True))
+    return Response(_serialize_request(r, include_chain=True, lang=request_locale(request)))
 
 
 @api_view(["POST"])
@@ -425,7 +424,7 @@ def my_requests(request):
     if request.GET.get("status"):
         qs = qs.filter(status=request.GET["status"])
 
-    return Response([_serialize_request(r)
+    return Response([_serialize_request(r, lang=request_locale(request))
                      for r in qs.order_by("-created_at")[:100]])
 
 
@@ -461,7 +460,7 @@ def my_approvals(request):
         from apps.leaves.services.approvals import (
             _step_is_acknowledgement, can_decide_type)
         rows.append({
-            **_serialize_request(r, include_chain=True),
+            **_serialize_request(r, include_chain=True, lang=request_locale(request)),
             "my_step": a.step_order,
             "waiting_since": r.created_at,
             "is_acknowledgement": _step_is_acknowledgement(r, a.step_order),
@@ -504,7 +503,7 @@ def my_leave_summary(request):
         ],
         "pending_count": Request.objects.filter(
             employment=emp, status=RequestStatus.PENDING).count(),
-        "recent": [_serialize_request(r) for r in recent],
+        "recent": [_serialize_request(r, lang=request_locale(request)) for r in recent],
     })
 
 
@@ -545,7 +544,7 @@ def request_types(request):
     return Response({
         "employee_no": emp.employee_no,
         "employment_id": emp.id,
-        "name_ar": emp.person.display_name,
+        "name_ar": emp.person.name_for(request_locale(request)),
         "is_saudi": emp.person.nationality_code == "SA",
         "needs_successor": (holds_admin_position(emp)
                             and successor_of(emp) is None),
@@ -634,7 +633,7 @@ def submit_request(request):
                 ends_on=date.fromisoformat(
                     str(res.request.payload.get("end_date")
                         or payload["start_date"])))
-            delegation = {"id": d.id, "deputy": d.deputy.person.display_name,
+            delegation = {"id": d.id, "deputy": d.deputy.person.name_for(request_locale(request)),
                           "status": d.status}
         except (DelegationError, KeyError, ValueError) as e:
             delegation = {"error": str(e)}
@@ -1025,7 +1024,7 @@ def eligible_deputies_view(request):
 
     return Response([
         {"employment_id": d.id, "employee_no": d.employee_no,
-         "name_ar": d.person.display_name}
+         "name_ar": d.person.name_for(request_locale(request))}
         for d in eligible_deputies(emp)
     ])
 
@@ -1048,8 +1047,8 @@ def my_delegations(request):
         return {
             "id": d.id,
             "request_no": d.request.request_no,
-            "absentee": d.absentee.person.display_name,
-            "deputy": d.deputy.person.display_name,
+            "absentee": d.absentee.person.name_for(request_locale(request)),
+            "deputy": d.deputy.person.name_for(request_locale(request)),
             "starts_on": d.starts_on,
             "ends_on": d.ends_on,
             "status": d.status,

@@ -53,7 +53,7 @@ def _employment_brief(e, lang="ar"):
     return {
         "id": e.id, "employee_no": e.employee_no,
         "person_id": e.person_id,
-        "name_ar": e.person.display_name,
+        "name_ar": e.person.name_for(lang),
         # localized ترتدّ للعربية إن لم يُملأ الإنجليزي (ق-i18n)
         "job_title": localized(e.job_title, locale=lang),
         "department": localized(e.department, locale=lang),
@@ -419,7 +419,7 @@ def my_profile(request):
         "employee": {
             "employment_id": emp.id,
             "employee_no": emp.employee_no,
-            "name_ar": emp.person.display_name,
+            "name_ar": emp.person.name_for(request_locale(request)),
             "name_en": emp.person.full_name_en,
             "id_number": emp.person.id_number,
             "id_type": emp.person.get_id_type_display(),
@@ -429,7 +429,7 @@ def my_profile(request):
             "department": localized(emp.department, locale=lang),
             "branch": localized(emp.branch, locale=lang),
             "job_title": localized(emp.job_title, locale=lang),
-            "manager": (emp.direct_manager.person.display_name
+            "manager": (emp.direct_manager.person.name_for(request_locale(request))
                         if emp.direct_manager else ""),
             "status": emp.status,
             "status_label": emp.get_status_display(),
@@ -496,7 +496,7 @@ def my_account(request):
 
     return Response({
         "username": request.user.username,
-        "name_ar": person.display_name,
+        "name_ar": person.name_for(request_locale(request)),
         "email": person.email,
         "mobile": person.mobile_e164,
         "preferred_locale": person.preferred_locale,
@@ -887,7 +887,7 @@ def employee_profile(request, employment_id):
             "branch_id": emp.branch_id,
             "site": localized(emp.primary_site, locale=lang),
             "site_id": emp.primary_site_id,
-            "manager": (emp.direct_manager.person.display_name
+            "manager": (emp.direct_manager.person.name_for(request_locale(request))
                         if emp.direct_manager else ""),
             "manager_id": emp.direct_manager_id,
             "grade": localized(emp.job_grade, locale=lang),
@@ -1205,7 +1205,7 @@ def job_changes(request, employment_id):
                                    if c.new_department_id else None),
                 "new_role_code": c.new_role_code,
                 "dismissal_reason": c.dismissal_reason,
-                "successor": (c.successor.person.display_name
+                "successor": (c.successor.person.name_for(request_locale(request))
                               if c.successor_id else None),
                 "note": c.note,
                 "created_at": c.created_at,
@@ -1322,13 +1322,13 @@ def my_job_changes(request):
         "id": c.id,
         "employment_id": c.employment_id,
         "employee_no": c.employment.employee_no,
-        "employee_name": c.employment.person.display_name,
+        "employee_name": c.employment.person.name_for(request_locale(request)),
         "type": c.change_type,
         "type_label": c.get_change_type_display(),
         "effective_from": c.effective_from,
         "new_department": (c.new_department.name_ar
                            if c.new_department_id else None),
-        "successor": (c.successor.person.display_name
+        "successor": (c.successor.person.name_for(request_locale(request))
                       if c.successor_id else None),
         "created_at": c.created_at,
     } for c in qs.order_by("-created_at")])

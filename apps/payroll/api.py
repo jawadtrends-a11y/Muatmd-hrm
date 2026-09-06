@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from apps.core.i18n import request_locale
 from rest_framework.response import Response
 
 from apps.core.access.gate import Gate
@@ -542,7 +543,7 @@ def retro_pending(request):
     return Response([{
         "id": a.id,
         "employee_no": a.employment.employee_no,
-        "employee_name": a.employment.person.display_name,
+        "employee_name": a.employment.person.name_for(request_locale(request)),
         "period": f"{a.period_year}-{a.period_month:02d}",
         "source": a.source,
         "source_label": a.get_source_display(),

@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from apps.core.i18n import request_locale
 from rest_framework.response import Response
 
 from apps.attendance.models import (
@@ -237,7 +238,7 @@ def attendance_days(request, employment_id):
     return Response({
         "employment_id": emp.id,
         "employee_no": emp.employee_no,
-        "name_ar": emp.person.display_name,
+        "name_ar": emp.person.name_for(request_locale(request)),
         "join_date": emp.join_date,
         "total": total,
         "page": page,
@@ -430,7 +431,7 @@ def daily_board(request):
         rows.append({
             "employment_id": emp.id,
             "employee_no": emp.employee_no,
-            "name_ar": emp.person.display_name,
+            "name_ar": emp.person.name_for(request_locale(request)),
             "department": emp.department.name_ar if emp.department else "",
             "status": status,
             "status_label": d.get_status_display() if d else "لا سجل",
@@ -551,7 +552,7 @@ def monthly_board(request):
         rows.append({
             "employment_id": emp.id,
             "employee_no": emp.employee_no,
-            "name_ar": emp.person.display_name,
+            "name_ar": emp.person.name_for(request_locale(request)),
             "department": emp.department.name_ar if emp.department else "",
             "worked_days": worked,
             "absent_days": absent,
@@ -695,7 +696,7 @@ def work_sites(request):
             "effective_radius": s.effective_radius,
             "enforce_geofence": s.enforce_geofence,
             "has_coordinates": s.has_coordinates,
-            "manager": (s.site_manager.person.display_name
+            "manager": (s.site_manager.person.name_for(request_locale(request))
                         if s.site_manager else ""),
             "employees": s.assignments.count(),
             "devices": s.devices.count(),
@@ -788,7 +789,7 @@ def site_assignments(request, site_id):
             "id": a.id,
             "employment_id": a.employment_id,
             "employee_no": a.employment.employee_no,
-            "name": a.employment.person.display_name,
+            "name": a.employment.person.name_for(request_locale(request)),
             "is_primary": a.is_primary,
             "effective_from": a.effective_from,
             "effective_to": a.effective_to,

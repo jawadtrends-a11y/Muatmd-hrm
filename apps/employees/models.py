@@ -119,6 +119,17 @@ class Person(AccountScopedModel):
                  self.grandfather_name_ar, self.family_name_ar]
         return " ".join(p for p in parts if p)
 
+    def name_for(self, locale="ar"):
+        """
+        الاسم بلغة العرض — وارتداد للعربي إن لم يُملأ الإنجليزي.
+
+        فمن اختار الإنجليزية يرى الاسم كما كُتب في جوازه، ومن لم
+        تملأ شركته الحقل يرى العربي بدل فراغ.
+        """
+        if locale == "en" and (self.full_name_en or "").strip():
+            return self.full_name_en.strip()
+        return self.display_name
+
     @property
     def is_saudi(self):
         return self.nationality_code == "SA"
