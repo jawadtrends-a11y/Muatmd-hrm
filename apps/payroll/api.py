@@ -138,6 +138,7 @@ def payroll_settings(request):
         for field in ("payroll_days_per_month", "working_hours_per_day",
                       "ramadan_hours_per_day", "overtime_basis",
                       "eosb_wage_basis", "exclude_unpaid_leave_from_service",
+                      "allow_mobile_punch",
                       "company_bears_employee_gosi",
                       "merge_supplementary_into_regular",
                       "terminated_pay_in_regular_run",
@@ -162,6 +163,8 @@ def payroll_settings(request):
         "overtime_basis_options": [
             {"value": v, "label": str(l)} for v, l in OvertimeBasis.choices],
         "eosb_wage_basis": s.eosb_wage_basis,
+        # ق-96: الافتراضي العامّ — وفترة العمل والموظف يغلبانه
+        "allow_mobile_punch": s.allow_mobile_punch,
         # الخياران not_set وflagged لا يُعرضان للاختيار: الأول
         # حالة لا قرار، والثاني قديم يبقى لمن اختاره (ق-97)
         "eosb_wage_basis_options": [

@@ -29,6 +29,13 @@ const T: Dict = {
   graceIn: { ar: "سماح الدخول (د)", en: "Grace in (min)" },
   graceOut: { ar: "سماح الخروج (د)", en: "Grace out (min)" },
   days: { ar: "أيام الدوام", en: "Working days" },
+  mobilePunch: { ar: "بصمة الجوال", en: "Mobile punch" },
+  followCompany: {
+    ar: "تتبع إعداد الشركة",
+    en: "Follow company setting",
+  },
+  mpEnabled: { ar: "مفعّلة لهذه الفترة", en: "Enabled for this shift" },
+  mpDisabled: { ar: "معطّلة لهذه الفترة", en: "Disabled for this shift" },
   crosses: { ar: "تعبر منتصف الليل", en: "Crosses midnight" },
   flexible: { ar: "مرنة", en: "Flexible" },
   active: { ar: "نشطة", en: "Active" },
@@ -74,6 +81,8 @@ type Shift = {
   grace_out_minutes: number;
   working_days: number[];
   crosses_midnight: boolean;
+  /** null = تتبع الشركة · true/false = قرار صريح (ق-96) */
+  allow_mobile_punch?: boolean | null;
   is_flexible: boolean;
   is_active: boolean;
 };
@@ -297,6 +306,20 @@ export default function ShiftsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="field" style={{ marginTop: 14, minWidth: 240 }}>
+            <label className="label">{L("mobilePunch")}</label>
+            <select className="select"
+              value={draft.allow_mobile_punch === true ? "1"
+                : draft.allow_mobile_punch === false ? "0" : ""}
+              onChange={(e) => set("allow_mobile_punch",
+                e.target.value === "" ? null
+                  : e.target.value === "1")}>
+              <option value="">{L("followCompany")}</option>
+              <option value="1">{L("mpEnabled")}</option>
+              <option value="0">{L("mpDisabled")}</option>
+            </select>
           </div>
 
           <div className="row" style={{ gap: 18, marginTop: 14 }}>

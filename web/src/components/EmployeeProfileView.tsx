@@ -39,6 +39,10 @@ const T: Dict = {
   shift: { ar: "فترة العمل", en: "Work shift" },
   costCenter: { ar: "مركز التكلفة", en: "Cost center" },
   mobilePunch: { ar: "بصمة الجوال", en: "Mobile punch" },
+  followShift: {
+    ar: "يتبع فترة العمل والشركة",
+    en: "Follow shift and company",
+  },
   enabled: { ar: "مفعّلة", en: "Enabled" },
   disabled: { ar: "معطّلة", en: "Disabled" },
   contract: { ar: "العقد", en: "Contract" },
@@ -1157,6 +1161,42 @@ function ProfileInner({
   employmentId: number;
   showBack?: boolean;
 }) {
+  /** تعديل بيانات الوظيفة — لمن يملك employees.edit (ق-98) */
+  const [canEditJob, setCanEditJob] = useState(false);
+  const [jobTitles, setJobTitles] = useState<any[]>([]);
+  const [sites, setSites] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [peers2, setPeers2] = useState<any[]>([]);
+  const [depts2, setDepts2] = useState<any[]>([]);
+
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setCanEditJob(
+        (d.permissions || []).includes("employees.edit")))
+      .catch(() => setCanEditJob(false));
+
+    // قوائم تبويب الوظيفة (ق-98)
+    apiGet<any[]>("/org/job-titles/")
+      .then((r) => setJobTitles(Array.isArray(r) ? r : []))
+      .catch(() => setJobTitles([]));
+    apiGet<any[]>("/org/departments/")
+      .then((r) => setDepts2(Array.isArray(r) ? r : []))
+      .catch(() => setDepts2([]));
+    apiGet<any[]>("/sites/")
+      .then((r) => setSites(Array.isArray(r) ? r : []))
+      .catch(() => setSites([]));
+    apiGet<any[]>("/attendance/shifts/")
+      .then((r) => setShifts(Array.isArray(r) ? r : []))
+      .catch(() => setShifts([]));
+    apiGet<any[]>("/org/cost-centers/")
+      .then((r) => setCostCenters(Array.isArray(r) ? r : []))
+      .catch(() => setCostCenters([]));
+    apiGet<any[]>("/employees/")
+      .then((r) => setPeers2(Array.isArray(r) ? r : []))
+      .catch(() => setPeers2([]));
+  }, []);
+
   const router = useRouter();
   const { L } = useT(T);
   const empId = employmentId;
@@ -1408,26 +1448,44 @@ function ProfileInner({
       )}
 
       {tab === "job" && (
-        <div className="card" style={{ padding: 20 }}>
-          <div className="row" style={{ marginBottom: 12 }}>
-            <IcOrg size={19} />
-            <h3 style={{ fontSize: "1rem" }}>{L("job")}</h3>
-          </div>
-          <ViewGrid items={[
-            { label: L("jobTitle"), value: data.job.job_title },
-            { label: L("department"), value: data.job.department },
-            { label: L("branch"), value: data.job.branch },
-            { label: L("site"), value: data.job.site },
-            { label: L("manager"), value: data.job.manager },
-            { label: `${L("grade")} (${L("optional")})`, value: data.job.grade },
-            { label: `${L("step")} (${L("optional")})`, value: data.job.step },
-            { label: L("shift"), value: data.job.shift },
-            { label: L("costCenter"), value: data.job.cost_center },
-            { label: L("mobilePunch"),
-              value: (data.job as any).allow_mobile_punch === false
-                ? L("disabled") : L("enabled") },
-          ]} />
-        </div>
+        <EditableSection
+          title={L("job")} icon={IcOrg} L={L} busy={saving}
+          readOnly={!canEditJob}
+          values={data.job}
+          onSave={(d) => save("job", d)}
+          fields={[
+            { key: "job_title_id", label: L("jobTitle"), kind: "select",
+              options: jobTitles.map((x: any) => ({
+                value: String(x.id), label: x.name_ar })) },
+            { key: "department_id", label: L("department"),
+              kind: "select",
+              options: depts2.map((x: any) => ({
+                value: String(x.id), label: x.name_ar })) },
+            { key: "primary_site_id", label: L("site"), kind: "select",
+              options: sites.map((x: any) => ({
+                value: String(x.id), label: x.name_ar })) },
+            { key: "direct_manager_id", label: L("manager"),
+              kind: "select",
+              options: peers2.map((x: any) => ({
+                value: String(x.employment_id),
+                label: `${x.employee_no} — ${x.name_ar}` })) },
+            { key: "shift_id", label: L("shift"), kind: "select",
+              options: shifts.map((x: any) => ({
+                value: String(x.id), label: x.name_ar })) },
+            { key: "cost_center_id", label: L("costCenter"),
+              kind: "select",
+              options: costCenters.map((x: any) => ({
+                value: String(x.id), label: x.name_ar })) },
+            // ق-96: فارغ = يتبع فترة العمل ثم الشركة
+            { key: "allow_mobile_punch", label: L("mobilePunch"),
+              kind: "select",
+              options: [
+                { value: "", label: L("followShift") },
+                { value: "true", label: L("enabled") },
+                { value: "false", label: L("disabled") },
+              ] },
+          ]}
+        />
       )}
 
       {tab === "contract" && (

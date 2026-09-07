@@ -103,6 +103,38 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
         "إن كنت في موقعك فعلًا، قدّم طلب تصحيح بصمة من «خدماتي»")
 
 
+
+def _mobile_punch_allowed(employment):
+    """
+    هل يبصم هذا الموظف بجواله؟ (ق-96)
+
+    ثلاثة مستويات، والأخصّ يغلب الأعمّ: الموظف ثم فترة عمله ثم
+    شركته. فمن فُتحت بصمته في ملفه يبصم ولو أُقفلت في فترته
+    وشركته — والاستثناء الفردي هو الغرض من وجوده.
+
+    وفارغ يعني «اتبع الأعمّ» لا «مسموح»: فرقٌ بين من لم يُقرَّر
+    له ومن قُرِّر له صراحةً.
+    """
+    if employment.allow_mobile_punch is not None:
+        return employment.allow_mobile_punch
+
+    from apps.attendance.models import ShiftAssignment
+
+    # معزول ذاتيًا: مقيَّد بالارتباط المقروء بالبوابة
+    a = (ShiftAssignment.objects
+         .filter(employment=employment)
+         .select_related("shift")
+         .order_by("-id").first())
+    if a and a.shift and a.shift.allow_mobile_punch is not None:
+        return a.shift.allow_mobile_punch
+
+    from apps.payroll.models import PayrollSettings
+
+    st = PayrollSettings.objects.filter(
+        company_id=employment.company_id).first()
+    return st.allow_mobile_punch if st else True
+
+
 def record_punch(*, employment, latitude=None, longitude=None,
                  method="mobile_gps", device_code="", accuracy_m=None,
                  punched_at=None, skip_geofence=False, direction=""):
@@ -117,7 +149,7 @@ def record_punch(*, employment, latitude=None, longitude=None,
     # ق-96: من أُلغيت بصمة جواله يبصم بالجهاز وحده — وبعض
     # المواقع تشترط الحضور الفعلي للجهاز
     if (method == PunchMethod.MOBILE_GPS
-            and not employment.allow_mobile_punch):
+            and not _mobile_punch_allowed(employment)):
         raise MobilePunchDisabled(
             "بصمة الجوال معطّلة لك — استخدم جهاز البصمة")
 

@@ -73,6 +73,21 @@ const T: Dict = {
     ar: "يجب تحديده قبل أول مسير مستحقات — الصمت هنا قرار مالي لم يتخذه أحد",
     en: "Must be set before the first settlement run",
   },
+  basicHousingTransport: {
+    ar: "الراتب الأساسي + بدل السكن والمواصلات",
+    en: "Basic + housing and transport",
+  },
+  basicAll: {
+    ar: "الراتب الأساسي + جميع البدلات",
+    en: "Basic + all allowances",
+  },
+  mobilePunch: { ar: "بصمة الجوال", en: "Mobile punch" },
+  mobilePunchHint: {
+    ar: "الافتراضي للشركة — وفترة العمل وملف الموظف يغلبانه",
+    en: "Company default — shift and employee override it",
+  },
+  enabled: { ar: "مفعّلة", en: "Enabled" },
+  disabled: { ar: "معطّلة", en: "Disabled" },
   basicOnly: { ar: "الأساسي فقط", en: "Basic only" },
   basicHousing: { ar: "الأساسي + السكن", en: "Basic + housing" },
   flagged: { ar: "حسب أعلام المكوّنات", en: "By component flags" },
@@ -128,6 +143,7 @@ type Section = (typeof SECTIONS)[number];
 
 type PayrollSettings = {
   eosb_wage_basis: string;
+  allow_mobile_punch: boolean;
   payroll_days_per_month: number;
   variance_threshold_percent: string;
   advances_enabled: boolean;
@@ -401,10 +417,28 @@ function PayrollPanel({
         <Row label={L("eosbBasis")} hint={L("eosbHint")}>
           <select className="select" value={data.eosb_wage_basis}
             onChange={(e) => set("eosb_wage_basis", e.target.value)}>
-            <option value="not_set">{L("notSet")}</option>
+            {data.eosb_wage_basis === "not_set" && (
+              <option value="not_set">{L("notSet")}</option>
+            )}
             <option value="basic_only">{L("basicOnly")}</option>
             <option value="basic_housing">{L("basicHousing")}</option>
-            <option value="flagged">{L("flagged")}</option>
+            <option value="basic_housing_transport">
+              {L("basicHousingTransport")}
+            </option>
+            <option value="basic_all">{L("basicAll")}</option>
+            {data.eosb_wage_basis === "flagged" && (
+              <option value="flagged">{L("flagged")}</option>
+            )}
+          </select>
+        </Row>
+
+        <Row label={L("mobilePunch")} hint={L("mobilePunchHint")}>
+          <select className="select"
+            value={data.allow_mobile_punch ? "1" : "0"}
+            onChange={(e) =>
+              set("allow_mobile_punch", e.target.value === "1")}>
+            <option value="1">{L("enabled")}</option>
+            <option value="0">{L("disabled")}</option>
           </select>
         </Row>
 

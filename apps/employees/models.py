@@ -212,7 +212,8 @@ class Employment(CompanyScopedModel):
     #: مفعّلة: يبصم بجواله أو بجهاز البصمة. ومعطّلة: بالجهاز
     #: وحده — فبعض المواقع تشترط الحضور الفعلي للجهاز.
     allow_mobile_punch = models.BooleanField(
-        _("بصمة الجوال"), default=True)
+        _("بصمة الجوال"), null=True, blank=True, default=None,
+        help_text=_("فارغ = يتبع فترة العمل ثم الشركة"))
     job_title = models.ForeignKey(
         "organization.JobTitle", on_delete=models.PROTECT,
         null=True, blank=True, related_name="employments",

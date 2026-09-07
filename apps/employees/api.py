@@ -341,6 +341,16 @@ def _avatar_url(person):
 
 
 
+def _current_shift_id(emp):
+    """معرّف فترة العمل السارية — للنموذج القابل للتعديل."""
+    from apps.attendance.models import ShiftAssignment
+
+    # معزول ذاتيًا: مقيَّد بالارتباط المقروء بالبوابة
+    a = (ShiftAssignment.objects.filter(employment=emp)
+         .order_by("-id").first())
+    return a.shift_id if a else None
+
+
 def _current_shift(emp, lang="ar"):
     """
     فترة العمل السارية — الإسناد الأحدث بلا نهاية.
@@ -950,6 +960,12 @@ def employee_profile(request, employment_id):
             "grade": localized(emp.job_grade, locale=lang),
             "grade_id": emp.job_grade_id,
             "step": localized(emp.job_step, locale=lang),
+            # ق-96 وق-98: فترة العمل ومركز التكلفة وبصمة الجوال
+            "shift": _current_shift(emp, lang),
+            "shift_id": _current_shift_id(emp),
+            "cost_center": localized(emp.cost_center, locale=lang),
+            "cost_center_id": emp.cost_center_id,
+            "allow_mobile_punch": emp.allow_mobile_punch,
             "step_id": emp.job_step_id,
             "employment_type": emp.employment_type,
             "work_ratio": str(emp.work_ratio),
@@ -1047,6 +1063,19 @@ def update_employee_profile(request, employment_id):
         "gosi_first_subscription_date",
     }
 
+    def _tri(v):
+        """
+        مفتاح ثلاثي من الواجهة: "" → None، "true"/"false" → منطقي.
+
+        فالقائمة ترسل نصًّا، والفارغ يعني «اتبع الأعمّ» لا
+        «معطّل» (ق-96).
+        """
+        if v in (None, "", "null"):
+            return None
+        if isinstance(v, bool):
+            return v
+        return str(v).lower() in ("true", "1", "yes")
+
     EMPLOYMENT_FIELDS = {
         "job_title_id", "department_id", "branch_id", "primary_site_id",
         "direct_manager_id", "job_grade_id", "job_step_id",
@@ -1068,9 +1097,12 @@ def update_employee_profile(request, employment_id):
                     if key.endswith("_date") else value)
             changed.append(key)
         elif key in EMPLOYMENT_FIELDS:
-            setattr(emp, key, value if value != "" else None
-                    if (key.endswith("_date") or key.endswith("_id"))
-                    else value)
+            if key == "allow_mobile_punch":
+                setattr(emp, key, _tri(value))
+            else:
+                setattr(emp, key, value if value != "" else None
+                        if (key.endswith("_date") or key.endswith("_id"))
+                        else value)
             changed.append(key)
 
     if not changed:

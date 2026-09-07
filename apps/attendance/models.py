@@ -46,6 +46,13 @@ class Shift(CompanyScopedModel):
         help_text=_("يُحتسب بإجمالي الساعات لا بوقت الحضور"))
     is_active = models.BooleanField(_("نشطة"), default=True)
 
+    #: بصمة الجوال لهذه الفترة (ق-96).
+    #:
+    #: فارغ = تتبع إعداد الشركة. والأخصّ يغلب الأعمّ: من فُتحت
+    #: بصمته في ملفه يبصم ولو أُقفلت هنا.
+    allow_mobile_punch = models.BooleanField(
+        _("بصمة الجوال"), null=True, blank=True, default=None)
+
     class Meta:
         verbose_name = _("فترة عمل")
         verbose_name_plural = _("فترات العمل")

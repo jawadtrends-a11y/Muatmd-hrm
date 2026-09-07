@@ -95,6 +95,8 @@ def shifts(request):
              "grace_out_minutes": s.grace_out_minutes,
              "working_days": s.working_days,
              "crosses_midnight": s.crosses_midnight,
+             # ق-96: فارغ = تتبع الشركة، والموظف يغلبها
+             "allow_mobile_punch": s.allow_mobile_punch,
              "is_flexible": s.is_flexible, "is_active": s.is_active}
             for s in qs.filter(company_id=company_id)
         ])
@@ -115,6 +117,8 @@ def shifts(request):
         account=comp.account, company=comp, code=code,
         name_ar=request.data.get("name_ar", ""),
         name_en=request.data.get("name_en", ""),
+        # ق-96: فارغ = تتبع الشركة
+        allow_mobile_punch=request.data.get("allow_mobile_punch"),
         start_time=request.data.get("start_time", "08:00"),
         end_time=request.data.get("end_time", "16:00"),
         break_minutes=int(request.data.get("break_minutes", 60)),
@@ -1001,6 +1005,10 @@ def shift_detail(request, shift_id):
                 pass
     if "working_days" in d:
         s.working_days = d["working_days"]
+    if "allow_mobile_punch" in d:
+        v = d["allow_mobile_punch"]
+        s.allow_mobile_punch = None if v in (None, "") else bool(v)
+
     for f in ("crosses_midnight", "is_flexible", "is_active"):
         if f in d:
             setattr(s, f, bool(d[f]))

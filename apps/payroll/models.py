@@ -168,6 +168,11 @@ class PayrollSettings(CompanyScopedModel):
         choices=EOSBWageBasis.choices, default=EOSBWageBasis.NOT_SET,
         help_text=_("يجب تحديده قبل أول مسير مستحقات"))
 
+    #: بصمة الجوال — الافتراضي العامّ للشركة (ق-96).
+    #: والأخصّ يغلب: فترة العمل ثم الموظف.
+    allow_mobile_punch = models.BooleanField(
+        _("بصمة الجوال"), default=True)
+
     payroll_days_per_month = models.PositiveSmallIntegerField(
         _("أيام الشهر للاحتساب"), default=30,
         validators=[MinValueValidator(28), MaxValueValidator(31)],
