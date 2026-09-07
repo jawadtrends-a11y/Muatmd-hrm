@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * الورديات — أوقات الدوام وأيامه وفترات السماح.
+ * فترات العمل — أوقات الدوام وأيامه وفترات السماح.
  *
- * والوردية المُسندة تُعطَّل لا تُحذف: حذفها يترك موظفين بلا دوام
+ * وفترة العمل المُسندة تُعطَّل لا تُحذف: حذفها يترك موظفين بلا دوام
  * محدَّد فتُقاس بصماتهم بلا مرجع.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -15,12 +15,12 @@ import { IcAlert, IcCheck, IcClock, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
   nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
-  title: { ar: "الورديات", en: "Shifts" },
+  title: { ar: "فترات العمل", en: "Shifts" },
   subtitle: {
     ar: "أوقات الدوام وأيامه وفترات السماح",
     en: "Working hours, days and grace periods",
   },
-  add: { ar: "وردية جديدة", en: "New shift" },
+  add: { ar: "فترة عمل جديدة", en: "New shift" },
   code: { ar: "الرمز", en: "Code" },
   name: { ar: "الاسم", en: "Name" },
   from: { ar: "من", en: "From" },
@@ -38,13 +38,13 @@ const T: Dict = {
   save: { ar: "حفظ", en: "Save" },
   cancel: { ar: "إلغاء", en: "Cancel" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
-  empty: { ar: "لا ورديات", en: "No shifts" },
+  empty: { ar: "لا فترات عمل", en: "No shifts" },
   noAccess: {
-    ar: "لا تملك صلاحية إدارة الورديات",
+    ar: "لا تملك صلاحية إدارة فترات العمل",
     en: "You cannot manage shifts",
   },
   confirmDelete: {
-    ar: "حذف الوردية؟ إن كانت مُسندة لموظفين فستُعطَّل بدل حذفها.",
+    ar: "حذف فترة العمل؟ إن كانت مُسندة لموظفين فستُعطَّل بدل حذفها.",
     en: "Delete? If assigned to employees it is deactivated instead.",
   },
   codeHint: {

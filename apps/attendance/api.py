@@ -78,7 +78,7 @@ def _get_employment(request, employment_id, permission):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def shifts(request):
-    """الورديات."""
+    """فترات العمل."""
     company_id = _company_id(request)
     if company_id is None:
         return Response({"detail": "لا شركة نشطة"}, status=400)
@@ -946,16 +946,16 @@ def my_punch(request):
     }, status=201)
 
 
-# ══════════ تعديل الوردية وحذفها ══════════
+# ══════════ تعديل فترة العمل وحذفها ══════════
 
 @api_view(["PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def shift_detail(request, shift_id):
     """
-    تعديل وردية أو تعطيلها.
+    تعديل فترة عمل أو تعطيلها.
 
     والرمز لا يُعدَّل: الإسنادات تشير إليه، وتغييره يفصلها عنها.
-    والوردية المُسندة تُعطَّل لا تُحذف — فحذفها يترك موظفين بلا
+    وفترة العمل المُسندة تُعطَّل لا تُحذف — فحذفها يترك موظفين بلا
     دوام محدَّد.
     """
     from apps.attendance.models import Shift, ShiftAssignment
@@ -965,7 +965,7 @@ def shift_detail(request, shift_id):
     # معزول ذاتيًا: مقيَّد بشركة المنفّذ النشطة
     s = Shift.objects.filter(id=shift_id, company_id=_company_id(request)).first()
     if s is None:
-        return Response({"detail": "الوردية غير موجودة"}, status=404)
+        return Response({"detail": "فترة العمل غير موجودة"}, status=404)
 
     if request.method == "DELETE":
         assigned = ShiftAssignment.objects.filter(shift=s).exists()
@@ -976,15 +976,15 @@ def shift_detail(request, shift_id):
             log_action(instance=s, action="update",
                        actor=getattr(request.user, "person", None),
                        label=s.code,
-                       summary=f"عُطّلت الوردية {s.name_ar} (مُسندة لموظفين)",
+                       summary=f"عُطّلت فترة العمل {s.name_ar} (مُسندة لموظفين)",
                        channel="web")
             return Response({"deactivated": True,
-                             "detail": "الوردية مُسندة لموظفين — عُطّلت "
+                             "detail": "فترة العمل مُسندة لموظفين — عُطّلت "
                                        "ولم تُحذف"})
 
         from apps.core.services.audit import log_delete
         log_delete(instance=s, actor=getattr(request.user, "person", None),
-                   label=s.code, summary=f"حُذفت الوردية {s.name_ar}",
+                   label=s.code, summary=f"حُذفت فترة العمل {s.name_ar}",
                    channel="web")
         s.delete()
         return Response({"deleted": True})
@@ -1009,7 +1009,7 @@ def shift_detail(request, shift_id):
     from apps.core.services.audit import log_action
     log_action(instance=s, action="update",
                actor=getattr(request.user, "person", None),
-               label=s.code, summary=f"عُدّلت الوردية {s.name_ar}",
+               label=s.code, summary=f"عُدّلت فترة العمل {s.name_ar}",
                channel="web")
     return Response({
         "id": s.id, "code": s.code, "name_ar": s.name_ar, "name_en": getattr(s, "name_en", ""),

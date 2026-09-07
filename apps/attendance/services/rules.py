@@ -51,7 +51,7 @@ def compute_day(*, work_date, punches, shift=None, is_holiday=False,
     يحتسب سجل يوم واحد من بصماته.
 
     punches: قائمة datetime مرتّبة تصاعديًا
-    shift: الوردية السارية، أو None لو لا وردية مسندة
+    shift: فترة العمل السارية، أو None لو لا فترة عمل مسندة
     """
     notes = []
     punches = sorted(punches)
@@ -71,7 +71,7 @@ def compute_day(*, work_date, punches, shift=None, is_holiday=False,
                               punches[0] if punches else None,
                               punches[-1] if punches else None,
                               worked, 0, 0, 0, count,
-                              ["لا وردية مسندة — لا يُحتسب تأخير"])
+                              ["لا فترة عمل مسندة — لا يُحتسب تأخير"])
 
     # يوم راحة أسبوعية
     weekday = (work_date.weekday() + 1) % 7      # 0=الأحد
@@ -149,7 +149,7 @@ def _worked_minutes(punches) -> int:
 
 
 def effective_shift(employment, work_date):
-    """الوردية السارية بتاريخ معيّن — لا بتاريخ اليوم."""
+    """فترة العمل السارية بتاريخ معيّن — لا بتاريخ اليوم."""
     from apps.attendance.models import ShiftAssignment
     a = (ShiftAssignment.objects
          .filter(employment=employment, effective_from__lte=work_date)

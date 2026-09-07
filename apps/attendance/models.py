@@ -17,7 +17,7 @@ from apps.core.models import CompanyScopedModel
 
 
 class Shift(CompanyScopedModel):
-    """وردية عمل."""
+    """فترة عمل عمل."""
 
     code = models.CharField(_("الرمز"), max_length=30)
     name_ar = models.CharField(_("الاسم"), max_length=120)
@@ -28,7 +28,7 @@ class Shift(CompanyScopedModel):
     end_time = models.TimeField(_("نهاية الدوام"))
     crosses_midnight = models.BooleanField(
         _("تمتد لليوم التالي"), default=False,
-        help_text=_("ورديات ليلية تبدأ مساءً وتنتهي صباحًا"))
+        help_text=_("فترات عمل ليلية تبدأ مساءً وتنتهي صباحًا"))
     break_minutes = models.PositiveSmallIntegerField(
         _("دقائق الاستراحة"), default=60)
 
@@ -47,8 +47,8 @@ class Shift(CompanyScopedModel):
     is_active = models.BooleanField(_("نشطة"), default=True)
 
     class Meta:
-        verbose_name = _("وردية")
-        verbose_name_plural = _("الورديات")
+        verbose_name = _("فترة عمل")
+        verbose_name_plural = _("فترات العمل")
         ordering = ["start_time"]
         constraints = [
             models.UniqueConstraint(fields=["company", "code"],
@@ -60,20 +60,20 @@ class Shift(CompanyScopedModel):
 
 
 class ShiftAssignment(CompanyScopedModel):
-    """إسناد وردية لموظف بتاريخ سريان."""
+    """إسناد فترة عمل لموظف بتاريخ سريان."""
 
     employment = models.ForeignKey(
         "employees.Employment", on_delete=models.CASCADE,
         related_name="shift_assignments", verbose_name=_("الموظف"))
     shift = models.ForeignKey(Shift, on_delete=models.PROTECT,
                               related_name="assignments",
-                              verbose_name=_("الوردية"))
+                              verbose_name=_("فترة العمل"))
     effective_from = models.DateField(_("سريان من"), db_index=True)
     effective_to = models.DateField(_("سريان إلى"), null=True, blank=True)
 
     class Meta:
-        verbose_name = _("إسناد وردية")
-        verbose_name_plural = _("إسنادات الورديات")
+        verbose_name = _("إسناد فترة عمل")
+        verbose_name_plural = _("إسنادات فترات العمل")
         ordering = ["-effective_from"]
         constraints = [
             models.UniqueConstraint(

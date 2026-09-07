@@ -67,7 +67,7 @@ PERMISSIONS = [
     _p("attendance.view_all", "attendance", "عرض حضور كل المنشأة"),
     _p("attendance.edit",     "attendance", "تعديل سجلات الحضور"),
     _p("attendance.approve",  "attendance", "اعتماد تعديلات الحضور"),
-    _p("attendance.shifts",   "attendance", "إدارة الورديات"),
+    _p("attendance.shifts",   "attendance", "إدارة فترات العمل"),
     # مواقع العمل: ثلاث صلاحيات منفصلة — فمن يُسنِد ليس بالضرورة
     # من يُنشئ، ومن يطّلع ليس بالضرورة من يُسنِد (ق-78)
     _p("sites.view",          "attendance", "عرض مواقع العمل"),

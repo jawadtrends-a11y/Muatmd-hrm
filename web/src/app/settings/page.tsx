@@ -40,7 +40,7 @@ const T: Dict = {
     ar: "الأجهزة المصرَّح لها بإرسال البصمات",
     en: "Devices allowed to submit punches",
   },
-  shifts: { ar: "الورديات", en: "Shifts" },
+  shifts: { ar: "فترات العمل", en: "Shifts" },
   shiftsHint: {
     ar: "أوقات الدوام وأيامه وفترات السماح",
     en: "Working hours, days and grace",
