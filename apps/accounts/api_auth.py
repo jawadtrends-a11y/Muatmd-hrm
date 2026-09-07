@@ -19,17 +19,109 @@ def _ip(request):
             else request.META.get("REMOTE_ADDR"))
 
 
+
+#: هل يُقبل الدخول باسم المستخدم؟ يبقى True للحسابات القائمة
+#: وللاختبارات — ويُجعل False حين تُستغنى عنه (ق-94)
+ALLOW_USERNAME_LOGIN = True
+
+
+def _normalize_mobile(raw):
+    """
+    الجوال بصيغه الثلاث → صيغة واحدة للمطابقة (ق-94).
+
+    05xxxxxxxx و+9665xxxxxxxx و9665xxxxxxxx رقم واحد — فمن يكتبه
+    بصيغة يدخل، ولا يُردّ لاختلاف كتابة.
+    """
+    d = "".join(ch for ch in raw if ch.isdigit())
+    if d.startswith("00966"):
+        d = d[5:]
+    elif d.startswith("966"):
+        d = d[3:]
+    elif d.startswith("0"):
+        d = d[1:]
+    return "+966" + d if d else ""
+
+
+def _resolve_identifier(raw):
+    """
+    اسم المستخدم من البريد أو الهوية أو الجوال (ق-94).
+
+    الموظف يدخل بما يعرفه لا باسم يُخترع له. والمعرّف غير حسّاس
+    للحالة، وكلمة المرور حسّاسة.
+
+    وعند التعارض يُمنع الدخول: الدخول لحساب غيرك خطأ لا يُغتفر.
+    """
+    from django.contrib.auth.models import User
+
+    from apps.employees.models import Person
+
+    ident = (raw or "").strip()
+    if not ident:
+        return None, ""
+
+    # اسم مستخدم صريح — الحسابات القائمة تُكمل بأسمائها.
+    #
+    # ويُوقَف بجعل ALLOW_USERNAME_LOGIN = False: الاسم يُولَّد
+    # داخليًّا ولا يُعرض، فمن لا يعرفه لا يفقد شيئًا (ق-94).
+    if ALLOW_USERNAME_LOGIN:
+        u = User.objects.filter(username__iexact=ident).first()
+        if u:
+            return u.username, ""
+
+    # البحث بدالة تتجاوز العزل: جدول الأشخاص محميّ بـRLS الذي
+    # يتطلب سياق حساب — والسياق لا يُضبط إلا بعد أن نعرف من هو.
+    # والدالة تُرجع اسم المستخدم وحده لا بيانات عمل (ق-94).
+    from django.db import connection
+
+    names = set()
+    candidates = [ident]
+
+    mob = _normalize_mobile(ident)
+    if mob and mob != ident:
+        candidates.append(mob)
+
+    with connection.cursor() as cur:
+        for value in candidates:
+            cur.execute(
+                "SELECT username FROM app_lookup_login_identifier(%s)",
+                [value])
+            for row in cur.fetchall():
+                names.add(row[0])
+
+    # والبريد قد يكون على حساب المستخدم نفسه لا على ملف الموظف
+    if "@" in ident:
+        names.update(User.objects.filter(
+            email__iexact=ident).values_list("username", flat=True))
+
+    if len(names) > 1:
+        return None, "هذا المعرّف يخصّ أكثر من حساب — استخدم بريدك"
+    if names:
+        return names.pop(), ""
+    return None, ""
+
+
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def login_view(request):
     """دخول العميل — يرجع الرمز مرة واحدة."""
-    username = (request.data.get("username") or "").strip()
+    # المعرّف: بريد أو هوية أو جوال أو اسم مستخدم (ق-94)
+    ident = (request.data.get("identifier")
+             or request.data.get("username") or "").strip()
     password = request.data.get("password") or ""
 
-    if not username or not password:
-        return Response({"detail": "اسم المستخدم وكلمة المرور مطلوبان"},
+    if not ident or not password:
+        return Response({"detail": "المعرّف وكلمة المرور مطلوبان"},
                         status=400)
+
+    username, conflict = _resolve_identifier(ident)
+    if conflict:
+        return Response({"detail": conflict, "code": "ambiguous"},
+                        status=409)
+    if username is None:
+        # لا نُفصح أيّهما خطأ: المعرّف أم كلمة المرور
+        return Response({"detail": "المعرّف أو كلمة المرور غير صحيحة",
+                         "code": "auth_failed"}, status=401)
 
     device = request.data.get("device_kind", DeviceKind.WEB)
     if device not in DeviceKind.values:

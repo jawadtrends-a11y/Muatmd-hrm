@@ -11,11 +11,17 @@ import { IcGlobe, IcMoon, IcSun } from "@/components/Icons";
 const T: Dict = {
   title: { ar: "تسجيل الدخول", en: "Sign in" },
   subtitle: { ar: "نظام الموارد البشرية — معتمد", en: "Muatmd HR System" },
-  username: { ar: "اسم المستخدم أو البريد", en: "Username or email" },
+  username: {
+    ar: "البريد أو رقم الهوية أو الجوال",
+    en: "Email, ID number or mobile",
+  },
   password: { ar: "كلمة المرور", en: "Password" },
   submit: { ar: "دخول", en: "Sign in" },
   submitting: { ar: "جارٍ الدخول…", en: "Signing in…" },
-  required: { ar: "أدخل اسم المستخدم وكلمة المرور", en: "Enter both fields" },
+  required: {
+    ar: "أدخل المعرّف وكلمة المرور",
+    en: "Enter identifier and password",
+  },
   failed: { ar: "بيانات الدخول غير صحيحة", en: "Invalid credentials" },
   network: { ar: "تعذّر الاتصال بالخادم", en: "Cannot reach the server" },
 };
@@ -40,7 +46,8 @@ export default function LoginPage() {
     setError("");
     try {
       const res = await apiPost<{ token: string }>("/auth/login/", {
-        username: username.trim(),
+        // المعرّف: بريد أو هوية أو جوال (ق-94)
+        identifier: username.trim(),
         password,
       });
       setToken(res.token);

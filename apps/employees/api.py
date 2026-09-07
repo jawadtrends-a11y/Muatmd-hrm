@@ -328,6 +328,18 @@ def registration_flags(request, employment_id):
 
 # ══════════════════ الملف الشخصي للموظف (ق-54) ══════════════════
 
+
+def _avatar_url(person):
+    """رابط الصورة الشخصية إن وُجدت — وإلا None."""
+    from apps.core.models_files import FileKind, StoredFile
+
+    # معزول ذاتيًا: مقيَّد بالشخص المقروء بالبوابة قبل الوصول هنا
+    f = StoredFile.objects.filter(
+        person=person, kind=FileKind.AVATAR, is_deleted=False
+    ).order_by("-id").first()
+    return f"/files/{f.id}/" if f else None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_profile(request):
@@ -436,6 +448,9 @@ def my_profile(request):
             # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته
             # تُنجز وهو نشط (المخالصة وإخلاء الطرف والعهد)
             "termination_pending_from": emp.termination_pending_from,
+            # الصورة الشخصية — التطبيق يعرضها في «حسابي» (ق-91).
+            # والمسار بلا بادئة /api: العميل يضيفها بنفسه.
+            "avatar_url": _avatar_url(emp.person),
         },
         "service": {
             "join_date": emp.join_date,
@@ -568,6 +583,27 @@ def my_avatar(request):
         return Response({"deleted": True})
 
     uploaded = request.FILES.get("file")
+
+    # التطبيق يرسل base64: React Native لا يقبل صيغة FormData
+    # للملفات، وblob() يفسد الثنائيّات (ق-70)
+    if uploaded is None and request.data.get("content_base64"):
+        import base64
+        import binascii
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        raw = request.data["content_base64"]
+        if "," in raw[:64]:
+            raw = raw.split(",", 1)[1]
+        try:
+            blob = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError):
+            return Response({"detail": "المحتوى ليس base64 صالحًا"},
+                            status=400)
+        uploaded = SimpleUploadedFile(
+            request.data.get("name") or "avatar.jpg", blob,
+            content_type=request.data.get("mime") or "image/jpeg")
+
     if uploaded is None:
         return Response({"detail": "لم يُرفع ملف"}, status=400)
 
