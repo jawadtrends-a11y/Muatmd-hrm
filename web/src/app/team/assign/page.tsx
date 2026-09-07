@@ -36,6 +36,8 @@ const T: Dict = {
 
 type Emp = { id: number; employee_no: string; name_ar: string };
 type ReqType = {
+  name_en?: string;
+  hint_en?: string;
   code: string;
   name_ar: string;
   hint_ar?: string;
@@ -52,7 +54,12 @@ export default function AssignRequestPage() {
   const [typeCode, setTypeCode] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [leaveTypes, setLeaveTypes] = useState<
-    { code: string; name_ar: string; requires_attachment?: boolean }[]
+    { code: string; name_ar: string; name_en?: string;
+      requires_attachment?: boolean }[]
+  >([]);
+  /** أسباب الإنهاء — والقائمة كانت تُمرَّر فارغة فلا يظهر شيء */
+  const [reasons, setReasons] = useState<
+    { code: string; name_ar: string; name_en?: string }[]
   >([]);
   const [busy, setBusy] = useState(true);
   const [sending, setSending] = useState(false);
@@ -68,6 +75,11 @@ export default function AssignRequestPage() {
              requires_attachment?: boolean }[]>("/leaves/types/")
       .then(setLeaveTypes)
       .catch(() => setLeaveTypes([]));
+    apiGet<{ reasons: { code: string; name_ar: string;
+             name_en?: string }[] }>(
+      "/payroll/termination-reasons/?initiator=employer")
+      .then((d) => setReasons(d.reasons || []))
+      .catch(() => setReasons([]));
   }, []);
 
   // أنواع الطلبات للموظف المختار — تختلف بالجنسية والمدة والعقد
@@ -192,7 +204,9 @@ export default function AssignRequestPage() {
                   onChange={(e) => { setTypeCode(e.target.value); setValues({}); }}>
                   <option value="">{L("pickType")}</option>
                   {types.map((t) => (
-                    <option key={t.code} value={t.code}>{t.name_ar}</option>
+                    <option key={t.code} value={t.code}>
+              {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
+            </option>
                   ))}
                 </select>
               </div>
@@ -203,7 +217,7 @@ export default function AssignRequestPage() {
                 fontSize: ".86rem", padding: "9px 11px",
                 background: "var(--paper-2)", borderRadius: "var(--radius-sm)",
               }}>
-                {active.hint_ar}
+                {(lang === "en" ? active.hint_en : active.hint_ar) || active.hint_ar}
               </div>
             )}
 
@@ -216,7 +230,7 @@ export default function AssignRequestPage() {
                 <DynField key={name} name={name} required={required}
                   value={values[name] ?? ""}
                   onChange={(v) => setValues((old) => ({ ...old, [name]: v }))}
-                  leaveTypes={leaveTypes} terminationReasons={[]} L={L} />
+                  leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
               ))}
             </div>
 

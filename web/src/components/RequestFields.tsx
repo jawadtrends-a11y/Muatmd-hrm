@@ -37,21 +37,23 @@ const FIELD_NAMES: Record<string, { ar: string; en: string }> = {
   fix_target: { ar: "أي بصمة تصحّح؟", en: "Which punch?" },
   amount: { ar: "المبلغ", en: "Amount" },
   installments: { ar: "عدد الأقساط", en: "Installments" },
-  asset_name: { ar: "اسم العهدة", en: "Asset name" },
-  asset_category: { ar: "التصنيف", en: "Category" },
-  serial_number: { ar: "الرقم التسلسلي", en: "Serial" },
-  value: { ar: "القيمة", en: "Value" },
-  destination: { ar: "الوجهة", en: "Destination" },
-  purpose: { ar: "الغرض", en: "Purpose" },
-  estimated_cost: { ar: "التكلفة التقديرية", en: "Estimated cost" },
-  travel_date: { ar: "تاريخ السفر", en: "Travel date" },
-  family_members: { ar: "عدد أفراد العائلة", en: "Family members" },
-  certificate_type: { ar: "نوع الخطاب", en: "Certificate type" },
-  addressed_to: { ar: "موجّه إلى", en: "Addressed to" },
-  include_salary: { ar: "يتضمن الراتب", en: "Include salary" },
-  last_working_day: { ar: "آخر يوم عمل", en: "Last working day" },
+  successor_employment_id: { ar: "البديل", en: "Successor" },
   termination_reason: { ar: "سبب الإنهاء", en: "Termination reason" },
   request_date: { ar: "تاريخ الطلب", en: "Request date" },
+  notice_days: { ar: "أيام الإشعار", en: "Notice days" },
+  travel_date: { ar: "تاريخ السفر", en: "Travel date" },
+  family_members: { ar: "عدد المرافقين", en: "Family members" },
+  estimated_cost: { ar: "التكلفة التقديرية", en: "Estimated cost" },
+  addressed_to: { ar: "موجّهة إلى", en: "Addressed to" },
+  include_salary: { ar: "تتضمن الراتب", en: "Include salary" },
+  serial_number: { ar: "الرقم التسلسلي", en: "Serial number" },
+  value: { ar: "القيمة", en: "Value" },
+  asset_category: { ar: "الفئة", en: "Category" },
+  certificate_type: { ar: "نوع الشهادة", en: "Certificate type" },
+  destination: { ar: "الوجهة", en: "Destination" },
+  purpose: { ar: "الغرض", en: "Purpose" },
+  asset_name: { ar: "اسم العهدة", en: "Asset name" },
+  last_working_day: { ar: "آخر يوم عمل", en: "Last working day" },
 };
 
 /** اسم الحقل بلغة الواجهة — والمجهول يظهر برمزه لا يُخفى */
@@ -82,21 +84,27 @@ export function fieldKind(name: string): string {
   return "text";
 }
 
-const ASSET_CATEGORIES = [
-  ["electronics", "أجهزة إلكترونية"], ["vehicle", "مركبة"],
-  ["tools", "أدوات"], ["furniture", "أثاث"], ["other", "أخرى"],
+/** القوائم الثابتة بلغتيها: [الرمز، عربي، إنجليزي] (ق-92) */
+const ASSET_CATEGORIES: [string, string, string][] = [
+  ["electronics", "أجهزة إلكترونية", "Electronics"],
+  ["vehicle", "مركبة", "Vehicle"],
+  ["tools", "أدوات", "Tools"],
+  ["furniture", "أثاث", "Furniture"],
+  ["other", "أخرى", "Other"],
 ];
 
-const FIX_TARGETS = [
-  ["in", "الحضور"], ["out", "الانصراف"], ["both", "كلاهما"],
+const FIX_TARGETS: [string, string, string][] = [
+  ["in", "الحضور", "Check-in"],
+  ["out", "الانصراف", "Check-out"],
+  ["both", "كلاهما", "Both"],
 ];
 
-const CERTIFICATE_TYPES = [
-  ["employment", "شهادة تعريف بالعمل"],
-  ["salary", "شهادة راتب"],
-  ["experience", "شهادة خبرة"],
-  ["bank", "خطاب لبنك"],
-  ["embassy", "خطاب لسفارة"],
+const CERTIFICATE_TYPES: [string, string, string][] = [
+  ["employment", "شهادة تعريف بالعمل", "Employment letter"],
+  ["salary", "شهادة راتب", "Salary certificate"],
+  ["experience", "شهادة خبرة", "Experience letter"],
+  ["bank", "خطاب لبنك", "Letter to a bank"],
+  ["embassy", "خطاب لسفارة", "Letter to an embassy"],
 ];
 
 
@@ -233,17 +241,17 @@ export default function DynField({
       ) : kind === "asset_category" ? (
         <select className="select" value={value}
           onChange={(e) => onChange(e.target.value)}>
-          {ASSET_CATEGORIES.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+          {ASSET_CATEGORIES.map(([v, ar, en]) => (
+            <option key={v} value={v}>{lang === "en" ? en : ar}</option>
           ))}
         </select>
       ) : kind === "fix_target" ? (
         <div className="row" style={{ gap: 4 }}>
-          {FIX_TARGETS.map(([v, l]) => (
+          {FIX_TARGETS.map(([v, ar, en]) => (
             <button key={v} type="button"
               className={`btn btn-sm ${value === v ? "btn-primary" : ""}`}
               onClick={() => onChange(v)}>
-              {l}
+              {lang === "en" ? en : ar}
             </button>
           ))}
         </div>
@@ -261,8 +269,8 @@ export default function DynField({
         <select className="select" value={value}
           onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
-          {CERTIFICATE_TYPES.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+          {CERTIFICATE_TYPES.map(([v, ar, en]) => (
+            <option key={v} value={v}>{lang === "en" ? en : ar}</option>
           ))}
         </select>
       ) : kind === "attachment" ? (

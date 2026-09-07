@@ -285,6 +285,7 @@ def termination_reasons(request):
     """
     from apps.payroll.services.eosb import (
         ALL_REASONS, FULL_ENTITLEMENT, NO_ENTITLEMENT, PRORATED_ENTITLEMENT,
+        REASONS_EN,
         TERMINATION_INITIATOR, notice_days_for,
     )
 
@@ -297,6 +298,8 @@ def termination_reasons(request):
             {
                 "code": code, "label": label,
                 "name_ar": label,
+                # الاسمان معًا — والواجهة تعرض بلغة المستخدم (ق-92)
+                "name_en": REASONS_EN.get(code, label),
                 "initiator": TERMINATION_INITIATOR.get(code, ("employer", 0))[0],
                 "notice_days": notice_days_for(code),
                 "entitlement": ("full" if code in FULL_ENTITLEMENT

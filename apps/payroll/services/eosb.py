@@ -66,6 +66,28 @@ PRORATED_ENTITLEMENT = {
 
 ALL_REASONS = {**FULL_ENTITLEMENT, **NO_ENTITLEMENT, **PRORATED_ENTITLEMENT}
 
+#: الأسباب بالإنجليزية — الترجمة عند الخادم لا في كل واجهة (ق-92).
+#: والصياغة تتبع ترجمة نظام العمل السعودي المنشورة.
+REASONS_EN = {
+    "contract_expiry": "Contract expiry",
+    "unlawful_termination": "Unlawful termination by the employer",
+    "force_majeure": "Termination due to force majeure",
+    "female_childbirth": "Resignation during the three-month maternity "
+                         "leave",
+    "female_marriage": "Resignation within six months of marriage",
+    "article_81": "Termination under Article 81",
+    "mutual_agreement": "Mutual agreement",
+    "worker_disability": "Worker disability",
+    "employer_death": "Death of the employer",
+    "worker_death": "Death of the worker",
+    "ownership_transfer": "Transfer of sole-establishment ownership",
+    "retirement": "Retirement age",
+    "notice_article_75": "Termination notice under Article 75",
+    "article_80": "Termination under Article 80",
+    "probation": "Termination during probation",
+    "resignation": "Resignation",
+}
+
 # الحالة الوحيدة التي تستوجب تعويضًا إضافيًا (م/77) فوق المكافأة
 UNLAWFUL_TERMINATION_CODE = "unlawful_termination"
 

@@ -145,6 +145,7 @@ def run_report(request, key):
     return Response({
         "key": result.key,
         "title_ar": result.title_ar,
+        "title_en": getattr(result, "title_en", "") or result.title_ar,
         "subtitle_ar": result.subtitle_ar,
         "company": comp.legal_name_ar,
         "columns": [

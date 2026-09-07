@@ -17,6 +17,7 @@ class AttendanceSummaryReport(Report):
 
     key = "attendance_summary"
     title_ar = "تقرير ملخص الحضور والانصراف"
+    title_en = "Attendance summary"
     group = "attendance"
     permission = "attendance.view"
     params = [
@@ -76,6 +77,7 @@ class AttendanceDetailReport(Report):
 
     key = "attendance_detail"
     title_ar = "تقرير الحضور والانصراف"
+    title_en = "Attendance detail"
     group = "attendance"
     permission = "attendance.view"
     params = [
@@ -142,6 +144,7 @@ class OvertimeReport(Report):
 
     key = "overtime"
     title_ar = "تقرير العمل الإضافي"
+    title_en = "Overtime"
     group = "attendance"
     permission = "attendance.view"
     params = [
@@ -199,6 +202,7 @@ class LeaveBalanceReport(Report):
 
     key = "leave_balance"
     title_ar = "تقرير رصيد الإجازات"
+    title_en = "Leave balances"
     group = "leaves"
     permission = "leaves.view"
     params = [
@@ -254,6 +258,7 @@ class LeaveRequestsReport(Report):
 
     key = "leave_requests"
     title_ar = "تقرير الإجازات"
+    title_en = "Leaves"
     group = "leaves"
     permission = "leaves.view"
     params = [
@@ -329,6 +334,7 @@ class ExpiringDocumentsReport(Report):
 
     key = "expiring_documents"
     title_ar = "تقرير الوثائق والإقامات المنتهية"
+    title_en = "Expiring documents"
     group = "employees"
     permission = "employees.view"
     params = [
@@ -367,6 +373,7 @@ class AssetsReport(Report):
 
     key = "assets"
     title_ar = "تقرير العهد"
+    title_en = "Assets custody"
     group = "employees"
     permission = "employees.view"
     params = [
@@ -425,6 +432,7 @@ class EmployeesReport(Report):
 
     key = "employees"
     title_ar = "تقرير الموظفين"
+    title_en = "Employees"
     group = "employees"
     permission = "employees.view"
     params = [

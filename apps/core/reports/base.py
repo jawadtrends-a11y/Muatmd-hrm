@@ -64,6 +64,9 @@ class Report:
 
     key = ""
     title_ar = ""
+    #: العنوان بالإنجليزية — الواجهة تعرض بلغة
+    #: المستخدم، والعربي ارتدادًا (ق-92)
+    title_en = ""
     group = "other"          # financial · attendance · leaves · employees
     permission = "reports.view"
     params = []
@@ -152,6 +155,34 @@ GROUPS = {
     "other": "أخرى",
 }
 
+#: المجموعات بالإنجليزية — والواجهة تعرض بلغة المستخدم (ق-92)
+GROUPS_EN = {
+    "financial": "Financial reports",
+    "attendance": "Attendance reports",
+    "leaves": "Leave reports",
+    "employees": "Employee reports",
+    "other": "Other",
+}
+
+#: تسميات المعاملات الشائعة — مشتركة بين التقارير
+PARAM_EN = {
+    "السنة": "Year",
+    "الشهر": "Month",
+    "النوع": "Type",
+    "من تاريخ": "From date",
+    "إلى تاريخ": "To date",
+    "التاريخ": "Date",
+    "الموظف": "Employee",
+    "الإدارة": "Department",
+    "الفرع": "Branch",
+    "الحالة": "Status",
+    "المسير": "Payroll run",
+    "مسير المقارنة": "Compare with run",
+    "يشمل المنتهية خدمتهم": "Include terminated",
+    "الأيام المتبقية": "Days remaining",
+    "نوع الإجازة": "Leave type",
+}
+
 
 def catalog():
     """قائمة التقارير مجمّعة — لصفحة التقارير."""
@@ -160,15 +191,20 @@ def catalog():
         out.setdefault(cls.group, []).append({
             "key": key,
             "title_ar": cls.title_ar,
+            # الاسمان معًا — والواجهة تعرض بلغة المستخدم
+            "title_en": cls.title_en or cls.title_ar,
             "permission": cls.permission,
             "params": [
-                {"key": p.key, "label_ar": p.label_ar, "kind": p.kind,
+                {"key": p.key, "label_ar": p.label_ar,
+                 "label_en": PARAM_EN.get(p.label_ar, p.label_ar),
+                 "kind": p.kind,
                  "required": p.required, "default": p.default,
                  "options": p.options, "help_ar": p.help_ar}
                 for p in cls.params
             ],
         })
     return [
-        {"group": g, "group_ar": GROUPS.get(g, g), "reports": items}
+        {"group": g, "group_ar": GROUPS.get(g, g),
+         "group_en": GROUPS_EN.get(g, g), "reports": items}
         for g, items in out.items()
     ]

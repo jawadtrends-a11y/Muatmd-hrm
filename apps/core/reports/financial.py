@@ -27,6 +27,7 @@ class EOSBProvisionReport(Report):
 
     key = "eosb_provision"
     title_ar = "تقرير مخصصات نهاية الخدمة"
+    title_en = "End-of-service provisions"
     group = "financial"
     permission = "payroll.view"
     params = [
@@ -137,6 +138,7 @@ class PayrollRunsReport(Report):
 
     key = "payroll_runs"
     title_ar = "تقرير مسيرات الرواتب"
+    title_en = "Payroll runs"
     group = "financial"
     permission = "payroll.view"
     params = [
@@ -204,6 +206,7 @@ class PayrollVarianceReport(Report):
 
     key = "payroll_variance"
     title_ar = "تقرير الفروقات بين مسيرات الرواتب"
+    title_en = "Payroll run variance"
     group = "financial"
     permission = "payroll.view"
     params = [
@@ -257,6 +260,7 @@ class AdjustmentsReport(Report):
 
     key = "adjustments"
     title_ar = "تقرير الحسومات والإضافات"
+    title_en = "Deductions and additions"
     group = "financial"
     permission = "payroll.view"
     params = [
@@ -304,6 +308,7 @@ class AdvancesReport(Report):
 
     key = "advances"
     title_ar = "تقرير السلف والذمم"
+    title_en = "Advances and receivables"
     group = "financial"
     permission = "payroll.view"
     params = [

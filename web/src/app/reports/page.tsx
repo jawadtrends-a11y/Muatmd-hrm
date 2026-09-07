@@ -39,6 +39,7 @@ const T: Dict = {
 type Param = {
   key: string;
   label_ar: string;
+  label_en?: string;
   kind: string;
   required: boolean;
   default: unknown;
@@ -49,6 +50,7 @@ type Param = {
 type ReportMeta = {
   key: string;
   title_ar: string;
+  title_en?: string;
   permission: string;
   params: Param[];
 };
@@ -56,15 +58,19 @@ type ReportMeta = {
 type Group = {
   group: string;
   group_ar: string;
+  group_en?: string;
   reports: ReportMeta[];
 };
 
 type ReportResult = {
   key: string;
   title_ar: string;
+  title_en?: string;
   subtitle_ar: string;
+  subtitle_en?: string;
   company: string;
-  columns: { key: string; label_ar: string; kind: string; total: boolean }[];
+  columns: { key: string; label_ar: string; label_en?: string;
+              kind: string; total: boolean }[];
   rows: Record<string, unknown>[];
   totals: Record<string, string>;
   row_count: number;
@@ -95,9 +101,12 @@ function ParamField({
   onChange: (v: string) => void;
   L: (k: string, f?: string) => string;
 }) {
+  // لغة الواجهة من سمة الوثيقة — كما في api.ts
+  const lang = typeof document !== "undefined"
+    ? document.documentElement.lang || "ar" : "ar";
   const label = (
     <label className="label">
-      {param.label_ar}
+      {(lang === "en" ? param.label_en : param.label_ar) || param.label_ar}
       {param.required && (
         <span style={{ color: "var(--danger)", marginInlineStart: 4 }}>*</span>
       )}
@@ -154,6 +163,9 @@ function ResultTable({
   result: ReportResult;
   L: (k: string, f?: string) => string;
 }) {
+  // لغة الواجهة من سمة الوثيقة — كما في api.ts
+  const lang = typeof document !== "undefined"
+    ? document.documentElement.lang || "ar" : "ar";
   if (result.rows.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
@@ -174,7 +186,7 @@ function ResultTable({
                 textAlign: c.kind === "money" || c.kind === "number"
                   ? "end" : "start",
               }}>
-                {c.label_ar}
+                {(lang === "en" ? c.label_en : c.label_ar) || c.label_ar}
               </th>
             ))}
           </tr>
@@ -225,7 +237,7 @@ function ResultTable({
 /* ══ الشاشة ══ */
 
 export default function ReportsPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<ReportMeta | null>(null);
@@ -321,7 +333,7 @@ export default function ReportsPage() {
               <h2 style={{
                 fontSize: "1rem", color: "var(--teal)", marginBottom: 12,
               }}>
-                {g.group_ar}
+                {(lang === "en" ? g.group_en : g.group_ar) || g.group_ar}
               </h2>
               <div className="stack" style={{ gap: 2 }}>
                 {g.reports.map((r) => (
@@ -332,7 +344,7 @@ export default function ReportsPage() {
                     onClick={() => pick(r)}
                   >
                     <IcDoc size={17} />
-                    {r.title_ar}
+                    {(lang === "en" ? r.title_en : r.title_ar) || r.title_ar}
                   </button>
                 ))}
               </div>
@@ -352,7 +364,7 @@ export default function ReportsPage() {
             onClick={() => { setSelected(null); setResult(null); }}>
             ← {L("back")}
           </button>
-          <h1 style={{ marginTop: 8 }}>{selected.title_ar}</h1>
+          <h1 style={{ marginTop: 8 }}>{(lang === "en" ? selected.title_en : selected.title_ar) || selected.title_ar}</h1>
           {result?.subtitle_ar && (
             <div className="muted" style={{ fontSize: ".9rem" }}>
               {result.subtitle_ar}
@@ -398,7 +410,7 @@ export default function ReportsPage() {
 
         {missing.length > 0 && (
           <div className="hint" style={{ marginTop: 10, color: "var(--copper)" }}>
-            {missing.map((p) => p.label_ar).join("، ")} — {L("required")}
+            {missing.map((p) => (lang === "en" ? p.label_en : p.label_ar) || p.label_ar).join(lang === "en" ? ", " : "، ")} — {L("required")}
           </div>
         )}
       </div>
