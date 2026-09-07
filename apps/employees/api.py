@@ -340,6 +340,23 @@ def _avatar_url(person):
     return f"/files/{f.id}/" if f else None
 
 
+
+def _current_shift(emp, lang="ar"):
+    """
+    فترة العمل السارية — الإسناد الأحدث بلا نهاية.
+
+    فالموظف قد تتغيّر فترته، والملف يعرض ما هو ساري اليوم.
+    """
+    from apps.attendance.models import ShiftAssignment
+
+    # معزول ذاتيًا: مقيَّد بالارتباط المقروء بالبوابة
+    a = (ShiftAssignment.objects
+         .filter(employment=emp)
+         .select_related("shift")
+         .order_by("-id").first())
+    return localized(a.shift, locale=lang) if a and a.shift_id else ""
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_profile(request):
@@ -448,6 +465,11 @@ def my_profile(request):
             # ق-82: من هو في طريقه للخروج يُعرف — فمعاملاته
             # تُنجز وهو نشط (المخالصة وإخلاء الطرف والعهد)
             "termination_pending_from": emp.termination_pending_from,
+            # ق-96: من أُلغيت بصمة جواله يبصم بالجهاز وحده
+            "allow_mobile_punch": emp.allow_mobile_punch,
+            # فترة العمل ومركز التكلفة — يظهران في تبويب الوظيفة
+            "shift": _current_shift(emp, lang),
+            "cost_center": localized(emp.cost_center, locale=lang),
             # الصورة الشخصية — التطبيق يعرضها في «حسابي» (ق-91).
             # والمسار بلا بادئة /api: العميل يضيفها بنفسه.
             "avatar_url": _avatar_url(emp.person),
@@ -1034,6 +1056,8 @@ def update_employee_profile(request, employment_id):
         "is_gosi_registered", "gosi_establishment_no", "gosi_declared_wage",
         "gosi_borne_by_company", "is_mol_registered", "mol_contract_no",
         "include_in_wps", "iban", "bank_code", "payment_method",
+        # ق-96: بصمة الجوال تُفعَّل وتُلغى لكل موظف
+        "allow_mobile_punch",
     }
 
     changed = []

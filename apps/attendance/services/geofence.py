@@ -14,6 +14,10 @@ logger = logging.getLogger("muatmd.attendance")
 EARTH_RADIUS_M = 6_371_000
 
 
+class MobilePunchDisabled(Exception):
+    """بصمة الجوال معطّلة لهذا الموظف (ق-96)."""
+
+
 class GeofenceError(Exception):
     """رفض بصمة — رسالته تُعرض للموظف."""
 
@@ -109,6 +113,13 @@ def record_punch(*, employment, latitude=None, longitude=None,
     """
     from apps.attendance.models import AttendancePunch
     from apps.attendance.models_sites import PunchDevice, PunchMethod
+
+    # ق-96: من أُلغيت بصمة جواله يبصم بالجهاز وحده — وبعض
+    # المواقع تشترط الحضور الفعلي للجهاز
+    if (method == PunchMethod.MOBILE_GPS
+            and not employment.allow_mobile_punch):
+        raise MobilePunchDisabled(
+            "بصمة الجوال معطّلة لك — استخدم جهاز البصمة")
 
     site = None
     distance = None

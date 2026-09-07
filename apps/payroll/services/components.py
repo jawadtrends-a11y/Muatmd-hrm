@@ -177,11 +177,33 @@ def eosb_wage(salary_lines, basis="flagged"):
         raise EOSBBasisNotSet(
             "يجب تحديد ما يدخل في أجر المكافأة قبل أول مسير مستحقات"
         )
+    earnings = [(c, a) for c, a in salary_lines
+                if c.component_type == ComponentType.EARNING]
+
+    def total(codes=None, all_earnings=False):
+        if all_earnings:
+            return sum((a for _, a in earnings), Decimal("0"))
+        return sum((a for c, a in earnings if c.code in codes),
+                   Decimal("0"))
+
     if basis == "basic_only":
-        return sum(
-            (amount for comp, amount in salary_lines if comp.code == "BASIC"),
-            Decimal("0"),
-        )
+        return total({"BASIC"})
+
+    if basis == "basic_housing":
+        return total({"BASIC", "HOUSING"})
+
+    if basis == "basic_housing_transport":
+        return total({"BASIC", "HOUSING", "TRANSPORT"})
+
+    if basis == "basic_all":
+        # الأساسي وكل بدل — والخصومات ليست بدلات فلا تدخل
+        return total(all_earnings=True)
+
+    # flagged: الخيار القديم — يبقى لمن اختاره ولا يُعرض للجديد
+    return sum(
+        (amount for comp, amount in earnings if comp.is_eosb_subject),
+        Decimal("0"),
+    )
     return sum(
         (amount for comp, amount in salary_lines
          if comp.is_eosb_subject and comp.component_type == ComponentType.EARNING),

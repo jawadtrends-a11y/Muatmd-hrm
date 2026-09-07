@@ -115,9 +115,18 @@ class EOSBWageBasis(models.TextChoices):
     NOT_SET يمنع تشغيل أول مسير مستحقات حتى تختار الشركة صراحةً:
     الصمت هنا قرار مالي لم يتخذه أحد.
     """
-    NOT_SET       = "not_set",       _("لم يُحدَّد بعد")
-    BASIC_ONLY    = "basic_only",    _("الأساسي وحده")
-    FLAGGED       = "flagged",       _("حسب أعلام المكوّنات (is_eosb_subject)")
+    NOT_SET = "not_set", _("لم يُحدَّد بعد")
+    BASIC_ONLY = "basic_only", _("الراتب الأساسي فقط")
+    BASIC_HOUSING = "basic_housing", _(
+        "الراتب الأساسي + بدل السكن")
+    BASIC_HOUSING_TRANSPORT = "basic_housing_transport", _(
+        "الراتب الأساسي + بدل السكن والمواصلات")
+    BASIC_ALL_ALLOWANCES = "basic_all", _(
+        "الراتب الأساسي + جميع البدلات")
+
+    #: الخيار القديم — يبقى للحسابات التي اختارته، ولا يُعرض
+    #: للجديد. وترحيله يحتاج قرار الشركة لا تخمينًا (ق-97).
+    FLAGGED = "flagged", _("حسب أعلام المكوّنات (قديم)")
 
 
 class PayrollSettings(CompanyScopedModel):
@@ -155,7 +164,7 @@ class PayrollSettings(CompanyScopedModel):
         _("استبعاد الإجازات بلا أجر من مدة الخدمة"), default=False,
         help_text=_("خيار الشركة — لا افتراض مفروض (ق-24)"))
     eosb_wage_basis = models.CharField(
-        _("أساس أجر المكافأة"), max_length=20,
+        _("أساس أجر المكافأة"), max_length=30,
         choices=EOSBWageBasis.choices, default=EOSBWageBasis.NOT_SET,
         help_text=_("يجب تحديده قبل أول مسير مستحقات"))
 

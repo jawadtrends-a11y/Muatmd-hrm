@@ -206,6 +206,13 @@ class Employment(CompanyScopedModel):
         "organization.CostCenter", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="employments",
         verbose_name=_("مركز التكلفة"))
+
+    #: بصمة الجوال لهذا الموظف (ق-96).
+    #:
+    #: مفعّلة: يبصم بجواله أو بجهاز البصمة. ومعطّلة: بالجهاز
+    #: وحده — فبعض المواقع تشترط الحضور الفعلي للجهاز.
+    allow_mobile_punch = models.BooleanField(
+        _("بصمة الجوال"), default=True)
     job_title = models.ForeignKey(
         "organization.JobTitle", on_delete=models.PROTECT,
         null=True, blank=True, related_name="employments",

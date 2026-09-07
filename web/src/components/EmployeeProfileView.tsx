@@ -36,6 +36,11 @@ const T: Dict = {
   // التبويبات
   personal: { ar: "البيانات الأساسية", en: "Personal" },
   job: { ar: "بيانات الوظيفة", en: "Job" },
+  shift: { ar: "فترة العمل", en: "Work shift" },
+  costCenter: { ar: "مركز التكلفة", en: "Cost center" },
+  mobilePunch: { ar: "بصمة الجوال", en: "Mobile punch" },
+  enabled: { ar: "مفعّلة", en: "Enabled" },
+  disabled: { ar: "معطّلة", en: "Disabled" },
   contract: { ar: "العقد", en: "Contract" },
   salary: { ar: "الراتب", en: "Salary" },
   gosi: { ar: "التأمينات", en: "GOSI" },
@@ -87,7 +92,6 @@ const T: Dict = {
   idExpiry: { ar: "انتهاء الهوية", en: "ID expiry" },
   passportNumber: { ar: "رقم الجواز", en: "Passport" },
   passportExpiry: { ar: "انتهاء الجواز", en: "Passport expiry" },
-  borderNumber: { ar: "رقم الحدود", en: "Border number" },
 
   // الوظيفة
   jobTitle: { ar: "المسمى الوظيفي", en: "Job title" },
@@ -1399,7 +1403,6 @@ function ProfileInner({
             { key: "passport_number", label: L("passportNumber") },
             { key: "passport_expiry_date", label: L("passportExpiry"),
               kind: "date" },
-            { key: "border_number", label: L("borderNumber") },
           ]}
         />
       )}
@@ -1418,6 +1421,11 @@ function ProfileInner({
             { label: L("manager"), value: data.job.manager },
             { label: `${L("grade")} (${L("optional")})`, value: data.job.grade },
             { label: `${L("step")} (${L("optional")})`, value: data.job.step },
+            { label: L("shift"), value: data.job.shift },
+            { label: L("costCenter"), value: data.job.cost_center },
+            { label: L("mobilePunch"),
+              value: (data.job as any).allow_mobile_punch === false
+                ? L("disabled") : L("enabled") },
           ]} />
         </div>
       )}

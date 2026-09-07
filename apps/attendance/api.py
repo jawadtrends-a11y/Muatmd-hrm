@@ -886,7 +886,7 @@ def my_punch(request):
     from apps.attendance.models import AttendancePunch
     from apps.attendance.models_sites import PunchMethod
     from apps.attendance.services.geofence import (
-        GeofenceError, record_punch, sites_for,
+        GeofenceError, MobilePunchDisabled, record_punch, sites_for,
     )
     from django.utils import timezone
 
@@ -930,6 +930,9 @@ def my_punch(request):
             accuracy_m=request.data.get("accuracy"),
             method=PunchMethod.MOBILE_GPS,
             direction=request.data.get("direction", ""))
+    except MobilePunchDisabled as e:
+        return Response({"detail": str(e), "code": "mobile_punch_off"},
+                        status=403)
     except GeofenceError as e:
         return Response({"detail": str(e), "code": "outside_geofence"},
                         status=400)

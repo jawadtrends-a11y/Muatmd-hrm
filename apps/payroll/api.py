@@ -162,8 +162,14 @@ def payroll_settings(request):
         "overtime_basis_options": [
             {"value": v, "label": str(l)} for v, l in OvertimeBasis.choices],
         "eosb_wage_basis": s.eosb_wage_basis,
+        # الخياران not_set وflagged لا يُعرضان للاختيار: الأول
+        # حالة لا قرار، والثاني قديم يبقى لمن اختاره (ق-97)
         "eosb_wage_basis_options": [
-            {"value": v, "label": str(l)} for v, l in EOSBWageBasis.choices],
+            {"value": v, "label": str(l)}
+            for v, l in EOSBWageBasis.choices
+            if v not in ("not_set", "flagged")
+            or v == s.eosb_wage_basis
+        ],
         "eosb_basis_required": s.eosb_wage_basis == EOSBWageBasis.NOT_SET,
         "exclude_unpaid_leave_from_service": s.exclude_unpaid_leave_from_service,
         "company_bears_employee_gosi": s.company_bears_employee_gosi,
