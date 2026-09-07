@@ -44,6 +44,35 @@ def _err(exc, code="structure_error", http=status.HTTP_400_BAD_REQUEST):
     return Response({"detail": str(exc), "code": code}, status=http)
 
 
+
+def _usage(model_name, obj, user):
+    """
+    كم يستعمل هذا العنصر — والزر الذي يُرفض عند الضغط لا يُعرض.
+
+    والعدّ يمرّ بالبوابة كغيره: من لا يرى موظفًا لا يُحتسب عليه.
+    """
+    from apps.employees.models import Employment
+    from apps.organization.models import Department
+
+    emps = Gate.filter_queryset(user, "employees.view",
+                                Employment.objects.all())
+    depts = Gate.filter_queryset(user, "org.view",
+                                 Department.objects.all())
+
+    if model_name == "branch":
+        return (emps.filter(branch=obj, status="active").count(),
+                depts.filter(branch=obj, is_active=True).count())
+
+    if model_name == "department":
+        return (emps.filter(department=obj, status="active").count(),
+                depts.filter(parent=obj, is_active=True).count())
+
+    if model_name == "job_title":
+        return emps.filter(job_title=obj, status="active").count(), 0
+
+    return 0, 0
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def branches(request):
@@ -55,7 +84,7 @@ def branches(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", Branch.objects.all())
         return Response([
-            {"id": b.id, "code": b.code, "name_ar": b.name_ar, "name_en": getattr(b, "name_en", ""),
+            {"id": b.id, "code": b.code, "name_ar": b.name_ar, "can_delete": _usage("branch", b, request.user)[0] == 0 and _usage("branch", b, request.user)[1] == 0, "name_en": getattr(b, "name_en", ""),
              "city": b.city, "is_active": b.is_active,
              "mol_establishment_no": b.mol_establishment_no,
              "gosi_establishment_no": b.gosi_establishment_no}
@@ -99,7 +128,7 @@ def departments(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", Department.objects.all())
         return Response([
-            {"id": d.id, "code": d.code, "name_ar": d.name_ar, "name_en": getattr(d, "name_en", ""),
+            {"id": d.id, "code": d.code, "name_ar": d.name_ar, "can_delete": _usage("department", d, request.user)[0] == 0 and _usage("department", d, request.user)[1] == 0, "name_en": getattr(d, "name_en", ""),
              "parent_id": d.parent_id, "branch_id": d.branch_id,
              "path": d.path, "depth": d.depth, "is_active": d.is_active}
             for d in qs.filter(company_id=company_id)
@@ -212,7 +241,7 @@ def job_titles(request):
         Gate.require(request.user, "org.view")
         qs = Gate.filter_queryset(request.user, "org.view", JobTitle.objects.all())
         return Response([
-            {"id": j.id, "name_ar": j.name_ar, "name_en": getattr(j, "name_en", ""),
+            {"id": j.id, "name_ar": j.name_ar, "can_delete": _usage("job_title", j, request.user)[0] == 0 and _usage("job_title", j, request.user)[1] == 0, "name_en": getattr(j, "name_en", ""),
              "mol_occupation_code": j.mol_occupation_code,
              "is_saudization_reserved": j.is_saudization_reserved}
             for j in qs.filter(company_id=company_id)
@@ -228,3 +257,122 @@ def job_titles(request):
         is_saudization_reserved=request.data.get("is_saudization_reserved", False),
     )
     return Response({"id": j.id, "name_ar": j.name_ar, "name_en": getattr(j, "name_en", "")}, status=201)
+
+
+# ══════════ التعديل والحذف (ق-93) ══════════
+
+def _org_detail(request, model, obj_id, used_by=None, guard=None):
+    """
+    تعديل كيان تنظيمي أو حذفه.
+
+    والحذف مشروط: ما يستعمله موظف يُعطَّل ولا يُحذف — والرسالة
+    تخبر بما يُفعل (انقل الموظفين أو أنهِ عقودهم) لا بما وقع.
+    """
+    obj = model.objects.filter(
+        id=obj_id, company_id=_company(request)).first()
+    if obj is None:
+        return Response({"detail": "غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        if guard:
+            blocked = guard(obj)
+            if blocked:
+                return Response({"detail": blocked,
+                                 "code": "has_children"}, status=409)
+
+        count = used_by(obj) if used_by else 0
+        if count:
+            obj.is_active = False
+            obj.save(update_fields=["is_active"])
+            return Response({
+                "deactivated": True,
+                "detail": f"مستعمل لدى {count} موظفًا — عُطّل ولم "
+                          f"يُحذف. انقلهم أو أنهِ عقودهم ثم احذفه.",
+            })
+
+        obj.delete()
+        return Response({"deleted": True})
+
+    for f in ("name_ar", "name_en", "code", "city",
+              "mol_establishment_no", "gosi_establishment_no",
+              "mol_occupation_code"):
+        if f in request.data and hasattr(obj, f):
+            setattr(obj, f, request.data[f] or "")
+    if "is_active" in request.data:
+        obj.is_active = bool(request.data["is_active"])
+    obj.save()
+
+    return Response({
+        "id": obj.id,
+        "name_ar": obj.name_ar,
+        "name_en": getattr(obj, "name_en", ""),
+        "is_active": obj.is_active,
+    })
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def branch_detail(request, branch_id):
+    """تعديل فرع أو حذفه."""
+    from apps.employees.models import Employment
+    from apps.organization.models import Branch, Department
+
+    Gate.require(request.user, "org.manage")
+
+    def guard(b):
+        n = _usage("branch", b, request.user)[1]
+        if n:
+            return f"فيه {n} إدارة — انقلها أو احذفها أولًا"
+        return ""
+
+    return _org_detail(
+        request, Branch, branch_id,
+        used_by=lambda b: _usage("branch", b, request.user)[0],
+        guard=guard)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def department_detail(request, dept_id):
+    """تعديل إدارة أو حذفها."""
+    from apps.employees.models import Employment
+    from apps.organization.models import Department
+
+    Gate.require(request.user, "org.manage")
+
+    def guard(d):
+        n = _usage("department", d, request.user)[1]
+        if n:
+            return f"تحتها {n} إدارة فرعية — انقلها أولًا"
+        return ""
+
+    return _org_detail(
+        request, Department, dept_id,
+        used_by=lambda d: _usage("department", d,
+                                 request.user)[0],
+        guard=guard)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def job_title_detail(request, title_id):
+    """تعديل مسمّى وظيفي أو حذفه."""
+    from apps.employees.models import Employment
+    from apps.organization.models import JobTitle
+
+    Gate.require(request.user, "org.manage")
+
+    return _org_detail(
+        request, JobTitle, title_id,
+        used_by=lambda j: _usage("job_title", j,
+                                 request.user)[0])
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def holiday_detail(request, holiday_id):
+    """تعديل إجازة رسمية أو حذفها — ولا تُستعمل في عقد فتُحذف."""
+    from apps.organization.models import Holiday
+
+    Gate.require(request.user, "org.manage")
+    return _org_detail(request, Holiday, holiday_id)

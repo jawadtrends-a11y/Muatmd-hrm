@@ -86,6 +86,7 @@ const T: Dict = {
 
 type Site = {
   id: number; code: string; name_ar: string;
+  name_en?: string;
   city: string; address: string;
   latitude: string | null; longitude: string | null;
   radius_meters: number; tolerance_meters: number;
@@ -100,7 +101,7 @@ type Assignment = {
   employee_no: string; name: string; is_primary: boolean;
 };
 
-type Employee = { id: number; employee_no: string; name_ar: string };
+type Employee = { id: number; employee_no: string; name_ar: string; name_en?: string };
 
 
 /* ══ نموذج الموقع — خارج المكوّن الرئيسي ══ */
@@ -272,6 +273,8 @@ function AssignDialog({
   L: (k: string, f?: string) => string;
   onClose: () => void;
 }) {
+  const lang = typeof document !== "undefined"
+    ? document.documentElement.lang || "ar" : "ar";
   const [rows, setRows] = useState<Assignment[]>([]);
   const [pool, setPool] = useState<Employee[]>([]);
   const [pick, setPick] = useState("");
@@ -313,6 +316,8 @@ function AssignDialog({
   }
 
   async function remove(id: number) {
+  const lang = typeof document !== "undefined"
+    ? document.documentElement.lang || "ar" : "ar";
     // apiDelete بلا جسم — المعرّف في الرابط
     await apiDelete(
       `/sites/${site.id}/employees/?employment_id=${id}`).catch(() => {});
@@ -332,7 +337,7 @@ function AssignDialog({
           <div>
             <h2 style={{ fontSize: "1.1rem" }}>{L("assignTitle")}</h2>
             <div className="muted" style={{ fontSize: ".88rem" }}>
-              {site.name_ar}
+              {(lang === "en" ? site.name_en : site.name_ar) || site.name_ar}
             </div>
           </div>
           <button className="btn btn-sm btn-ghost" onClick={onClose}>
@@ -409,7 +414,7 @@ function AssignDialog({
 /* ══ الشاشة ══ */
 
 export default function SitesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Site[]>([]);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
@@ -560,7 +565,7 @@ export default function SitesPage() {
                 {rows.map((s) => (
                   <tr key={s.id} style={{ opacity: s.is_active ? 1 : 0.55 }}>
                     <td><span className="num">{s.code}</span></td>
-                    <td>{s.name_ar}</td>
+                    <td>{(lang === "en" ? s.name_en : s.name_ar) || s.name_ar}</td>
                     <td className="muted">{s.city || "—"}</td>
                     <td style={{ textAlign: "end" }}>
                       {s.has_coordinates ? (

@@ -63,6 +63,7 @@ type Comp = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   component_type: string;
   is_gosi_subject: boolean;
   is_eosb_subject: boolean;
@@ -83,7 +84,7 @@ const FLAGS: { key: keyof Comp; label: string }[] = [
 ];
 
 export default function PayComponentsPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Comp[]>([]);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
@@ -333,7 +334,7 @@ export default function PayComponentsPage() {
                   }}>
                     <td><span className="num">{c.code}</span></td>
                     <td>
-                      {c.name_ar}
+                      {(lang === "en" ? c.name_en : c.name_ar) || c.name_ar}
                       {c.is_system && (
                         <span className="badge" style={{
                           marginInlineStart: 6, fontSize: ".72rem",

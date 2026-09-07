@@ -25,6 +25,28 @@ from apps.core.access.gate import Gate
 from apps.employees.models import Employment
 
 
+#: حالات اليوم بالإنجليزية — الترجمة عند الخادم لا في كل واجهة
+DAY_STATUS_EN = {
+    "present": "Present",
+    "absent": "Absent",
+    "leave": "On leave",
+    "holiday": "Holiday",
+    "weekend": "Weekend",
+    "partial": "Partial",
+    "not_scheduled": "Not scheduled",
+    "no_record": "No record",
+}
+
+
+def _day_status(d, lang="ar"):
+    """اسم حالة اليوم بلغة العرض — و«لا سجل» حين لا يوجد."""
+    if d is None:
+        return "No record" if lang == "en" else "لا سجل"
+    if lang == "en":
+        return DAY_STATUS_EN.get(d.status, d.status)
+    return d.get_status_display()
+
+
 def _company_id(request):
     ctx = getattr(request, "account_ctx", None)
     return getattr(ctx, "active_company_id", None)
@@ -222,7 +244,7 @@ def attendance_days(request, employment_id):
 
     rows = [
         {"id": d.id, "work_date": d.work_date, "status": d.status,
-         "status_label": d.get_status_display(),
+         "status_label": _day_status(d, request_locale(request)),
          "first_in": d.first_in, "last_out": d.last_out,
          "worked_minutes": d.worked_minutes,
          "late_minutes": d.late_minutes,
@@ -434,7 +456,7 @@ def daily_board(request):
             "name_ar": emp.person.name_for(request_locale(request)),
             "department": emp.department.name_ar if emp.department else "",
             "status": status,
-            "status_label": d.get_status_display() if d else "لا سجل",
+            "status_label": _day_status(d, request_locale(request)),
             "first_in": (timezone.localtime(d.first_in).strftime("%H:%M")
                          if d and d.first_in else ""),
             "last_out": (timezone.localtime(d.last_out).strftime("%H:%M")
@@ -625,7 +647,7 @@ def my_attendance(request):
         rows.append({
             "date": d.work_date,
             "status": d.status,
-            "status_label": d.get_status_display(),
+            "status_label": _day_status(d, request_locale(request)),
             "first_in": (timezone.localtime(d.first_in).strftime("%H:%M")
                          if d.first_in else ""),
             "last_out": (timezone.localtime(d.last_out).strftime("%H:%M")

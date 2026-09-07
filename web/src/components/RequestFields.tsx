@@ -181,10 +181,15 @@ export default function DynField({
   required: boolean;
   value: string;
   onChange: (v: string) => void;
-  leaveTypes: { code: string; name_ar: string }[];
-  terminationReasons: { code: string; name_ar: string }[];
+  leaveTypes: { code: string; name_ar: string;
+                name_en?: string }[];
+  terminationReasons: { code: string; name_ar: string; name_en?: string }[];
   L: (k: string, f?: string) => string;
 }) {
+  // لغة الواجهة من سمة الوثيقة — كما في api.ts
+  const lang = typeof document !== "undefined"
+    ? document.documentElement.lang || "ar"
+    : "ar";
   const kind = fieldKind(name);
 
   const label = (
@@ -220,7 +225,9 @@ export default function DynField({
           onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
           {leaveTypes.map((t) => (
-            <option key={t.code} value={t.code}>{t.name_ar}</option>
+            <option key={t.code} value={t.code}>
+              {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
+            </option>
           ))}
         </select>
       ) : kind === "asset_category" ? (
@@ -245,7 +252,9 @@ export default function DynField({
           onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
           {terminationReasons.map((r) => (
-            <option key={r.code} value={r.code}>{r.name_ar}</option>
+            <option key={r.code} value={r.code}>
+              {(lang === "en" ? r.name_en : r.name_ar) || r.name_ar}
+            </option>
           ))}
         </select>
       ) : kind === "certificate_type" ? (

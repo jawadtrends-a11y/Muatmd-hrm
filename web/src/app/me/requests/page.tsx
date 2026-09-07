@@ -99,8 +99,10 @@ const T: Dict = {
 type ReqType = {
   code: string;
   name_ar: string;
+  name_en?: string;
   icon: string;
   hint_ar: string;
+  hint_en?: string;
   required_fields: string[];
   optional_fields: string[];
 };
@@ -134,7 +136,7 @@ function hasPreviewContent(p: Record<string, unknown>): boolean {
 export default function MyRequestsPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
 
   const [types, setTypes] = useState<ReqType[]>([]);
   /** ق-75: زملاء الإدارة — يختار الموظف منهم نائبه أثناء غيابه */
@@ -337,7 +339,10 @@ export default function MyRequestsPage() {
           </button>
         )}
         <h1 style={{ marginTop: selected ? 8 : 0 }}>
-          {selected ? selected.name_ar : L("title")}
+          {selected
+            ? ((lang === "en" ? selected.name_en : selected.name_ar)
+               || selected.name_ar)
+            : L("title")}
         </h1>
         <div className="muted" style={{ fontSize: ".88rem", marginTop: 2 }}>
           {selected ? selected.hint_ar : L("subtitle")}
@@ -388,10 +393,10 @@ export default function MyRequestsPage() {
                   <Icon size={24} />
                 </div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                  {t.name_ar}
+                  {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
                 </div>
                 <div className="muted" style={{ fontSize: ".82rem" }}>
-                  {t.hint_ar}
+                  {(lang === "en" ? t.hint_en : t.hint_ar) || t.hint_ar}
                 </div>
               </button>
             );

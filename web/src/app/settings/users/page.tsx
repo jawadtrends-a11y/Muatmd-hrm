@@ -40,13 +40,14 @@ type Row = {
   id: number;
   employee_no: string;
   name_ar: string;
+  name_en?: string;
   department?: string | null;
   username?: string | null;
   roles?: string[];
 };
 
 export default function UsersPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(true);
@@ -120,7 +121,7 @@ export default function UsersPage() {
                         <span className="num">{r.employee_no}</span>
                       </td>
                       <td className="truncate">
-                        {r.name_ar}
+                        {(lang === "en" ? r.name_en : r.name_ar) || r.name_ar}
                         {!r.username && (
                           <span className="muted" style={{
                             fontSize: ".76rem", marginInlineStart: 8,

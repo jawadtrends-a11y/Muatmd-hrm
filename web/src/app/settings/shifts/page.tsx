@@ -66,6 +66,7 @@ type Shift = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   start_time: string;
   end_time: string;
   break_minutes: number;
@@ -78,7 +79,7 @@ type Shift = {
 };
 
 export default function ShiftsPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Shift[]>([]);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
@@ -361,7 +362,7 @@ export default function ShiftsPage() {
                   <tr key={s.id}>
                     <td><span className="num">{s.code}</span></td>
                     <td>
-                      {s.name_ar}
+                      {(lang === "en" ? s.name_en : s.name_ar) || s.name_ar}
                       {s.is_flexible && (
                         <span className="badge" style={{
                           marginInlineStart: 6, fontSize: ".72rem",

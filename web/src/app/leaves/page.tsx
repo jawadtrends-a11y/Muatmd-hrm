@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost, qs, openForView, ApiError } from "@/lib/api";
-import { useT, type Dict } from "@/lib/prefs";
+import { usePrefs, useT, type Dict } from "@/lib/prefs";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcLeave, IcX } from "@/components/Icons";
 import ApprovalChain, { type ChainRow, stamp }
@@ -82,6 +82,7 @@ type Req = {
   request_no: string;
   type: string;
   type_label: string;
+  type_label_en?: string;
   employee_no: string;
   employee_name: string;
   status: string;
@@ -133,6 +134,7 @@ function ApprovalCard({
           comment: string) => void;
   busy: boolean;
 }) {
+  const { lang } = usePrefs();
   const [open, setOpen] = useState<"approved" | "rejected" | null>(null);
   const [comment, setComment] = useState("");
 
@@ -142,7 +144,7 @@ function ApprovalCard({
         <div>
           <div style={{ fontWeight: 600 }}>{req.employee_name}</div>
           <div className="muted" style={{ fontSize: ".85rem" }}>
-            <span className="num">{req.employee_no}</span> · {req.type_label}
+            <span className="num">{req.employee_no}</span> · {typeName(req, lang)}
           </div>
         </div>
         <span className="badge badge-warn">
@@ -286,6 +288,7 @@ function RequestsTable({
   L: (k: string, f?: string) => string;
   showEmployee: boolean;
 }) {
+  const { lang } = usePrefs();
   /**
    * ق-71: الصف يتمدّد بالنقر فيُظهر مراحل الاعتماد.
    *
@@ -347,7 +350,7 @@ function RequestsTable({
                 </span>
               </td>
               {showEmployee && <td className="truncate">{r.employee_name}</td>}
-              <td>{r.type_label}</td>
+              <td>{typeName(r, lang)}</td>
               <td style={{ textAlign: "end" }}>
                 <span className="num">{payloadPeriod(r.payload)}</span>
               </td>
@@ -441,8 +444,21 @@ type Deleg = {
 
 /* ══ الشاشة ══ */
 
+/**
+ * اسم نوع الطلب بلغة الواجهة — والعربي ارتدادًا.
+ *
+ * فالخادم يرسل الاسمين، والشاشة تعرض ما يقرؤه المستخدم.
+ */
+function typeName(
+  r: { type_label: string; type_label_en?: string },
+  lang: string,
+) {
+  return (lang === "en" ? r.type_label_en : r.type_label) || r.type_label;
+}
+
+
 export default function LeavesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
 
   const [approvals, setApprovals] = useState<Req[]>([]);
   const [all, setAll] = useState<Req[]>([]);

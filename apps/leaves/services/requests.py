@@ -51,6 +51,7 @@ class RequestSpec:
     #: الاسم الإنجليزي — التطبيق والويب يعرضان بلغة المستخدم.
     #: وموضعه بعد الحقول بلا افتراضي، فـdataclass يشترط ذلك.
     name_en: str = ""
+    hint_en: str = ""
 
 
 SPECS = {
@@ -59,42 +60,49 @@ SPECS = {
         required_fields=("leave_type_code", "start_date", "end_date"),
         optional_fields=("note", "attachment_url"),
         hint_ar="اختر من تاريخ إلى تاريخ — النظام يحتسب المخصوم من رصيدك",
+        hint_en="Pick from and to — the system computes the deduction",
     ),
     RequestType.ATTENDANCE_FIX: RequestSpec(
         code="attendance_fix", name_ar="طلب تصحيح بصمة", name_en="Attendance correction", icon="clock",
         required_fields=("work_date", "fix_target", "reason"),
         optional_fields=("first_in", "last_out", "note"),
         hint_ar="حدّد أي بصمة تصحّح — ولا يُقبل طلبان لنفس اليوم",
+        hint_en="Pick which punch to fix — one request per day",
     ),
     RequestType.PERMISSION: RequestSpec(
         code="permission", name_ar="طلب استئذان", name_en="Permission request", icon="clock",
         required_fields=("work_date", "from_time", "to_time", "reason"),
         optional_fields=("note",),
         hint_ar="خروج مؤقت خلال ساعات الدوام",
+        hint_en="Temporary leave during working hours",
     ),
     RequestType.REMOTE_WORK: RequestSpec(
         code="remote_work", name_ar="طلب عمل عن بُعد", name_en="Remote work request", icon="home",
         required_fields=("start_date", "days", "reason"),
         optional_fields=("note",),
         hint_ar="تُسجَّل الأيام حضورًا بلا بصمة",
+        hint_en="Days count as attendance without punching",
     ),
     RequestType.ADVANCE: RequestSpec(
         code="advance", name_ar="طلب سلفة", name_en="Salary advance", icon="wallet",
         required_fields=("amount", "installments"),
         optional_fields=("reason", "note"),
         hint_ar="تُخصم أقساطها من راتبك الشهري",
+        hint_en="Instalments are deducted from your monthly salary",
     ),
     RequestType.ASSET: RequestSpec(
         code="asset", name_ar="طلب تسجيل عهدة", name_en="Asset custody", icon="doc",
         required_fields=("asset_name", "asset_category"),
         optional_fields=("serial_number", "value", "note"),
         hint_ar="تُسجَّل باسمك وتُخصم قيمتها إن لم تُرجع",
+        hint_en="Registered to you; deducted if not returned",
     ),
     RequestType.BUSINESS_TRIP: RequestSpec(
         code="business_trip", name_ar="طلب رحلة عمل", name_en="Business trip", icon="doc",
         required_fields=("destination", "start_date", "end_date", "purpose"),
         optional_fields=("estimated_cost", "note"),
         hint_ar="من المغادرة إلى العودة — لا تُخصم من رصيد الإجازات",
+        hint_en="Departure to return — not from leave balance",
     ),
     RequestType.TICKET: RequestSpec(
         code="ticket", name_ar="طلب تذكرة سفر", name_en="Travel ticket", icon="doc",
@@ -102,12 +110,14 @@ SPECS = {
         optional_fields=("family_members", "note"),
         eligibility="ticket_eligible",
         hint_ar="استحقاق سنوي — يشمل أفراد العائلة حسب سياسة المنشأة",
+        hint_en="Annual entitlement — family per company policy",
     ),
     RequestType.CERTIFICATE: RequestSpec(
         code="certificate", name_ar="طلب شهادة أو خطاب", name_en="Certificate or letter", icon="doc",
         required_fields=("certificate_type",),
         optional_fields=("addressed_to", "include_salary", "note"),
         hint_ar="صالحة 30 يومًا من تاريخ إصدارها",
+        hint_en="Valid for 30 days from issue",
     ),
     RequestType.RESIGNATION: RequestSpec(
         code="resignation", name_ar="طلب إنهاء عقد", name_en="Contract termination", icon="alert",
@@ -117,12 +127,14 @@ SPECS = {
         # لا يقطع بمغادرته سلسلة
         optional_fields=("successor_employment_id", "note"),
         hint_ar="مدة الإشعار 30 يومًا تبدأ من تاريخ الاعتماد النهائي",
+        hint_en="30-day notice starts at final approval",
     ),
     RequestType.OVERTIME: RequestSpec(
         code="overtime", name_ar="طلب اعتماد عمل إضافي", name_en="Overtime approval", icon="clock",
         required_fields=("work_date", "from_time", "to_time"),
         optional_fields=("reason", "note"),
         hint_ar="من أي وقت إلى أي وقت — تُحتسب بالدقيقة لا بالساعة",
+        hint_en="From when to when — counted by the minute",
     ),
 }
 
@@ -162,6 +174,9 @@ def eligible_types(employment):
             "name_ar": spec.name_ar,
             "icon": spec.icon,
             "hint_ar": spec.hint_ar,
+            # الاسمان معًا — والواجهة تعرض بلغة المستخدم (ق-92)
+            "name_en": spec.name_en,
+            "hint_en": spec.hint_en,
             "required_fields": list(spec.required_fields),
             "optional_fields": list(spec.optional_fields),
         })

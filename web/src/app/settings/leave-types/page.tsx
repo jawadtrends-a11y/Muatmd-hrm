@@ -93,7 +93,7 @@ function num(v?: string | null) {
 }
 
 export default function LeaveTypesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<LeaveType[]>([]);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
@@ -351,7 +351,7 @@ export default function LeaveTypesPage() {
                   <tr key={t.id}>
                     <td><span className="num">{t.code}</span></td>
                     <td>
-                      {t.name_ar}
+                      {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
                       {t.below_statutory && (
                         <span className="badge badge-warn" style={{
                           marginInlineStart: 8, fontSize: ".72rem",

@@ -59,6 +59,7 @@ type Step = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   step_number: number;
   salary: string | null;
 };
@@ -67,6 +68,7 @@ type Grade = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   level: number;
   min_salary: string | null;
   max_salary: string | null;
@@ -75,7 +77,7 @@ type Grade = {
 };
 
 export default function JobGradesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Grade[]>([]);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
@@ -317,7 +319,7 @@ export default function JobGradesPage() {
                 <div>
                   <div style={{ fontWeight: 600 }}>
                     <span className="num">{g.code}</span>
-                    {" — "}{g.name_ar}
+                    {" — "}{(lang === "en" ? g.name_en : g.name_ar) || g.name_ar}
                   </div>
                   <div className="muted" style={{
                     fontSize: ".8rem", marginTop: 3,
@@ -379,7 +381,7 @@ export default function JobGradesPage() {
                       }}>
                         <div style={{ fontSize: ".88rem" }}>
                           <span className="num">{s.step_number}</span>
-                          {" · "}{s.name_ar}
+                          {" · "}{(lang === "en" ? s.name_en : s.name_ar) || s.name_ar}
                         </div>
                         <div className="row" style={{ gap: 8 }}>
                           {s.salary && (

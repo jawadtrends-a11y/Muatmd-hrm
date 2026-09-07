@@ -191,13 +191,14 @@ type Device = {
   id: number;
   device_code: string;
   name_ar: string;
+  name_en?: string;
   site: string | null;
   site_id: number | null;
   last_seen_at: string | null;
   is_active: boolean;
 };
 
-type Site = { id: number; name_ar: string };
+type Site = { id: number; name_ar: string; name_en?: string };
 
 type Guide = {
   ingest_url: string;
@@ -216,7 +217,7 @@ type Guide = {
 };
 
 export default function DevicesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [rows, setRows] = useState<Device[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [busy, setBusy] = useState(true);
@@ -654,7 +655,7 @@ export default function DevicesPage() {
                 onChange={(e) => set("site_id", e.target.value)}>
                 <option value="">— {L("noSite")} —</option>
                 {sites.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name_ar}</option>
+                  <option key={s.id} value={s.id}>{(lang === "en" ? s.name_en : s.name_ar) || s.name_ar}</option>
                 ))}
               </select>
             </div>
@@ -702,7 +703,7 @@ export default function DevicesPage() {
                 {rows.map((d) => (
                   <tr key={d.id}>
                     <td><span className="num">{d.device_code}</span></td>
-                    <td>{d.name_ar}</td>
+                    <td>{(lang === "en" ? d.name_en : d.name_ar) || d.name_ar}</td>
                     <td className="muted">{d.site || L("noSite")}</td>
                     <td className="muted">
                       {d.last_seen_at

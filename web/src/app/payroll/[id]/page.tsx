@@ -246,7 +246,7 @@ function SummaryCards({
 export default function RunDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const runId = Number(params.id);
 
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -255,14 +255,14 @@ export default function RunDetailPage() {
   const [busy, setBusy] = useState(true);
   const [tabBusy, setTabBusy] = useState(false);
   const [error, setError] = useState("");
-  const [templates, setTemplates] = useState<{ id: number; name_ar: string }[]>([]);
+  const [templates, setTemplates] = useState<{ id: number; name_ar: string; name_en?: string }[]>([]);
 
   useEffect(() => {
     apiGet<Overview>(`/payroll/runs/${runId}/overview/`)
       .then((d) => { setOverview(d); setBusy(false); })
       .catch((e: ApiError) => { setError(e.message); setBusy(false); });
 
-    apiGet<{ id: number; name_ar: string }[]>("/payroll/bank-templates/")
+    apiGet<{ id: number; name_ar: string; name_en?: string }[]>("/payroll/bank-templates/")
       .then(setTemplates)
       .catch(() => setTemplates([]));
   }, [runId]);
@@ -386,7 +386,7 @@ export default function RunDetailPage() {
                 onClick={() => downloadFile(
                   `/payroll/runs/${runId}/bank/${t.id}/download/`)}>
                 <IcDownload size={16} />
-                {t.name_ar}
+                {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
               </button>
             ))}
           </div>

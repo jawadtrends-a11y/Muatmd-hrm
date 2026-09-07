@@ -7,12 +7,16 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPut, ApiError }
+  from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcOrg, IcPlus, IcX } from "@/components/Icons";
 
 const T: Dict = {
   nameEn: { ar: "الاسم بالإنجليزية", en: "Name (English)" },
+  actions: { ar: "إجراءات", en: "Actions" },
+  edit: { ar: "تعديل", en: "Edit" },
+  del: { ar: "حذف", en: "Delete" },
   title: { ar: "الهيكل التنظيمي", en: "Organization" },
   subtitle: {
     ar: "الفروع والأقسام والمسميات — تُعرَّف قبل إضافة الموظفين",
@@ -97,7 +101,7 @@ type FieldDef = {
 };
 
 function AddForm({
-  fields, L, onSave, onCancel, busy, error,
+  fields, L, onSave, onCancel, busy, error, initial,
 }: {
   fields: FieldDef[];
   L: (k: string, f?: string) => string;
@@ -105,8 +109,18 @@ function AddForm({
   onCancel: () => void;
   busy: boolean;
   error: string;
+  /** قيم أولية عند التعديل — والنموذج نفسه يخدم الحالين */
+  initial?: Record<string, any>;
 }) {
-  const [v, setV] = useState<Record<string, string>>({});
+  const [v, setV] = useState<Record<string, string>>(() => {
+    if (!initial) return {};
+    const out: Record<string, string> = {};
+    for (const f of fields) {
+      const raw = initial[f.key];
+      if (raw !== null && raw !== undefined) out[f.key] = String(raw);
+    }
+    return out;
+  });
 
   const missing = fields.filter((f) => f.required && !v[f.key]?.trim());
 
@@ -178,12 +192,14 @@ function AddForm({
 /* ══ جدول بسيط ══ */
 
 function SimpleTable({
-  rows, cols, L,
+  rows, cols, L, onEdit, onDelete,
 }: {
   rows: Record<string, unknown>[];
   cols: { key: string; label: string; width?: number;
           render?: (r: Record<string, unknown>) => React.ReactNode }[];
   L: (k: string, f?: string) => string;
+  onEdit?: (r: Record<string, any>) => void;
+  onDelete?: (r: Record<string, any>) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -206,7 +222,10 @@ function SimpleTable({
             ))}
           </colgroup>
           <thead>
-            <tr>{cols.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
+            <tr>
+              {cols.map((c) => <th key={c.key}>{c.label}</th>)}
+              {(onEdit || onDelete) && <th>{L("actions")}</th>}
+            </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
@@ -217,6 +236,21 @@ function SimpleTable({
                       : ((r[c.key] as React.ReactNode) ?? "—")}
                   </td>
                 ))}
+                {(onEdit || onDelete) && (
+                  <td>
+                    <div className="row" style={{ gap: 4 }}>
+                      {onEdit && (
+                        <button className="btn btn-sm btn-ghost"
+                          onClick={() => onEdit(r)}>{L("edit")}</button>
+                      )}
+                      {onDelete && (
+                        <button className="btn btn-sm btn-ghost"
+                          style={{ color: "var(--danger)" }}
+                          onClick={() => onDelete(r)}>{L("del")}</button>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -230,14 +264,30 @@ function SimpleTable({
 /* ══ الشاشة ══ */
 
 export default function OrgPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   /**
    * الزر الذي يظهر ثم يُرفض عند الضغط خلل: يوهم المستخدم بقدرة
    * لا يملكها. فمن لا يملك إدارة الهيكل لا يرى زر الإضافة —
    * ومدير الإدارة يطّلع ولا يعدّل (ق-68).
    */
   const [canManage, setCanManage] = useState(false);
-  const [tab, setTab] = useState<Tab>("branches");
+  // التبويب في الرابط: من يحدّث الصفحة يعود لما كان فيه لا
+  // للأول (نفس نهج ملف الموظف)
+  const [tab, setTabState] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "branches";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return (TABS as readonly string[]).includes(q || "")
+      ? (q as Tab) : "branches";
+  });
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    if (typeof window !== "undefined") {
+      const u = new URL(window.location.href);
+      u.searchParams.set("tab", t);
+      window.history.replaceState(null, "", u.toString());
+    }
+  };
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [depts, setDepts] = useState<Department[]>([]);
@@ -246,6 +296,9 @@ export default function OrgPage() {
 
   const [busy, setBusy] = useState(true);
   const [adding, setAdding] = useState(false);
+  /** العنصر قيد التعديل — والنموذج نفسه يخدم الإنشاء والتعديل */
+  const [editing, setEditing] = useState<any>(null);
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [denied, setDenied] = useState(false);
@@ -283,6 +336,20 @@ export default function OrgPage() {
     holidays: "/org/holidays/",
   };
 
+  async function remove(row: any) {
+    setError("");
+    setNotice("");
+    try {
+      const r = await apiDelete<{ deactivated?: boolean;
+                                  detail?: string }>(
+        `${ENDPOINTS[tab]}${row.id}/`);
+      if (r?.deactivated && r.detail) setNotice(r.detail);
+      load();
+    } catch (e) {
+      setError((e as ApiError).message);
+    }
+  }
+
   async function save(data: Record<string, string>) {
     setSaving(true);
     setError("");
@@ -292,7 +359,12 @@ export default function OrgPage() {
         if (v === "") continue;
         payload[k] = v === "1" ? true : v === "0" ? false : v;
       }
-      await apiPost(ENDPOINTS[tab], payload);
+      if (editing) {
+        await apiPut(`${ENDPOINTS[tab]}${editing.id}/`, payload);
+        setEditing(null);
+      } else {
+        await apiPost(ENDPOINTS[tab], payload);
+      }
       setAdding(false);
       await load();
     } catch (e) {
@@ -353,10 +425,22 @@ export default function OrgPage() {
     </span>
   );
 
+  /**
+   * الاسم بلغة الواجهة — والعربي ارتدادًا إن لم يُملأ الإنجليزي.
+   *
+   * فالخادم يرسل الاسمين، والشاشة تعرض ما يقرؤه المستخدم.
+   */
+  const nameCell = (r: Record<string, unknown>) => {
+    return (
+    (lang === "en" ? (r.name_en as string) : (r.name_ar as string))
+      || (r.name_ar as string) || "—");
+  };
+
   const COLS: Record<Tab, Parameters<typeof SimpleTable>[0]["cols"]> = {
     branches: [
       { key: "code", label: L("code"), width: 110 },
-      { key: "name_ar", label: L("nameAr"), width: 240 },
+      { key: "name_ar", label: L("nameAr"), width: 240,
+   render: nameCell },
       { key: "city", label: L("city"), width: 140 },
       { key: "mol_establishment_no", label: L("molNo"), width: 150 },
       { key: "gosi_establishment_no", label: L("gosiNo"), width: 170 },
@@ -370,14 +454,15 @@ export default function OrgPage() {
           <span style={{
             paddingInlineStart: `${(Number(r.depth) || 0) * 18}px`,
           }}>
-            {String(r.name_ar)}
+            {nameCell(r)}
           </span>
         ) },
       { key: "is_active", label: "", width: 100,
         render: (r) => badge(Boolean(r.is_active)) },
     ],
     jobTitles: [
-      { key: "name_ar", label: L("nameAr"), width: 280 },
+      { key: "name_ar", label: L("nameAr"), width: 280,
+   render: nameCell },
       { key: "mol_occupation_code", label: L("molCode"), width: 180 },
       { key: "is_saudization_reserved", label: L("saudiOnly"), width: 150,
         render: (r) => (
@@ -388,7 +473,8 @@ export default function OrgPage() {
         ) },
     ],
     holidays: [
-      { key: "name_ar", label: L("nameAr"), width: 260 },
+      { key: "name_ar", label: L("nameAr"), width: 260,
+   render: nameCell },
       { key: "start_date", label: L("date"), width: 140,
         render: (r) => <span className="num">{String(r.start_date)}</span> },
       { key: "days", label: L("days"), width: 100,
@@ -458,9 +544,23 @@ export default function OrgPage() {
         </div>
       )}
 
-      {adding && (
-        <AddForm fields={FORMS[tab]} L={L} onSave={save}
-          onCancel={() => { setAdding(false); setError(""); }}
+      {notice && (
+        <div style={{
+          background: "var(--copper-soft)", color: "var(--copper)",
+          padding: "10px 14px", borderRadius: "var(--radius-sm)",
+          fontSize: ".9rem",
+        }}>
+          {notice}
+        </div>
+      )}
+
+      {(adding || editing) && (
+        <AddForm key={editing ? `e${editing.id}` : "new"}
+          fields={FORMS[tab]} L={L} onSave={save}
+          initial={editing || undefined}
+          onCancel={() => {
+            setAdding(false); setEditing(null); setError("");
+          }}
           busy={saving} error={error} />
       )}
 
@@ -471,7 +571,11 @@ export default function OrgPage() {
           {L("loading")}
         </div>
       ) : (
-        <SimpleTable rows={DATA[tab]} cols={COLS[tab]} L={L} />
+        <SimpleTable rows={DATA[tab]} cols={COLS[tab]} L={L}
+          onEdit={canManage ? (r) => {
+            setEditing(r); setAdding(false); setError("");
+          } : undefined}
+          onDelete={canManage ? remove : undefined} />
       )}
     </div>
   );

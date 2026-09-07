@@ -36,6 +36,11 @@ urlpatterns = [
     path("api/org/departments/<int:dept_id>/move/", org_api.department_move, name="dept-move"),
     path("api/org/holidays/", org_api.holidays, name="holidays"),
     path("api/org/job-titles/", org_api.job_titles, name="job-titles"),
+    # التعديل والحذف (ق-93)
+    path("api/org/branches/<int:branch_id>/", org_api.branch_detail, name="branch-detail"),
+    path("api/org/departments/<int:dept_id>/", org_api.department_detail, name="department-detail"),
+    path("api/org/job-titles/<int:title_id>/", org_api.job_title_detail, name="job-title-detail"),
+    path("api/org/holidays/<int:holiday_id>/", org_api.holiday_detail, name="holiday-detail"),
     path("api/access/permissions/", access_api.permission_catalog, name="perm-catalog"),
     path("api/access/roles/", access_api.role_list, name="role-list"),
     path("api/access/roles/<int:role_id>/", access_api.role_detail, name="role-detail"),

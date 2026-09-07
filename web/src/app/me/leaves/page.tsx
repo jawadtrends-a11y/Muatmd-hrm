@@ -54,13 +54,13 @@ const T: Dict = {
 type Tier = { from_day: number; to_day: number; pay_percentage: string };
 
 type Balance = {
-  code: string; name_ar: string; is_paid: boolean;
+  code: string; name_ar: string; name_en?: string; is_paid: boolean;
   days_per_year: string; opening: string; accrued: string;
   consumed: string; available: string; tiers: Tier[];
 };
 
 type EventType = {
-  code: string; name_ar: string; days_per_event: string;
+  code: string; name_ar: string; name_en?: string; days_per_event: string;
   is_paid: boolean; once_per_service: boolean;
 };
 
@@ -82,7 +82,7 @@ const TONE: Record<string, string> = {
 };
 
 export default function MyLeavesPage() {
-  const { L } = useT(T);
+  const { L, lang } = useT(T);
   const [tab, setTab] = useState<"balances" | "history">("balances");
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<Data | null>(null);
@@ -151,7 +151,7 @@ export default function MyLeavesPage() {
             {(data?.balances ?? []).map((b) => (
               <div key={b.code} className="card" style={{ padding: 20 }}>
                 <div className="spread" style={{ marginBottom: 10 }}>
-                  <h3 style={{ fontSize: "1rem" }}>{b.name_ar}</h3>
+                  <h3 style={{ fontSize: "1rem" }}>{(lang === "en" ? b.name_en : b.name_ar) || b.name_ar}</h3>
                   <span className={b.is_paid ? "badge badge-ok" : "badge"}>
                     {b.is_paid ? L("paid") : L("unpaid")}
                   </span>
@@ -237,7 +237,7 @@ export default function MyLeavesPage() {
                     padding: "10px 14px", background: "var(--paper-2)",
                     borderRadius: "var(--radius-sm)", minWidth: 170,
                   }}>
-                    <div style={{ fontWeight: 500 }}>{t.name_ar}</div>
+                    <div style={{ fontWeight: 500 }}>{(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}</div>
                     <div className="muted" style={{ fontSize: ".84rem" }}>
                       <span className="num">{t.days_per_event}</span>{" "}
                       {L("perEvent")}

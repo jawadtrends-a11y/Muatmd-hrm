@@ -20,12 +20,23 @@ from apps.leaves.models import (
 )
 
 
-def _type_en(code):
-    """اسم نوع الطلب بالإنجليزية من كتالوج الأنواع."""
-    from apps.leaves.services.requests import SPECS
+#: حالات الطلب بالإنجليزية — الترجمة عند الخادم لا في كل واجهة
+#: قرارات الاعتماد بالإنجليزية
+DECISION_EN = {
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "delegated": "Delegated",
+    "": "",
+}
 
-    spec = SPECS.get(code)
-    return getattr(spec, "name_en", "") if spec else ""
+STATUS_EN = {
+    "draft": "Draft",
+    "pending": "Pending approval",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "withdrawn": "Withdrawn",
+}
 
 
 def _type_en(code):
@@ -154,7 +165,8 @@ def _serialize_request(r, include_chain=False, lang="ar"):
         "employee_no": r.employment.employee_no,
         "employee_name": r.employment.person.name_for(lang),
         "status": r.status,
-        "status_label": r.get_status_display(),
+        "status_label": (STATUS_EN.get(r.status, r.status)
+                         if lang == "en" else r.get_status_display()),
         "current_step": r.current_step,
         "note": r.note,
         # التاريخ والوقت معًا (ق-71): من يراجع يحتاج معرفة متى
@@ -189,7 +201,9 @@ def _serialize_request(r, include_chain=False, lang="ar"):
                 "approver": (a.approver_employment.person.name_for(lang)
                              if a.approver_employment else "—"),
                 "decision": a.decision,
-                "decision_label": a.get_decision_display(),
+                "decision_label": (
+                    DECISION_EN.get(a.decision, a.decision)
+                    if lang == "en" else a.get_decision_display()),
                 "state": state,
                 "comment": a.comment,
                 "decided_at": a.decided_at,

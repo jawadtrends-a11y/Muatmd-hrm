@@ -92,6 +92,7 @@ type Template = {
   id: number;
   code: string;
   name_ar: string;
+  name_en?: string;
   bank_name_ar: string;
   swift_prefix: string;
   delimiter: string;
@@ -293,7 +294,7 @@ export default function BankTemplatesPage() {
               <div className="spread" style={{ padding: "14px 18px" }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>
-                    {t.name_ar}
+                    {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
                     {t.is_builtin && (
                       <span className="badge" style={{
                         marginInlineStart: 6, fontSize: ".72rem",
