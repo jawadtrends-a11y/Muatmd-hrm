@@ -72,7 +72,6 @@ class Person(AccountScopedModel):
     passport_number = models.CharField(_("رقم الجواز"), max_length=20, blank=True)
     passport_expiry_date = models.DateField(_("انتهاء الجواز"),
                                             null=True, blank=True)
-    border_number = models.CharField(_("رقم الحدود"), max_length=20, blank=True)
 
     # ── الاتصال ──
     email = models.EmailField(_("البريد الإلكتروني"), blank=True)

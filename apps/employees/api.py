@@ -728,7 +728,6 @@ def _person_block(p):
         "id_expiry_hijri": p.id_expiry_hijri,
         "passport_number": p.passport_number,
         "passport_expiry_date": p.passport_expiry_date,
-        "border_number": p.border_number,
         "mobile": p.mobile_e164,
         "email": p.email,
         "preferred_locale": p.preferred_locale,
@@ -1021,7 +1020,7 @@ def update_employee_profile(request, employment_id):
         "family_name_ar", "full_name_en", "gender", "birth_date",
         "birth_date_hijri", "marital_status", "nationality_code",
         "id_expiry_date", "id_expiry_hijri", "passport_number",
-        "passport_expiry_date", "border_number", "email",
+        "passport_expiry_date", "email",
         "preferred_locale", "gosi_scheme_code",
         "gosi_first_subscription_date",
     }

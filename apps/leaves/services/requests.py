@@ -812,7 +812,6 @@ EDITABLE_BY_EMPLOYEE = {
     "id_expiry_date": "انتهاء الهوية",
     "passport_number": "رقم الجواز",
     "passport_expiry_date": "انتهاء الجواز",
-    "border_number": "رقم الحدود",
     "mobile": "الجوال",
     "email": "البريد الإلكتروني",
     # البنك
@@ -832,7 +831,7 @@ PERSON_FIELDS = {
     "first_name_ar", "father_name_ar", "grandfather_name_ar",
     "family_name_ar", "full_name_en", "birth_date", "marital_status",
     "id_expiry_date", "passport_number", "passport_expiry_date",
-    "border_number", "email", "gosi_scheme_code",
+    "email", "gosi_scheme_code",
 }
 
 
