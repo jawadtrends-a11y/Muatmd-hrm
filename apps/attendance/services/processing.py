@@ -103,6 +103,10 @@ def process_employment_days(*, employment, start_date, end_date,
             work_date__lte=end_date)
     }
 
+    # أيام الإجازة المعتمدة: بدونها يُعدّ صاحبها غائبًا فيُخصم أجره
+    from apps.leaves.services.leave_requests import leave_dates_in_range
+    on_leave = leave_dates_in_range(employment, start_date, end_date)
+
     for day in _date_range(start_date, end_date):
         current = existing.get(day)
         if current and current.is_manually_adjusted and not force:
@@ -112,7 +116,7 @@ def process_employment_days(*, employment, start_date, end_date,
         shift = effective_shift(employment, day)
         comp = compute_day(
             work_date=day, punches=by_day.get(day, []), shift=shift,
-            is_holiday=day in holidays, is_on_leave=False)
+            is_holiday=day in holidays, is_on_leave=day in on_leave)
 
         defaults = {
             "account": employment.account,

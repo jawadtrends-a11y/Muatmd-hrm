@@ -91,6 +91,15 @@ def publish(announcement, *, recipients, attachments=None):
         "link_url": "/me/notifications",
         "via_email": announcement.via_email,
         "attachments": attachments or [],
+        # أسماء المرفقات تُجمّد في الإشعار كما جُمّد نصّه: فالأرشيف
+        # يعرضها بلا استعلام ثانٍ، ولا يتغيّر ما رآه الموظف لو
+        # حُذف المرفق لاحقًا.
+        "attachment_files": [
+            {"id": x.stored_file_id,
+             "name": x.stored_file.original_name,
+             "size": x.stored_file.size_label}
+            for x in announcement.attachments.select_related("stored_file")
+        ],
     }
 
     emit(EVENT_KEY,

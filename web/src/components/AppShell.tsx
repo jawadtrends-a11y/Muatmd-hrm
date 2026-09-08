@@ -13,14 +13,17 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { apiGet, getToken, setToken, ApiError } from "@/lib/api";
+import { apiGet, apiPost, getToken, setToken, ApiError } from "@/lib/api";
 import { loadPrefs, usePrefs, useT, type Dict } from "@/lib/prefs";
 import {
-  IcAlert, IcChart, IcClock, IcDoc, IcGlobe, IcHome, IcLeave, IcLogout,
+  IcAlert, IcChart, IcCheck, IcClock, IcDoc, IcGlobe, IcHome, IcLeave,
+  IcLogout,
   IcMenu, IcMoon, IcOrg, IcPayroll, IcSettings, IcSun, IcUser, IcUsers,
   IcWallet, IcX,
 } from "@/components/Icons";
 import NotificationBell from "@/components/NotificationBell";
+
+type CompanyOpt = { id: number; name_ar: string; name_en: string };
 
 const PUBLIC_PATHS = ["/login", "/join", "/accept-invitation", "/signup"];
 
@@ -47,6 +50,8 @@ const T: Dict = {
   myLetters: { ar: "خطاباتي", en: "My Letters" },
   announcements: { ar: "الإعلانات", en: "Announcements" },
   myNotifications: { ar: "إشعاراتي", en: "My notifications" },
+  switchCompany: { ar: "الشركة", en: "Company" },
+  switching: { ar: "جارٍ التبديل…", en: "Switching…" },
   myAccount: { ar: "حسابي", en: "My Account" },
   sites: { ar: "مواقع العمل", en: "Work Sites" },
   settings: { ar: "الإعدادات", en: "Settings" },
@@ -246,6 +251,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // الصفحات العامة بلا هيكل
   const perms = new Set(ws?.permissions ?? []);
+
+  // ق-102ب: مبدّل الشركات — لمن له توظيف نشط في أكثر من واحدة.
+  // ويختفي لصاحب الشركة الواحدة: خيارٌ لا يفعل شيئًا يزحم لا يفيد.
+  const [companies, setCompanies] = useState<CompanyOpt[]>([]);
+  const [activeCompany, setActiveCompany] = useState<number | null>(null);
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    apiGet<{ active_id: number | null; companies: CompanyOpt[] }>(
+      "/me/companies/")
+      .then((d) => { setCompanies(d.companies || []); setActiveCompany(d.active_id); })
+      .catch(() => {});
+  }, []);
+
+  const switchTo = async (id: number) => {
+    if (id === activeCompany) { setAccountOpen(false); return; }
+    setSwitching(true);
+    try {
+      await apiPost("/me/companies/switch/", { company_id: id });
+      // للرئيسية بإعادة تحميل كاملة: ما هو معروض يخصّ الشركة
+      // السابقة، والبقاء في الصفحة يُريه بيانات شركة أخرى.
+      window.location.href = "/";
+    } catch {
+      setSwitching(false);
+    }
+  };
 
   /**
    * ق-58: البند الإداري يحتاج نطاقًا أوسع من «نفسي».
@@ -618,11 +649,47 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   zIndex: 50,
                 }}
               >
+                {companies.length > 1 && (
+                  <div style={{
+                    padding: "6px 12px 10px",
+                    borderBottom: "1px solid var(--line)",
+                    marginBottom: 6,
+                  }}>
+                    <div className="muted" style={{
+                      fontSize: ".72rem", marginBottom: 6,
+                    }}>
+                      {L("switchCompany")}
+                    </div>
+                    {companies.map((c) => {
+                      const on = c.id === activeCompany;
+                      return (
+                        <button key={c.id} onClick={() => switchTo(c.id)}
+                          disabled={switching}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            width: "100%", textAlign: "start",
+                            padding: "8px 10px", marginBottom: 2,
+                            border: "none", cursor: switching ? "wait" : "pointer",
+                            borderRadius: "var(--radius-sm)", font: "inherit",
+                            fontWeight: on ? 600 : 400,
+                            background: on ? "var(--teal-soft)" : "transparent",
+                            color: on ? "var(--teal)" : "var(--ink-2)",
+                          }}>
+                          <IcOrg size={16} />
+                          <span className="truncate" style={{ flex: 1 }}>
+                            {(lang === "en" ? c.name_en : c.name_ar) || c.name_ar}
+                          </span>
+                          {on && <IcCheck size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {/* بيانات مالية عن الحساب: مالك الحساب
                     والمدير العام ومدير الموارد */}
                 {perms.has("account.view") && (
                 <Link
-                  href="/settings/subscription"
+                  href="/settings?tab=subscription"
                   onClick={() => setAccountOpen(false)}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
@@ -659,7 +726,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           }}>
             <IcAlert size={18} />
             <span className="grow">{L("readOnly")}</span>
-            <Link href="/settings/subscription" className="btn btn-sm">
+            <Link href="/settings?tab=subscription" className="btn btn-sm">
               {L("renew")}
             </Link>
           </div>
@@ -675,7 +742,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {L("trialLeft")}{" "}
               <span className="num">{sub.trial.days_left}</span> {L("days")}
             </span>
-            <Link href="/settings/subscription" className="btn btn-sm btn-primary">
+            <Link href="/settings?tab=subscription" className="btn btn-sm btn-primary">
               {L("renew")}
             </Link>
           </div>
@@ -692,7 +759,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {L("renewSoon")} <span className="num">{sub.days_left}</span>{" "}
               {L("days")}
             </span>
-            <Link href="/settings/subscription" className="btn btn-sm">
+            <Link href="/settings?tab=subscription" className="btn btn-sm">
               {L("renew")}
             </Link>
           </div>

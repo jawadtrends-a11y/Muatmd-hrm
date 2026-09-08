@@ -26,6 +26,8 @@ const T: Dict = {
   departments: { ar: "الأقسام", en: "Departments" },
   jobTitles: { ar: "المسميات الوظيفية", en: "Job Titles" },
   holidays: { ar: "العطل الرسمية", en: "Holidays" },
+  fromDate: { ar: "من تاريخ", en: "From" },
+  toDate: { ar: "إلى تاريخ", en: "To" },
   code: { ar: "الرمز", en: "Code" },
   nameAr: { ar: "الاسم", en: "Name" },
   city: { ar: "المدينة", en: "City" },
@@ -85,7 +87,8 @@ type JobTitle = {
 };
 
 type Holiday = {
-  id: number; name_ar: string; name_en?: string; start_date: string; days: number;
+  id: number; name_ar: string; name_en?: string;
+  start_date: string; end_date: string; days: number;
 };
 
 
@@ -414,8 +417,10 @@ export default function OrgPage() {
       // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
       // عربيًّا إن نقص المقابل
       { key: "name_en", label: L("nameEn"), required: true },
-      { key: "start_date", label: L("date"), kind: "date", required: true },
-      { key: "days", label: L("days"), kind: "number", required: true },
+      // من تاريخ إلى تاريخ لا تاريخ وعدد أيام: المستخدم يرى المدى
+      // كاملًا ولا يحسبه في رأسه.
+      { key: "start_date", label: L("fromDate"), kind: "date", required: true },
+      { key: "end_date", label: L("toDate"), kind: "date", required: true },
     ],
   };
 
@@ -475,9 +480,11 @@ export default function OrgPage() {
     holidays: [
       { key: "name_ar", label: L("nameAr"), width: 260,
    render: nameCell },
-      { key: "start_date", label: L("date"), width: 140,
+      { key: "start_date", label: L("fromDate"), width: 130,
         render: (r) => <span className="num">{String(r.start_date)}</span> },
-      { key: "days", label: L("days"), width: 100,
+      { key: "end_date", label: L("toDate"), width: 130,
+        render: (r) => <span className="num">{String(r.end_date)}</span> },
+      { key: "days", label: L("days"), width: 90,
         render: (r) => <span className="num">{String(r.days)}</span> },
     ],
   };

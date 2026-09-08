@@ -66,6 +66,11 @@ urlpatterns = [
     # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
     path("api/company/settings/", accounts_company_api.company_settings,
          name="company-settings"),
+    # مبدّل الشركات — لمن له توظيف في أكثر من شركة
+    path("api/me/companies/", accounts_company_api.my_companies,
+         name="my-companies"),
+    path("api/me/companies/switch/", accounts_company_api.switch_company,
+         name="switch-company"),
     # ق-94: الدعوة للانضمام — محميّان بـemployees.invite
     path("api/employees/<int:person_id>/invite/",
          accounts_invites_api.invite_person, name="invite-person"),

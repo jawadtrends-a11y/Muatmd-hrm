@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiGet, apiPut, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -64,14 +65,18 @@ const T: Dict = {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
   },
-  payroll: { ar: "إعدادات الرواتب", en: "Payroll settings" },
+  payroll: { ar: "الإعدادات العامة", en: "General settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
-  team: { ar: "الفريق", en: "Team" },
   save: { ar: "حفظ", en: "Save" },
   saving: { ar: "جارٍ الحفظ…", en: "Saving…" },
   saved: { ar: "حُفظت التغييرات", en: "Saved" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   noAccess: { ar: "لا صلاحية لهذا القسم", en: "No access to this section" },
+  noSub: { ar: "لا اشتراك لهذا الحساب بعد", en: "No subscription yet" },
+  noSubHint: {
+    ar: "يُفعّله مدير المنصة — راجعه لتفعيل اشتراك منشأتك",
+    en: "Activated by the platform administrator",
+  },
   // إعدادات الرواتب
   eosbBasis: { ar: "أجر مكافأة نهاية الخدمة", en: "EOSB wage basis" },
   eosbHint: {
@@ -143,7 +148,7 @@ const T: Dict = {
   empty: { ar: "لا سجلات", en: "No records" },
 };
 
-const SECTIONS = ["payroll", "subscription", "team"] as const;
+const SECTIONS = ["payroll", "subscription"] as const;
 type Section = (typeof SECTIONS)[number];
 
 type PayrollSettings = {
@@ -582,11 +587,16 @@ function SubscriptionPanel({
   }
 
   if (!sub) {
+    // «لا اشتراك» ليست «لا صلاحية»: من لا اشتراك لحسابه سيظنّ
+    // أنه ممنوع فيراجع مديره بلا سبب.
     return (
       <div className="card" style={{
         padding: 36, textAlign: "center", color: "var(--ink-3)",
       }}>
-        {L("noAccess")}
+        <div style={{ fontWeight: 500 }}>{L("noSub")}</div>
+        <div style={{ fontSize: ".86rem", marginTop: 6 }}>
+          {L("noSubHint")}
+        </div>
       </div>
     );
   }
@@ -681,12 +691,29 @@ function SubscriptionPanel({
 
 export default function SettingsPage() {
   const { L } = useT(T);
-  const [section, setSection] = useState<Section>("payroll");
+  // التبويب في الرابط لا في الحالة: يبقى عند التحديث، ويُفتح
+  // مباشرةً من قائمة الحساب (?tab=subscription).
+  const params = useSearchParams();
+  const router = useRouter();
+  const fromUrl = params.get("tab") as Section | null;
+  const [section, setSectionState] = useState<Section>(
+    fromUrl && SECTIONS.includes(fromUrl) ? fromUrl : "payroll");
+
+  const setSection = (s: Section) => {
+    setSectionState(s);
+    router.replace(s === "payroll" ? "/settings" : `/settings?tab=${s}`,
+                   { scroll: false });
+  };
+
+  useEffect(() => {
+    if (fromUrl && SECTIONS.includes(fromUrl) && fromUrl !== section) {
+      setSectionState(fromUrl);
+    }
+  }, [fromUrl, section]);
 
   const ICONS: Record<Section, React.ComponentType<{ size?: number }>> = {
     payroll: IcPayroll,
     subscription: IcWallet,
-    team: IcUsers,
   };
 
   return (
@@ -709,13 +736,6 @@ export default function SettingsPage() {
 
       {section === "payroll" && <PayrollPanel L={L} />}
       {section === "subscription" && <SubscriptionPanel L={L} />}
-      {section === "team" && (
-        <div className="card" style={{
-          padding: 36, textAlign: "center", color: "var(--ink-3)",
-        }}>
-          {L("soon", "قريبًا")}
-        </div>
-      )}
     </div>
   );
 }

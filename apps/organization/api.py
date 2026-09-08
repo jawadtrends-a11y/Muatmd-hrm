@@ -191,6 +191,32 @@ def department_move(request, dept_id):
     return Response({"id": dept.id, "path": dept.path, "depth": dept.depth})
 
 
+def _holiday_end(data):
+    """
+    تاريخ النهاية — من end_date إن أُرسل، وإلا من days.
+
+    والخلط بينهما كان يمرّر None فتنكسر المقارنة بـ500: الشاشة
+    ترسل days والمسار ينتظر end_date.
+    """
+    from datetime import date, timedelta
+
+    end = (data.get("end_date") or "").strip() if isinstance(
+        data.get("end_date"), str) else data.get("end_date")
+    if end:
+        return end
+
+    start = data.get("start_date")
+    if not start:
+        return None
+    try:
+        d = date.fromisoformat(str(start))
+        n = int(data.get("days") or 1)
+    except (TypeError, ValueError):
+        return start
+    n = max(1, n)
+    return (d + timedelta(days=n - 1)).isoformat()
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def holidays(request):
@@ -222,7 +248,9 @@ def holidays(request):
             # ق-92: الاسمان معًا — والواجهة تعرض بلغة المستخدم
             name_en=request.data.get("name_en", ""),
             start_date=request.data.get("start_date"),
-            end_date=request.data.get("end_date"),
+            # الشاشة تسأل عن «عدد الأيام» لا تاريخ نهاية: أيسر على
+            # المستخدم. ويُقبل end_date صريحًا لمن يرسله.
+            end_date=_holiday_end(request.data),
             is_paid=request.data.get("is_paid", True),
         )
     except StructureError as e:

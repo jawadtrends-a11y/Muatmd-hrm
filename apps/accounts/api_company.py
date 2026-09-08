@@ -111,3 +111,80 @@ def company_settings(request):
         company.save(update_fields=changed + ["updated_at"])
 
     return Response(_serialize(company))
+
+
+def _my_company_ids(user):
+    """أرقام شركاته — توظيفه النشط، وما يبلغه نطاقه."""
+    from apps.employees.models import Employment, EmploymentStatus
+
+    m = getattr(user, "account_membership", None)
+    if m is None:
+        return None, set()
+    ids = set()
+    person = getattr(user, "person", None)
+    if person is not None:
+        ids = set(Employment.objects.filter(
+            person_id=person.id, status=EmploymentStatus.ACTIVE
+        ).values_list("company_id", flat=True))
+    # مالك الحساب ومن نطاقه على الحساب يرى شركاته كلّها
+    ids |= set(m.company_ids or [])
+    return m, ids
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_companies(request):
+    """
+    شركات المستخدم — ما له فيها توظيف نشط داخل حسابه.
+
+    ويظهر المبدّل لمن له أكثر من واحدة وحده: من له شركة واحدة لا
+    يزحم قائمته بخيار لا يفعل شيئًا.
+    """
+    m, ids = _my_company_ids(request.user)
+    if m is None:
+        return Response({"active_id": None, "companies": []})
+
+    qs = Company.objects.filter(id__in=ids, account_id=m.account_id,
+                                is_active=True).order_by("legal_name_ar")
+    return Response({
+        "active_id": m.active_company_id,
+        "companies": [{
+            "id": c.id, "code": c.code,
+            "name_ar": c.legal_name_ar,
+            "name_en": c.legal_name_en or c.legal_name_ar,
+        } for c in qs],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def switch_company(request):
+    """
+    تبديل الشركة النشطة — {"company_id": n}.
+
+    ولا يُقبل إلا ما هو في شركاته: المُدخل من المستخدم، وقبوله
+    بلا فحص يفتح شركة غيره.
+    """
+    m, allowed = _my_company_ids(request.user)
+    if m is None:
+        return Response({"detail": "لا عضوية"},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        cid = int(request.data.get("company_id"))
+    except (TypeError, ValueError):
+        return Response({"detail": "معرّف غير صحيح"},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # الشركة معطَّلة أو من حساب آخر لا تُقبل ولو كانت في نطاقه
+    if not Company.objects.filter(id=cid, account_id=m.account_id,
+                                  is_active=True).exists():
+        return Response({"detail": "الشركة غير متاحة لك"},
+                        status=status.HTTP_403_FORBIDDEN)
+    if cid not in allowed:
+        return Response({"detail": "الشركة غير متاحة لك"},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    m.active_company_id = cid
+    m.save(update_fields=["active_company"])
+    return Response({"switched": True, "active_id": cid})

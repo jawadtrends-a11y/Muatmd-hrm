@@ -106,12 +106,32 @@ def department_tree(company):
     return roots
 
 
+def _as_date(v):
+    """نصًّا كان أو كائنًا — يرجع date أو None."""
+    from datetime import date, datetime
+
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    return date.fromisoformat(str(v)[:10])
+
+
 @transaction.atomic
 def create_holiday(*, company, name_ar, start_date, end_date,
                    branch=None, is_paid=True, **extra):
     """
     عطلة تديرها الشركة بالكامل — لا تدخّل من المنصة.
     """
+    # التواريخ قد تصل نصوصًا من الـAPI: فتنكسر المقارنة هنا،
+    # ويبقى الكائن في الذاكرة نصًّا فيفشل احتساب days بعد الحفظ.
+    start_date = _as_date(start_date)
+    end_date = _as_date(end_date) or start_date
+
+    if start_date is None:
+        raise StructureError("تاريخ البداية مطلوب")
     if end_date < start_date:
         raise StructureError("تاريخ النهاية قبل تاريخ البداية")
 

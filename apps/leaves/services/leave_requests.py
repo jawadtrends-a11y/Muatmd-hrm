@@ -272,6 +272,39 @@ def _mark_attendance_days(*, employment, start, end, leave_type,
     return marked
 
 
+def leave_dates_in_range(employment, start, end):
+    """
+    تواريخ الإجازات المعتمدة والمطبَّقة في مدى — لمعالجة الحضور.
+
+    بدونها يُسجَّل من في إجازة سنوية **غائبًا** إن لم يبصم، فيُخصم
+    من راتبه أجر يوم هو إجازة مأذونة.
+
+    وتُستثنى أيام excluded: هي عطل وراحات مدّدت الإجازة ولم تُحتسب
+    منها، فلها حالتها لا حالة الإجازة.
+    """
+    out = set()
+    for r in Request.objects.filter(
+            employment=employment, request_type=RequestType.LEAVE,
+            status=RequestStatus.APPROVED):
+        if not r.payload.get("applied"):
+            continue
+        try:
+            r_start = date.fromisoformat(str(r.payload["start_date"]))
+            r_end = date.fromisoformat(str(r.payload["end_date"]))
+        except (KeyError, ValueError, TypeError):
+            continue
+        lo, hi = max(r_start, start), min(r_end, end)
+        if lo > hi:
+            continue
+        excluded = {str(x.get("date")) for x in r.payload.get("excluded", [])}
+        cur = lo
+        while cur <= hi:
+            if str(cur) not in excluded:
+                out.add(cur)
+            cur += timedelta(days=1)
+    return out
+
+
 def unpaid_leave_days_in_period(employment, year, month):
     """
     أيام الإجازة بلا أجر في شهر — لخصمها في المسير.

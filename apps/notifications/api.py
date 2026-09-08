@@ -78,25 +78,9 @@ def notifications_archive(request):
     has_more = len(rows) > size
     rows = rows[:size]
 
-    from apps.notifications.models_announcement import (
-        Announcement, EVENT_KEY)
-    ann_ids = [(n.payload or {}).get("announcement_id")
-               for n in rows if n.event_key == EVENT_KEY]
-    ann_ids = [i for i in ann_ids if i]
-    atts = {}
-    if ann_ids:
-        for a in Announcement.objects.filter(
-                id__in=ann_ids).prefetch_related("attachments__stored_file"):
-            atts[a.id] = [{
-                "id": x.stored_file_id,
-                "name": x.stored_file.original_name,
-                "size": x.stored_file.size_label,
-            } for x in a.attachments.all()]
-
     out = []
     for n in rows:
         p = n.payload or {}
-        aid = p.get("announcement_id")
         out.append({
             "id": n.id,
             "title": n.title,
@@ -106,7 +90,7 @@ def notifications_archive(request):
             "link_url": n.link_url,
             "is_read": n.read_at is not None,
             "created_at": n.created_at,
-            "attachments": atts.get(aid, []),
+            "attachments": p.get("attachment_files") or [],
         })
 
     return Response({
