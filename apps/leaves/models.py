@@ -276,6 +276,7 @@ class RequestType(models.TextChoices):
     REMOTE_WORK = "remote_work", _("عمل عن بُعد")
     BUSINESS_TRIP = "business_trip", _("رحلة عمل")
     PROFILE_UPDATE = "profile_update", _("تعديل بيانات")
+    ATTENDANCE_EXEMPTION = "attendance_exemption", _("إعفاء من البصمة")
 
 
 class RequestStatus(models.TextChoices):

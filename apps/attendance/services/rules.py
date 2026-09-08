@@ -46,7 +46,7 @@ def _combine(day: date, t: time, tz=None):
 
 
 def compute_day(*, work_date, punches, shift=None, is_holiday=False,
-                is_on_leave=False):
+                is_on_leave=False, is_exempt=False):
     """
     يحتسب سجل يوم واحد من بصماته.
 
@@ -60,6 +60,14 @@ def compute_day(*, work_date, punches, shift=None, is_holiday=False,
     if is_on_leave:
         return DayComputation(work_date, DayStatus.LEAVE, None, None,
                               0, 0, 0, 0, count, ["في إجازة"])
+    # الإجازة تسبقه: من في إجازة بلا أجر يبقى LEAVE فلا يُدفع له.
+    # والعطلة بعده: المعفيّ لا يُطالَب أصلًا فلا معنى لتمييزها.
+    if is_exempt:
+        return DayComputation(work_date, DayStatus.EXEMPT,
+                              punches[0] if punches else None,
+                              punches[-1] if punches else None,
+                              _worked_minutes(punches), 0, 0, 0, count,
+                              ["معفيّ من البصمة"])
     if is_holiday:
         return DayComputation(work_date, DayStatus.HOLIDAY, None, None,
                               0, 0, 0, 0, count, ["عطلة"])
@@ -149,14 +157,23 @@ def _worked_minutes(punches) -> int:
 
 
 def effective_shift(employment, work_date):
-    """فترة العمل السارية بتاريخ معيّن — لا بتاريخ اليوم."""
-    from apps.attendance.models import ShiftAssignment
+    """
+    فترة العمل السارية بتاريخ معيّن — لا بتاريخ اليوم.
+
+    ق-104: ومن لم تُسند له فترة يتبع **الافتراضية**. فلا موظف بلا
+    فترة عمل: بدونها يبقى يومه «خارج جدول العمل» بلا حساب، فلا
+    يُعرف حضوره من غيابه ولا تأخيره من انضباطه.
+    """
+    from apps.attendance.models import Shift, ShiftAssignment
     a = (ShiftAssignment.objects
          .filter(employment=employment, effective_from__lte=work_date)
          .filter(models_q_effective_to(work_date))
          .select_related("shift")
          .order_by("-effective_from").first())
-    return a.shift if a else None
+    if a:
+        return a.shift
+    return Shift.objects.filter(company_id=employment.company_id,
+                                is_default=True, is_active=True).first()
 
 
 def models_q_effective_to(work_date):

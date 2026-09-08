@@ -21,3 +21,10 @@ def escalate_overdue_task():
         with account_scope(acc_id):
             total += escalate_overdue().get("escalated", 0)
     return {"escalated": total}
+
+
+# ق-105: تذكير المديرين — في ملف مستقل، ويُستورد هنا لأن
+# autodiscover_tasks لا يبحث إلا في tasks.py
+from apps.leaves.tasks_reminders import (  # noqa: E402,F401
+    remind_pending_approvals,
+)

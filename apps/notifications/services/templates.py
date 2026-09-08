@@ -25,6 +25,14 @@ TEMPLATES = {
         "{{title}}",
         "{{body}}\n\n— {{company_name}}",
     ),
+    "approvals.end_of_shift_reminder": (
+        "لديك {{count}} طلبًا ينتظر قرارك",
+        "قبل نهاية دوامك: {{count}} طلبًا ما زال ينتظر اعتمادك أو رفضه.",
+        "You have {{count}} requests awaiting your decision",
+        "Before your shift ends: {{count}} requests still await your approval.",
+        "آپ کے {{count}} درخواستیں فیصلے کی منتظر ہیں",
+        "آپ کی شفٹ ختم ہونے سے پہلے: {{count}} درخواستیں منتظر ہیں۔",
+    ),
     "employee.hired": (
         "موظف جديد: {{employee_name}}",
         "انضم {{employee_name}} إلى {{company_name}} بتاريخ {{join_date}} بمسمى {{job_title}}.",

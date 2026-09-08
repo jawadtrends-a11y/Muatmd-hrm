@@ -45,6 +45,11 @@ class Shift(CompanyScopedModel):
         _("دوام مرن"), default=False,
         help_text=_("يُحتسب بإجمالي الساعات لا بوقت الحضور"))
     is_active = models.BooleanField(_("نشطة"), default=True)
+    # ق-104: لا موظف بلا فترة عمل — من لم تُسند له فترة يتبع
+    # الافتراضية، فلا يبقى يومه «خارج جدول العمل» بلا حساب.
+    is_default = models.BooleanField(
+        _("الفترة الافتراضية"), default=False,
+        help_text=_("يتبعها من لم تُسند له فترة — واحدة للشركة"))
 
     #: بصمة الجوال لهذه الفترة (ق-96).
     #:
@@ -147,6 +152,9 @@ class DayStatus(models.TextChoices):
     WEEKEND = "weekend", _("راحة أسبوعية")
     PARTIAL = "partial", _("حضور جزئي")
     NOT_SCHEDULED = "not_scheduled", _("خارج جدول العمل")
+    # ق-104: معفيّ من البصمة بقرار معتمد — المندوب الخارجي والمدير
+    # العام وغيرهما. لا يُعدّ غائبًا ولا يُسجَّل حضورًا كاذبًا.
+    EXEMPT = "exempt", _("معفيّ من البصمة")
 
 
 class AttendanceDay(CompanyScopedModel):
@@ -246,4 +254,10 @@ class AttendanceMonthlySummary(CompanyScopedModel):
 # مواقع العمل والبصمة بالنطاق (ق-62)
 from apps.attendance.models_sites import (  # noqa: E402,F401
     PunchDevice, PunchMethod, SiteAssignment, WorkSite,
+)
+
+
+# الإعفاء من البصمة (ق-104) — سجلٌّ بمدّة لا حقل في الموظف
+from apps.attendance.models_exemption import (  # noqa: E402,F401
+    AttendanceExemption,
 )

@@ -37,6 +37,15 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),
         "options": {"queue": "maintenance"},
     },
+    # تذكير المديرين بما ينتظر قرارهم (ق-105).
+    #
+    # كل ربع ساعة: التذكير قبل نهاية فترة كل مدير بساعتين، وهي
+    # تختلف باختلاف فتراتهم — فالوقت الثابت للجميع يخطئ أكثرهم.
+    "remind-pending-approvals": {
+        "task": "leaves.remind_pending_approvals",
+        "schedule": crontab(minute="*/15"),
+        "options": {"queue": "realtime"},
+    },
     # لقطة الموظفين — أساس الفوترة بالذروة (ق-49)
     # بلا هذه اللقطة تصير الفوترة على عدد يوم الفاتورة وهو
     # قابل للتحايل بإيقاف موظفين قبلها وإعادتهم بعدها

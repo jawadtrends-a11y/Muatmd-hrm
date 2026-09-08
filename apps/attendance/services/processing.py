@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.attendance.models import (
@@ -107,6 +107,14 @@ def process_employment_days(*, employment, start_date, end_date,
     from apps.leaves.services.leave_requests import leave_dates_in_range
     on_leave = leave_dates_in_range(employment, start_date, end_date)
 
+    # ق-104: الإعفاء من البصمة — المندوب الخارجي والمدير العام
+    # لا يُطالَبون ببصمة، فلا يُعدّون غائبين ولا يُخصم من أجرهم.
+    from apps.attendance.models_exemption import AttendanceExemption
+    exemptions = list(AttendanceExemption.objects.filter(
+        employment=employment, is_active=True, start_date__lte=end_date
+    ).filter(models.Q(end_date__isnull=True)
+             | models.Q(end_date__gte=start_date)))
+
     for day in _date_range(start_date, end_date):
         current = existing.get(day)
         if current and current.is_manually_adjusted and not force:
@@ -116,7 +124,8 @@ def process_employment_days(*, employment, start_date, end_date,
         shift = effective_shift(employment, day)
         comp = compute_day(
             work_date=day, punches=by_day.get(day, []), shift=shift,
-            is_holiday=day in holidays, is_on_leave=day in on_leave)
+            is_holiday=day in holidays, is_on_leave=day in on_leave,
+            is_exempt=any(x.covers(day) for x in exemptions))
 
         defaults = {
             "account": employment.account,

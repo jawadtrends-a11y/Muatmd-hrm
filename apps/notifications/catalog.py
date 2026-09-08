@@ -51,6 +51,10 @@ EVENTS = [
        "تجاوزك طلب متأخر", ("in_app",)),
     _e("request.escalated_to", "requests",
        "وصلك طلب بالتصعيد", ("in_app",)),
+    # ق-105: تذكير قبل نهاية فترة المدير بساعتين — فمن غادر
+    # ولم يقرّر يعطّل موظفًا ينتظر.
+    _e("approvals.end_of_shift_reminder", "requests",
+       "تذكير بطلبات تنتظر قرارك", ("in_app", "email")),
     _e("request.sla_breached", "requests", "تأخر اعتماد عن المدة المحددة",
        ("in_app", "email")),
 

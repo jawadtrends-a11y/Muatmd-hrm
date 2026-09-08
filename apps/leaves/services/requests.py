@@ -76,6 +76,14 @@ SPECS = {
         hint_ar="خروج مؤقت خلال ساعات الدوام",
         hint_en="Temporary leave during working hours",
     ),
+    RequestType.ATTENDANCE_EXEMPTION: RequestSpec(
+        code="attendance_exemption", name_ar="طلب إعفاء من البصمة",
+        name_en="Attendance exemption", icon="clock",
+        required_fields=("start_date", "reason"),
+        optional_fields=("end_date", "note"),
+        hint_ar="اترك تاريخ النهاية فارغًا إن كان الإعفاء غير محدّد المدّة",
+        hint_en="Leave the end date empty for an open-ended exemption",
+    ),
     RequestType.REMOTE_WORK: RequestSpec(
         code="remote_work", name_ar="طلب عمل عن بُعد", name_en="Remote work request", icon="home",
         required_fields=("start_date", "days", "reason"),
@@ -564,6 +572,43 @@ def _daily_wage(employment):
     return (st.gross_monthly or Decimal("0")) / Decimal("30")
 
 
+def _effect_attendance_exemption(req):
+    """
+    ينشئ سجلّ الإعفاء ساريًا (ق-104).
+
+    ومن أُعفي لا يُطالَب ببصمة ولا يُعدّ غائبًا — فلا يُخصم من
+    أجره يوم لم يكن مطالَبًا فيه بشيء.
+
+    والإعفاء السابق الساري يُلغى: فلا إعفاءان لشخص واحد، والمدّة
+    الجديدة هي المعتبرة.
+    """
+    from django.utils import timezone
+
+    from apps.attendance.models_exemption import AttendanceExemption
+
+    p = req.payload
+    start = date.fromisoformat(str(p["start_date"]))
+    end = (date.fromisoformat(str(p["end_date"]))
+           if p.get("end_date") else None)
+    if end and end < start:
+        raise RequestError("تاريخ النهاية قبل تاريخ البداية")
+
+    AttendanceExemption.objects.filter(
+        employment=req.employment, is_active=True
+    ).update(is_active=False, revoked_at=timezone.now())
+
+    ex = AttendanceExemption.objects.create(
+        account_id=req.account_id, company_id=req.company_id,
+        employment=req.employment,
+        start_date=start, end_date=end,
+        reason=str(p.get("reason") or "")[:255],
+        request=req,
+        granted_by_person_id=getattr(req.employment, "person_id", None),
+    )
+    return {"exemption_id": ex.id, "start_date": str(start),
+            "end_date": str(end) if end else "غير محدّدة"}
+
+
 def _effect_remote_work(req):
     """يسجّل أيام العمل عن بُعد حضورًا كاملًا بلا بصمة."""
     from apps.attendance.models import AttendanceDay, DayStatus
@@ -937,6 +982,7 @@ EFFECTS = {
     RequestType.OVERTIME: _effect_overtime,
     RequestType.CERTIFICATE: _effect_certificate,
     RequestType.RESIGNATION: _effect_resignation,
+    RequestType.ATTENDANCE_EXEMPTION: _effect_attendance_exemption,
     # التذكرة ورحلة العمل: أثرهما مالي بسياسة المنشأة — يُصرفان
     # يدويًا أو بالمسير حسب اختيار الشركة (ق-54)
 }

@@ -228,6 +228,12 @@ DEFAULT_CHAINS = [
     # يتجاوز المدير المباشر، فتصحيح رقم جوال ليس قرارًا إداريًا
     (RequestType.PROFILE_UPDATE, "تعديل بيانات الموظف", {}, 0,
      [(1, ApproverType.ROLE, "hr_staff", True, 48)]),
+    # ق-104: الإعفاء من البصمة — مدير الإدارة ثم موظف الموارد.
+    # فمن أسندها لا يعتمدها: مدير الإدارة إن قدّمها تُتخطّى درجته
+    # (ق-35) وتمضي لموظف الموارد، فيبقى معتمدٌ واحد على الأقل.
+    (RequestType.ATTENDANCE_EXEMPTION, "إعفاء من البصمة", {}, 0,
+     [(1, ApproverType.DEPARTMENT_HEAD, "", True, 48),
+      (2, ApproverType.ROLE, "hr_staff", True, 48)]),
 ]
 
 
