@@ -204,13 +204,29 @@ def start_checkout(request):
     if cycle not in (BillingCycle.MONTHLY, BillingCycle.ANNUAL):
         return Response({"detail": "دورة غير صحيحة"}, status=400)
 
+    # ق-108: العدد الذي أدخله العميل هو المعتبر — يُثبَّت في
+    # الاشتراك ولا يتغيّر بتغيّر موظفيه. ومن زاد بعده يدفع فرقه
+    # بالأيام المتبقّية.
+    try:
+        employees = int(request.data.get("employees") or 0)
+    except (TypeError, ValueError):
+        employees = 0
+    if employees < 1:
+        from apps.employees.models import Employment, EmploymentStatus
+        employees = Employment.objects.filter(
+            account_id=sub.account_id,
+            status=EmploymentStatus.ACTIVE).count() or 1
+
     sub.plan = plan
     sub.cycle = cycle
-    sub.save(update_fields=["plan", "cycle", "updated_at"])
+    sub.subscribed_employees = employees
+    sub.save(update_fields=["plan", "cycle", "subscribed_employees",
+                            "updated_at"])
 
     try:
         invoice, disc = billing.create_invoice(
-            subscription=sub, coupon_code=request.data.get("coupon_code"))
+            subscription=sub, headcount=employees,
+            coupon_code=request.data.get("coupon_code"))
         billing.issue_invoice(invoice)
     except billing.BillingError as e:
         return Response({"detail": str(e)}, status=400)
@@ -218,6 +234,7 @@ def start_checkout(request):
     return Response({
         "invoice_id": invoice.id,
         "invoice_no": invoice.invoice_no,
+        "employees": employees,
         "before_vat": str(invoice.total_before_vat),
         "vat_amount": str(invoice.vat_amount),
         "total": str(invoice.total),

@@ -83,6 +83,7 @@ const T: Dict = {
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   noAccess: { ar: "لا صلاحية لهذا القسم", en: "No access to this section" },
   noSub: { ar: "لا اشتراك لهذا الحساب بعد", en: "No subscription yet" },
+  browsePlans: { ar: "عرض الباقات والاشتراك", en: "View plans" },
   noSubHint: {
     ar: "يُفعّله مدير المنصة — راجعه لتفعيل اشتراك منشأتك",
     en: "Activated by the platform administrator",
@@ -629,6 +630,10 @@ function SubscriptionPanel({
         <div style={{ fontSize: ".86rem", marginTop: 6 }}>
           {L("noSubHint")}
         </div>
+        <Link href="/subscribe" className="btn btn-primary"
+              style={{ marginTop: 16 }}>
+          {L("browsePlans")}
+        </Link>
       </div>
     );
   }

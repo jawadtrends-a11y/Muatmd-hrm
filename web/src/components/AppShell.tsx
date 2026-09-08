@@ -51,6 +51,7 @@ const T: Dict = {
   announcements: { ar: "الإعلانات", en: "Announcements" },
   myNotifications: { ar: "إشعاراتي", en: "My notifications" },
   myProfile: { ar: "ملفي", en: "My profile" },
+  plansLink: { ar: "الباقات", en: "Plans" },
   switchCompany: { ar: "الشركة", en: "Company" },
   switching: { ar: "جارٍ التبديل…", en: "Switching…" },
   myAccount: { ar: "حسابي", en: "My Account" },
@@ -699,6 +700,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <IcUser size={18} />
                   {L("myProfile")}
+                </Link>
+                )}
+                {perms.has("account.view") && (
+                <Link
+                  href="/subscribe"
+                  onClick={() => setAccountOpen(false)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "9px 12px", borderRadius: "var(--radius-sm)",
+                    color: "var(--ink-2)",
+                  }}
+                >
+                  <IcWallet size={18} />
+                  {L("plansLink")}
                 </Link>
                 )}
                 {/* بيانات مالية عن الحساب: مالك الحساب

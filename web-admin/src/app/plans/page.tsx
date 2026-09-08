@@ -15,6 +15,7 @@ type Plan = {
   id: number; code: string; name_ar: string; name_en: string;
   tier_order: number; base_fee_monthly: string;
   min_billable_employees: number; max_employees: number | null;
+  setup_fee: string;
   trial_days: number; is_public: boolean; is_active: boolean;
   tiers: Tier[]; features: Record<string, string>;
 };
@@ -160,26 +161,33 @@ export default function PlansPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              {p.tiers.map((t) => (
-                <div key={t.id ?? t.from_employees} className="spread"
-                     style={{ fontSize: ".85rem", padding: "3px 0" }}>
-                  <span className="muted">
-                    {t.from_employees}–{t.to_employees ?? "∞"} موظفًا
-                  </span>
-                  <span>
-                    <b>{t.monthly}</b> شهريًّا · {t.yearly} سنويًّا
-                  </span>
+              {p.tiers[0] ? (
+                <>
+                  <div className="spread" style={{ fontSize: ".9rem" }}>
+                    <span className="muted">للموظف شهريًّا</span>
+                    <b>{p.tiers[0].monthly}</b>
+                  </div>
+                  <div className="spread" style={{ fontSize: ".9rem" }}>
+                    <span className="muted">للموظف سنويًّا</span>
+                    <b>{p.tiers[0].yearly}</b>
+                  </div>
+                  {Number(p.setup_fee) > 0 && (
+                    <div className="spread" style={{ fontSize: ".9rem" }}>
+                      <span className="muted">إعداد أوّليّ</span>
+                      <b>{p.setup_fee}</b>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="muted" style={{ fontSize: ".85rem" }}>
+                  لا سعر — أضفه
                 </div>
-              ))}
-              {p.tiers.length === 0 && (
-                <div className="muted" style={{ fontSize: ".85rem" }}>لا أسعار — أضفها</div>
               )}
             </div>
 
             <div className="muted" style={{ fontSize: ".85rem", marginTop: 10 }}>
               {Object.keys(p.features).length} ميزة ·
-              تجربة {p.trial_days} يومًا ·
-              حد أدنى {p.min_billable_employees}
+              حد أدنى {p.min_billable_employees} موظفًا
             </div>
 
             <div className="row" style={{ gap: 6, marginTop: 12 }}>
@@ -215,11 +223,6 @@ export default function PlansPage() {
                        onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} />
               </label>
               <label className="field">
-                <span className="muted" style={{ fontSize: ".85rem" }}>أيام التجربة</span>
-                <input className="input" type="number" value={edit.trial_days}
-                       onChange={(e) => setEdit({ ...edit, trial_days: +e.target.value })} />
-              </label>
-              <label className="field">
                 <span className="muted" style={{ fontSize: ".85rem" }}>أدنى عدد محتسَب</span>
                 <input className="input" type="number"
                        value={edit.min_billable_employees}
@@ -227,34 +230,49 @@ export default function PlansPage() {
               </label>
             </div>
 
-            <h4 style={{ marginTop: 18 }}>الأسعار لكل موظف</h4>
-            {edit.tiers.map((t, i) => (
-              <div key={i} className="row" style={{ gap: 8, marginTop: 8,
-                                                    flexWrap: "wrap" }}>
-                <input className="input" style={{ width: 90 }} type="number"
-                       value={t.from_employees}
-                       onChange={(e) => setTier(i, { from_employees: +e.target.value })} />
-                <span className="muted">إلى</span>
-                <input className="input" style={{ width: 90 }} type="number"
-                       placeholder="∞"
-                       value={t.to_employees ?? ""}
-                       onChange={(e) => setTier(i, {
-                         to_employees: e.target.value ? +e.target.value : null })} />
-                <input className="input" style={{ width: 110 }}
-                       value={t.monthly} placeholder="شهريًّا"
-                       onChange={(e) => setTier(i, { monthly: e.target.value })} />
-                <input className="input" style={{ width: 110 }}
-                       value={t.yearly} placeholder="سنويًّا"
-                       onChange={(e) => setTier(i, { yearly: e.target.value })} />
-                <button className="btn btn-sm btn-danger"
-                        onClick={() => setEdit({ ...edit,
-                          tiers: edit.tiers.filter((_, j) => j !== i) })}>
-                  ×
-                </button>
-              </div>
-            ))}
-            <button className="btn btn-sm" style={{ marginTop: 8 }}
-                    onClick={addTier}>+ شريحة</button>
+            <h4 style={{ marginTop: 18 }}>السعر لكل موظف</h4>
+            <div className="muted" style={{ fontSize: ".82rem" }}>
+              سعر واحد مهما كان العدد — غير شامل الضريبة
+            </div>
+            <div className="row" style={{ gap: 10, marginTop: 10,
+                                          flexWrap: "wrap" }}>
+              <label className="field">
+                <span className="muted" style={{ fontSize: ".85rem" }}>
+                  شهريًّا
+                </span>
+                <input className="input" style={{ width: 120 }}
+                       value={edit.tiers[0]?.monthly ?? "0"}
+                       onChange={(e) => setEdit({ ...edit, tiers: [{
+                         from_employees: 1, to_employees: null,
+                         monthly: e.target.value,
+                         yearly: edit.tiers[0]?.yearly ?? "0",
+                       }] })} />
+              </label>
+              <label className="field">
+                <span className="muted" style={{ fontSize: ".85rem" }}>
+                  سنويًّا
+                </span>
+                <input className="input" style={{ width: 120 }}
+                       value={edit.tiers[0]?.yearly ?? "0"}
+                       onChange={(e) => setEdit({ ...edit, tiers: [{
+                         from_employees: 1, to_employees: null,
+                         monthly: edit.tiers[0]?.monthly ?? "0",
+                         yearly: e.target.value,
+                       }] })} />
+              </label>
+              <label className="field">
+                <span className="muted" style={{ fontSize: ".85rem" }}>
+                  رسم الإعداد الأوّليّ
+                </span>
+                <input className="input" style={{ width: 120 }}
+                       value={edit.setup_fee}
+                       onChange={(e) => setEdit({ ...edit,
+                                                  setup_fee: e.target.value })} />
+              </label>
+            </div>
+            <div className="muted" style={{ fontSize: ".8rem", marginTop: 6 }}>
+              رسم الإعداد اختياريّ للعميل، ويُدفع مرّة واحدة — ولا يدخل التجديد
+            </div>
 
             <h4 style={{ marginTop: 18 }}>المزايا</h4>
             <div style={{ display: "grid", gap: 4,

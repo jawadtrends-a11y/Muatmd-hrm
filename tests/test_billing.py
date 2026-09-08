@@ -18,7 +18,7 @@ from apps.accounts.services.billing_v2 import (
     BillingError, account_peak_headcount, create_invoice, effective_end,
     evaluate_state, extend_grace, activate_manually, is_writable,
     issue_invoice, mark_paid, period_end_for, renewal_alert_due,
-    resolve_discount, start_trial,
+    ensure_trial, resolve_discount, start_trial,
 )
 from apps.accounts.services.provisioning import provision_account
 from apps.core.tenancy.context import account_scope
@@ -39,7 +39,7 @@ def env(db):
 
 
 def _sub(env, **kw):
-    sub = start_trial(env["acc"])
+    sub = ensure_trial(env["acc"])
     for k, v in kw.items():
         setattr(sub, k, v)
     if kw:
@@ -53,7 +53,7 @@ def _sub(env, **kw):
 def test_trial_starts_with_limits(env):
     """سبعة أيام وخمسة موظفين."""
     with account_scope(env["account_id"]):
-        sub = start_trial(env["acc"])
+        sub = ensure_trial(env["acc"])
         assert sub.state == SubscriptionState.TRIAL
         assert sub.employee_limit == 5
         assert (sub.trial_ends_at - sub.trial_started_at).days == 7
@@ -63,7 +63,7 @@ def test_trial_starts_with_limits(env):
 @pytest.mark.django_db(transaction=True)
 def test_second_trial_blocked(env):
     with account_scope(env["account_id"]):
-        start_trial(env["acc"])
+        ensure_trial(env["acc"])
         with pytest.raises(BillingError):
             start_trial(env["acc"])
 
@@ -436,4 +436,8 @@ def test_invoices_isolated(env, rls_enforced_late):
     rls_enforced_late()
     with account_scope(other.account_id):
         assert Invoice.objects.count() == 0
-        assert AccountSubscription.objects.count() == 0
+        # ق-108: لكل حساب تجربته من التزويد — فالمتوقَّع اشتراكه هو
+        # وحده، لا اشتراك الحساب الآخر. والعزل هو ما يُحرَس هنا.
+        subs = list(AccountSubscription.objects.all())
+        assert len(subs) == 1
+        assert subs[0].account_id == other.account_id

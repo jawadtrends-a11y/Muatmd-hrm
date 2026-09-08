@@ -45,6 +45,17 @@ def start_trial(account):
         trial_ends_at=today + timedelta(days=AccountSubscription.TRIAL_DAYS))
 
 
+def ensure_trial(account):
+    """
+    اشتراك الحساب — يُنشئ تجربةً إن لم يكن له اشتراك.
+
+    فالتزويد يبدأ التجربة تلقائيًّا (ق-108)، ومن يريد الاشتراك
+    القائم يستعمل هذه لا start_trial التي تمنع التكرار عمدًا.
+    """
+    sub = AccountSubscription.objects.filter(account=account).first()
+    return sub if sub is not None else start_trial(account)
+
+
 # ══════════ الخصومات (ق-47) ══════════
 
 @dataclass

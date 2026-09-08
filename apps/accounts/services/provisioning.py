@@ -59,6 +59,17 @@ def provision_account(
 
     with account_scope(account_id):
         provision_roles_for_account(account_id)
+
+        # ق-108: التجربة تبدأ مع الحساب — سبعة أيام. وبدونها يبقى
+        # الحساب بلا اشتراك، فلا يجرّب ولا يستطيع الاشتراك (لأن
+        # start_checkout يشترط اشتراكًا قائمًا).
+        from apps.accounts.models import Account
+        from apps.accounts.services import billing_v2 as _billing
+        try:
+            _billing.start_trial(Account.objects.get(id=account_id))
+        except _billing.BillingError:
+            pass          # له اشتراك أصلًا — لا نكرّره
+
         comp = Company.objects.get(id=company_id)
         # مكوّنات الأجر وإعدادات الرواتب — الشركة تعدّلها بحرية (ق-9)
         provision_default_components(comp)

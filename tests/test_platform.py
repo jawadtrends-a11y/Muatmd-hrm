@@ -231,9 +231,9 @@ def test_write_requires_confirmation(env):
 
 @pytest.mark.django_db(transaction=True)
 def test_write_proceeds_with_confirmation(env):
-    from apps.accounts.services.billing_v2 import start_trial
+    from apps.accounts.services.billing_v2 import ensure_trial
     with account_scope(env["account_id"]):
-        start_trial(env["account"])
+        ensure_trial(env["account"])
 
     c = _login("p_owner")
     until = date.today() + timedelta(days=30)
