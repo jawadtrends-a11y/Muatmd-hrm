@@ -17,6 +17,11 @@ const T: Dict = {
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
   company: { ar: "بيانات المنشأة", en: "Company details" },
+  holidays: { ar: "العطل الرسمية", en: "Public holidays" },
+  holidaysHint: {
+    ar: "عطل الشركة — لا تُخصم من الرصيد ولا من الأجر",
+    en: "Company holidays — not deducted from balance or pay",
+  },
   companyHint: {
     ar: "السجل التجاري والأرقام النظامية وبريد التواصل",
     en: "Registration, statutory numbers and contact email",
@@ -327,6 +332,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("company")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("companyHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("org.view") && (
+        <Link href="/settings/holidays" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("holidays")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("holidaysHint")}
           </span>
         </Link>
         )}

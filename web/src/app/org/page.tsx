@@ -25,7 +25,6 @@ const T: Dict = {
   branches: { ar: "الفروع", en: "Branches" },
   departments: { ar: "الأقسام", en: "Departments" },
   jobTitles: { ar: "المسميات الوظيفية", en: "Job Titles" },
-  holidays: { ar: "العطل الرسمية", en: "Holidays" },
   fromDate: { ar: "من تاريخ", en: "From" },
   toDate: { ar: "إلى تاريخ", en: "To" },
   code: { ar: "الرمز", en: "Code" },
@@ -66,7 +65,7 @@ const T: Dict = {
   },
 };
 
-const TABS = ["branches", "departments", "jobTitles", "holidays"] as const;
+const TABS = ["branches", "departments", "jobTitles"] as const;
 type Tab = (typeof TABS)[number];
 
 type Branch = {
@@ -86,10 +85,6 @@ type JobTitle = {
   is_saudization_reserved: boolean; is_active: boolean;
 };
 
-type Holiday = {
-  id: number; name_ar: string; name_en?: string;
-  start_date: string; end_date: string; days: number;
-};
 
 
 /* ══ حقل نموذج — خارج المكوّن الرئيسي ══ */
@@ -295,7 +290,6 @@ export default function OrgPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [depts, setDepts] = useState<Department[]>([]);
   const [titles, setTitles] = useState<JobTitle[]>([]);
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
 
   const [busy, setBusy] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -308,19 +302,17 @@ export default function OrgPage() {
 
   const load = useCallback(async () => {
     setBusy(true);
-    const [b, d, j, h] = await Promise.all([
+    const [b, d, j] = await Promise.all([
       apiGet<Branch[]>("/org/branches/").catch((e: ApiError) => {
         if (e.isForbidden) setDenied(true);
         return [] as Branch[];
       }),
       apiGet<Department[]>("/org/departments/").catch(() => [] as Department[]),
       apiGet<JobTitle[]>("/org/job-titles/").catch(() => [] as JobTitle[]),
-      apiGet<Holiday[]>("/org/holidays/").catch(() => [] as Holiday[]),
     ]);
     setBranches(b);
     setDepts(d);
     setTitles(j);
-    setHolidays(h);
     setBusy(false);
   }, []);
 
@@ -336,7 +328,6 @@ export default function OrgPage() {
     branches: "/org/branches/",
     departments: "/org/departments/",
     jobTitles: "/org/job-titles/",
-    holidays: "/org/holidays/",
   };
 
   async function remove(row: any) {
@@ -412,16 +403,6 @@ export default function OrgPage() {
       { key: "mol_occupation_code", label: L("molCode") },
       { key: "is_saudization_reserved", label: L("saudiOnly"), kind: "bool" },
     ],
-    holidays: [
-      { key: "name_ar", label: L("nameAr"), required: true },
-      // ق-92: الاسمان معًا — من يعرض بالإنجليزية يجد نصف الشاشة
-      // عربيًّا إن نقص المقابل
-      { key: "name_en", label: L("nameEn"), required: true },
-      // من تاريخ إلى تاريخ لا تاريخ وعدد أيام: المستخدم يرى المدى
-      // كاملًا ولا يحسبه في رأسه.
-      { key: "start_date", label: L("fromDate"), kind: "date", required: true },
-      { key: "end_date", label: L("toDate"), kind: "date", required: true },
-    ],
   };
 
   const badge = (on: boolean) => (
@@ -477,23 +458,12 @@ export default function OrgPage() {
           </span>
         ) },
     ],
-    holidays: [
-      { key: "name_ar", label: L("nameAr"), width: 260,
-   render: nameCell },
-      { key: "start_date", label: L("fromDate"), width: 130,
-        render: (r) => <span className="num">{String(r.start_date)}</span> },
-      { key: "end_date", label: L("toDate"), width: 130,
-        render: (r) => <span className="num">{String(r.end_date)}</span> },
-      { key: "days", label: L("days"), width: 90,
-        render: (r) => <span className="num">{String(r.days)}</span> },
-    ],
   };
 
   const DATA: Record<Tab, Record<string, unknown>[]> = {
     branches: branches as unknown as Record<string, unknown>[],
     departments: depts as unknown as Record<string, unknown>[],
     jobTitles: titles as unknown as Record<string, unknown>[],
-    holidays: holidays as unknown as Record<string, unknown>[],
   };
 
   const HINTS: Partial<Record<Tab, string>> = {

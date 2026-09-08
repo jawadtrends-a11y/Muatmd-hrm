@@ -309,7 +309,7 @@ def _org_detail(request, model, obj_id, used_by=None, guard=None):
                                  "code": "has_children"}, status=409)
 
         count = used_by(obj) if used_by else 0
-        if count:
+        if count and hasattr(obj, "is_active"):
             obj.is_active = False
             obj.save(update_fields=["is_active"])
             return Response({
@@ -326,16 +326,36 @@ def _org_detail(request, model, obj_id, used_by=None, guard=None):
               "mol_occupation_code"):
         if f in request.data and hasattr(obj, f):
             setattr(obj, f, request.data[f] or "")
-    if "is_active" in request.data:
+
+    # التواريخ تُعدَّل أيضًا — بدونها تُنشأ العطلة ولا يُصحَّح
+    # تاريخها أبدًا، والتعديل ينجح ظاهرًا ولا يغيّر شيئًا.
+    from datetime import date as _date
+    for f in ("start_date", "end_date"):
+        if f in request.data and hasattr(obj, f) and request.data[f]:
+            setattr(obj, f, _date.fromisoformat(str(request.data[f])[:10]))
+    if "is_paid" in request.data and hasattr(obj, "is_paid"):
+        obj.is_paid = bool(request.data["is_paid"])
+    if (hasattr(obj, "start_date") and hasattr(obj, "end_date")
+            and obj.end_date < obj.start_date):
+        return Response({"detail": "تاريخ النهاية قبل تاريخ البداية"},
+                        status=400)
+
+    # is_active ليس في كل كيان — العطلة تُحذف ولا تُعطَّل
+    if "is_active" in request.data and hasattr(obj, "is_active"):
         obj.is_active = bool(request.data["is_active"])
     obj.save()
 
-    return Response({
+    out = {
         "id": obj.id,
         "name_ar": obj.name_ar,
         "name_en": getattr(obj, "name_en", ""),
-        "is_active": obj.is_active,
-    })
+        "is_active": getattr(obj, "is_active", True),
+    }
+    if hasattr(obj, "start_date"):
+        out["start_date"] = str(obj.start_date)
+        out["end_date"] = str(obj.end_date)
+        out["days"] = obj.days
+    return Response(out)
 
 
 @api_view(["PUT", "DELETE"])

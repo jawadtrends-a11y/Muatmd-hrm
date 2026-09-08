@@ -395,6 +395,44 @@ def _page_params(request, default_size=20, max_size=200):
     return page, max(1, min(size, max_size))
 
 
+_CAL_LABEL = {
+    "holiday": ("عطلة", "Holiday"),
+    "weekend": ("يوم راحة", "Weekend"),
+    "leave": ("إجازة", "On leave"),
+    "no_record": ("لا سجل", "No record"),
+}
+
+
+def _calendar_status(day, company_id, employments):
+    """
+    حالة اليوم لمن لا سجلّ حضور له — تُستنتج من التقويم.
+
+    يوم العطلة أو الراحة أو الإجازة معروف قبل أي بصمة، وعرضه
+    «لا سجل» يُخفي الحقيقة ويُقلق المدير بلا سبب.
+    """
+    from apps.attendance.services.rules import effective_shift
+    from apps.leaves.services.leave_requests import leave_dates_in_range
+    from apps.organization.models import Holiday
+
+    if Holiday.objects.filter(company_id=company_id,
+                              start_date__lte=day,
+                              end_date__gte=day).exists():
+        return {e.id: "holiday" for e in employments}
+
+    out = {}
+    weekday = (day.weekday() + 1) % 7          # الأحد = 0
+    for e in employments:
+        if leave_dates_in_range(e, day, day):
+            out[e.id] = "leave"
+            continue
+        shift = effective_shift(e, day)
+        working = (set(shift.working_days) if shift and shift.working_days
+                   else {0, 1, 2, 3, 4})
+        if weekday not in working:
+            out[e.id] = "weekend"
+    return out
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def daily_board(request):
@@ -450,17 +488,23 @@ def daily_board(request):
     if no_record > 0:
         counts["no_record"] = no_record
 
+    page_emps = list(employments[(page - 1) * page_size: page * page_size])
+    cal = _calendar_status(day, company_id, page_emps)
+
     rows = []
-    for emp in employments[(page - 1) * page_size: page * page_size]:
+    for emp in page_emps:
         d = days.get(emp.id)
-        status = d.status if d else "no_record"
+        status = d.status if d else cal.get(emp.id, "no_record")
         rows.append({
             "employment_id": emp.id,
             "employee_no": emp.employee_no,
             "name_ar": emp.person.name_for(request_locale(request)),
             "department": emp.department.name_ar if emp.department else "",
             "status": status,
-            "status_label": _day_status(d, request_locale(request)),
+            "status_label": (_day_status(d, request_locale(request))
+                             if d else _CAL_LABEL.get(
+                                 status, _CAL_LABEL["no_record"])[
+                                     1 if request_locale(request) == "en" else 0]),
             "first_in": (timezone.localtime(d.first_in).strftime("%H:%M")
                          if d and d.first_in else ""),
             "last_out": (timezone.localtime(d.last_out).strftime("%H:%M")
