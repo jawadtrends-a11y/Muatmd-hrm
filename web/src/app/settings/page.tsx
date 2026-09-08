@@ -18,6 +18,11 @@ const T: Dict = {
   users: { ar: "المستخدمون", en: "Users" },
   company: { ar: "بيانات المنشأة", en: "Company details" },
   holidays: { ar: "العطل الرسمية", en: "Public holidays" },
+  exemptions: { ar: "الإعفاء من البصمة", en: "Attendance exemptions" },
+  exemptionsHint: {
+    ar: "من لا يُطالَب ببصمة ولا يُعدّ غائبًا",
+    en: "Employees not required to punch",
+  },
   holidaysHint: {
     ar: "عطل الشركة — لا تُخصم من الرصيد ولا من الأجر",
     en: "Company holidays — not deducted from balance or pay",
@@ -332,6 +337,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("company")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("companyHint")}
+          </span>
+        </Link>
+        )}
+        {perms.has("attendance.view") && (
+        <Link href="/settings/exemptions" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("exemptions")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("exemptionsHint")}
           </span>
         </Link>
         )}

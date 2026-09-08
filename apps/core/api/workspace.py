@@ -42,6 +42,19 @@ def _allowed(permission, perms):
     return permission is None or permission in perms
 
 
+def _active_employment_id(person, company):
+    """توظيفه النشط في الشركة النشطة — أو أيّ نشط له."""
+    from apps.employees.models import Employment, EmploymentStatus
+
+    qs = Employment.objects.filter(person=person,
+                                   status=EmploymentStatus.ACTIVE)
+    if company is not None:
+        e = qs.filter(company=company).values_list("id", flat=True).first()
+        if e:
+            return e
+    return qs.values_list("id", flat=True).first()
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def workspace(request):
@@ -67,6 +80,9 @@ def workspace(request):
             "display_name": person.display_name,
             "first_name": person.first_name_ar or person.display_name,
             "preferred_locale": getattr(person, "preferred_locale", None),
+            # رقم توظيفه النشط — به يفتح ملفّه من قائمة حسابه.
+            # وبدونه لا يعرف الموظف رابط ملفّه هو.
+            "employment_id": _active_employment_id(person, active),
         } if (person := getattr(user, "person", None)) else None),
         "account": {
             "id": account.id,

@@ -85,6 +85,7 @@ type Shift = {
   allow_mobile_punch?: boolean | null;
   is_flexible: boolean;
   is_active: boolean;
+  is_default?: boolean;
 };
 
 export default function ShiftsPage() {
@@ -415,6 +416,12 @@ export default function ShiftsPage() {
                       <span className="num">{s.grace_in_minutes}</span>
                     </td>
                     <td>
+                      {s.is_default && (
+                        <span className="badge badge-teal"
+                              style={{ marginInlineEnd: 6 }}>
+                          {L("isDefault", "الفترة الافتراضية")}
+                        </span>
+                      )}
                       <span className={s.is_active
                         ? "badge badge-ok" : "badge"}>
                         {s.is_active ? L("active") : L("inactive")}

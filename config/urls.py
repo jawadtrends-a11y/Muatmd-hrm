@@ -12,6 +12,7 @@ from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
+from apps.attendance import api_exemptions as exemptions_api
 from apps.payroll import api_outputs as outputs_api
 from apps.attendance import api_ingest as ingest_api
 from apps.employees import api_assets as assets_api
@@ -94,6 +95,11 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/job-changes/", employees_api.job_changes, name="job-changes"),
     path("api/job-changes/<int:change_id>/decide/", employees_api.decide_job_change, name="job-change-decide"),
     path("api/me/job-changes/", employees_api.my_job_changes, name="my-job-changes"),
+    # ق-104: الإعفاءات من البصمة — عرض وإلغاء، والإنشاء بطلب معتمد
+    path("api/attendance/exemptions/", exemptions_api.exemptions,
+         name="exemptions"),
+    path("api/attendance/exemptions/<int:exemption_id>/revoke/",
+         exemptions_api.revoke_exemption, name="exemption-revoke"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
     # أجهزة البصمة

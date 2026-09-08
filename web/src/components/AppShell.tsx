@@ -50,6 +50,7 @@ const T: Dict = {
   myLetters: { ar: "خطاباتي", en: "My Letters" },
   announcements: { ar: "الإعلانات", en: "Announcements" },
   myNotifications: { ar: "إشعاراتي", en: "My notifications" },
+  myProfile: { ar: "ملفي", en: "My profile" },
   switchCompany: { ar: "الشركة", en: "Company" },
   switching: { ar: "جارٍ التبديل…", en: "Switching…" },
   myAccount: { ar: "حسابي", en: "My Account" },
@@ -74,6 +75,7 @@ type Workspace = {
     display_name: string;
     first_name?: string;
     preferred_locale?: string;
+    employment_id?: number | null;
   } | null;
   account: { name: string } | null;
   company: { name: string } | null;
@@ -684,6 +686,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       );
                     })}
                   </div>
+                )}
+                {ws?.person?.employment_id && (
+                <Link
+                  href={`/employees/${ws.person.employment_id}`}
+                  onClick={() => setAccountOpen(false)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "9px 12px", borderRadius: "var(--radius-sm)",
+                    color: "var(--ink-2)",
+                  }}
+                >
+                  <IcUser size={18} />
+                  {L("myProfile")}
+                </Link>
                 )}
                 {/* بيانات مالية عن الحساب: مالك الحساب
                     والمدير العام ومدير الموارد */}

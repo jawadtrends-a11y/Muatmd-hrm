@@ -97,7 +97,8 @@ def shifts(request):
              "crosses_midnight": s.crosses_midnight,
              # ق-96: فارغ = تتبع الشركة، والموظف يغلبها
              "allow_mobile_punch": s.allow_mobile_punch,
-             "is_flexible": s.is_flexible, "is_active": s.is_active}
+             "is_flexible": s.is_flexible, "is_active": s.is_active,
+             "is_default": s.is_default}
             for s in qs.filter(company_id=company_id)
         ])
 
@@ -125,6 +126,7 @@ def shifts(request):
         grace_in_minutes=int(request.data.get("grace_in_minutes", 0)),
         grace_out_minutes=int(request.data.get("grace_out_minutes", 0)),
         working_days=request.data.get("working_days", [0, 1, 2, 3, 4]),
+        is_default=bool(request.data.get("is_default")),
         crosses_midnight=bool(request.data.get("crosses_midnight", False)),
         is_flexible=bool(request.data.get("is_flexible", False)),
     )
@@ -1047,6 +1049,16 @@ def shift_detail(request, shift_id):
                 setattr(s, f, int(d[f] or 0))
             except (TypeError, ValueError):
                 pass
+    # ق-104: واحدة افتراضية للشركة — فتعيين ثانية ينزع الأولى.
+    # ولو بقيتا لتبع الموظفُ أيَّهما جاءت أولًا، وهو عشوائيّ.
+    if d.get("is_default"):
+        from apps.attendance.models import Shift as _Shift
+        _Shift.objects.filter(company_id=s.company_id).exclude(
+            id=s.id).update(is_default=False)
+        s.is_default = True
+    elif "is_default" in d:
+        s.is_default = bool(d["is_default"])
+
     if "working_days" in d:
         s.working_days = d["working_days"]
     if "allow_mobile_punch" in d:
