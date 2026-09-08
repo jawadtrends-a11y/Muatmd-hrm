@@ -28,6 +28,23 @@ def _channel_allowed(account_id, person_id, event_key, channel) -> bool:
     return True if pref is None else pref.is_enabled
 
 
+def _localized_context(context, locale):
+    """
+    يستبدل قيم المفاتيح بنظيراتها بلغة المستقبل.
+
+    السياق يحمل title وtitle_en معًا؛ فمن لغته en يأخذ title_en
+    مكان title. وما لا نظير له يبقى كما هو، وما كان نظيره فارغًا
+    يرتدّ للأصل — فلا موظف يقرأ فراغًا.
+    """
+    if locale != "en":
+        return context
+    out = dict(context)
+    for k, v in context.items():
+        if k.endswith("_en") and str(v or "").strip():
+            out[k[:-3]] = v
+    return out
+
+
 def _locale_of(person_id, fallback="ar"):
     from apps.employees.models import Person
     loc = (Person.objects.filter(id=person_id)
@@ -53,7 +70,10 @@ def _deliver_email(*, account_id, company_id, notif, person_id,
 
     to = _email_of(person_id)
     if not to:
-        return DeliveryStatus.SKIPPED, "لا بريد للموظف"
+        # ليست تخطّيًا بتفضيل المستخدم — بل تعذّرًا لغياب العنوان.
+        # والتمييز مقصود: SKIPPED محجوزة لمن أوقف القناة بنفسه،
+        # وحارس الأحداث الإلزامية يفحصها.
+        return DeliveryStatus.FAILED, "لا بريد للموظف"
     try:
         r = render(event_key, Channel.EMAIL, locale, context, account_id)
     except TemplateNotFound:
@@ -86,9 +106,13 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
         # لغة المستقبل من ملفّه — لا لغة واحدة للجميع. فمن ضبط
         # الإنجليزية يقرأ إشعاره بها ولو أرسله عربيّ.
         locale = _locale_of(person_id, context.get("recipient_locale", "ar"))
+        # نصّ المستقبل بلغته: من وضع {{title}} في القالب يريد نصّ
+        # المستقبل لا نصّ المرسِل. والمفاتيح المنتهية بـ_en تُبدَّل
+        # مكان أصلها حين تكون لغته الإنجليزية.
+        ctx = _localized_context(context, locale)
         try:
             rendered = render(event_key, Channel.IN_APP, locale,
-                              context, account_id)
+                              ctx, account_id)
         except TemplateNotFound as e:
             logger.error("قالب مفقود: %s", e)
             continue
@@ -115,7 +139,7 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
                 st, err = _deliver_email(
                     account_id=account_id, company_id=company_id,
                     notif=notif, person_id=person_id, event_key=event_key,
-                    locale=locale, context=context)
+                    locale=locale, context=ctx)
             else:
                 # واتساب وإشعار الجوال — لا مزوّد بعد (ق-90)
                 st, err = DeliveryStatus.PENDING, ""

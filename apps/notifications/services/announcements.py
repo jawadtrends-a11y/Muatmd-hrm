@@ -82,6 +82,10 @@ def publish(announcement, *, recipients, attachments=None):
         "title_en": announcement.title_en or announcement.title_ar,
         "body_en": announcement.body_en or announcement.body_ar,
         "company_name": company.legal_name_ar if company else "",
+        # الاسم بلغته أيضًا — يبدّله المحرّك لمن لغته إنجليزية،
+        # ويرتدّ للعربي إن لم تملأ الشركة اسمها الإنجليزي.
+        "company_name_en": ((company.legal_name_en or company.legal_name_ar)
+                            if company else ""),
         "link_url": f"/announcements/{announcement.id}",
         "via_email": announcement.via_email,
         "attachments": attachments or [],
