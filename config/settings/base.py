@@ -159,3 +159,18 @@ MOYASAR_CALLBACK_URL = env("MOYASAR_CALLBACK_URL",
 from apps.core.logging_config import logging_settings  # noqa: E402
 
 LOGGING = logging_settings(BASE_DIR, level=env("LOG_LEVEL", default="INFO"))
+
+# ── البريد (Brevo عبر API لا SMTP) ─────────────────────
+# عبر HTTPS لا SMTP: فلا يرتبط الإرسال بعنوان الخادم ولا بسمعته،
+# وينتقل المشروع لخادم آخر فيعمل البريد من أول دقيقة.
+BREVO_API_KEY = env("BREVO_API_KEY", default="")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL",
+                         default="noreply-hr@muatmd.sa")
+DEFAULT_FROM_NAME = env("DEFAULT_FROM_NAME",
+                        default="معتمد للموارد البشرية")
+# بلا مفتاح يُطبع البريد في السجل ولا يُرسل — فالبيئة الجديدة
+# تعمل بلا انتظار مفتاح، ولا يُرسل بريد حقيقي من قاعدة تجريبية.
+EMAIL_BACKEND = ("apps.notifications.email_backend.BrevoBackend"
+                 if BREVO_API_KEY
+                 else "django.core.mail.backends.console.EmailBackend")
+PUBLIC_WEB_URL = env("PUBLIC_WEB_URL", default="https://hr.muatmd.sa")
