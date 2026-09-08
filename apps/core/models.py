@@ -65,3 +65,9 @@ from apps.core.models_audit import AuditAction, AuditEntry  # noqa: E402,F401
 from apps.core.models_files import (  # noqa: E402,F401
     BLOCKED_EXTENSIONS, KIND_RULES, FileKind, StoredFile,
 )
+
+
+# تفضيلات لوحة الرئيسية (ق-106)
+from apps.core.models_dashboard import (  # noqa: E402,F401
+    DashboardPreference,
+)

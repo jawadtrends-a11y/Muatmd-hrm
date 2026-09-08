@@ -75,6 +75,8 @@ def test_no_raw_queryset_in_api_views():
                     "deputy=emp",
                     # الإشعار يخصّ شخصًا بعينه — المستقبل هو القيد
                     "recipient_person_id=person.id",
+                    # تفضيل اللوحة يخصّ مستخدمًا بعينه — هو القيد
+                    "user=user",
                     # الاستثناء يخصّ عضوية بعينها — العضوية هي القيد
                     "membership=membership",
                     # التخصيص يخصّ عضوية بعينها

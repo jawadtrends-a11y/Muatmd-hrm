@@ -131,9 +131,20 @@ def accounts_list(request):
     """
     from apps.employees.models import Employment, EmploymentStatus
 
+    # ق-107: سياسة العزل تحجب كل حساب عمّن لا سياق له، ولوحة
+    # المنصّة بطبيعتها بلا سياق — فكانت تراها فارغة. والدالّة
+    # SECURITY DEFINER ترجع الملخّص لا البيانات.
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute("SELECT account_id FROM app_platform_accounts()")
+        account_ids = [r[0] for r in cur.fetchall()]
+
     rows = []
-    for acc in Account.objects.all().order_by("-created_at"):
-        with account_scope(acc.id):
+    for acc_id in account_ids:
+        with account_scope(acc_id):
+            acc = Account.objects.filter(id=acc_id).first()
+            if acc is None:
+                continue
             sub = AccountSubscription.objects.filter(account=acc).first()
             companies = Company.objects.filter(account=acc).count()
             employees = Employment.objects.filter(

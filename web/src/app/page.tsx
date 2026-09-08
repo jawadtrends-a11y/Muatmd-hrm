@@ -1,261 +1,249 @@
 "use client";
-
 /**
- * الصفحة الرئيسية (ق-65).
+ * الرئيسية — لوحة ودجتات يختارها المستخدم (ق-106).
  *
- *   الموظف العادي → **ملفه الكامل** بتبويباته مباشرةً
- *   المدير        → لوحته الإدارية + ملفه
+ * وليست ملفّه: الملف صفحة مستقلّة يفتحها من «ملفي». فالرئيسية
+ * للمتابعة، وجمعُهما يجعلها عشر بطاقات فوق أحد عشر تبويبًا.
  *
- * فلا زر «ملفي الكامل» ولا انتقال — الملف هو الشاشة.
+ * والمعروض من صلاحياته ونطاقه: من لا فريق له لا تُعرض له بطاقات
+ * الفريق أصلًا — لا في اللوحة ولا في قائمة الاختيار.
  */
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPut } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import PunchCard from "@/components/PunchCard";
-import EmployeeProfileView from "@/components/EmployeeProfileView";
-import {
-  IcAlert, IcClock, IcPayroll, IcUser,
-} from "@/components/Icons";
+import WidgetCard, { type Widget } from "@/components/DashboardWidgets";
+import { IcAlert, IcCheck, IcSettings, IcX } from "@/components/Icons";
 
 const T: Dict = {
   welcome: { ar: "مرحبًا", en: "Welcome" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
-  awaiting: { ar: "بانتظار قرارك", en: "Awaiting you" },
-  requests: { ar: "طلب", en: "requests" },
-  delegAwaiting: { ar: "إنابة تنتظر قرارك", en: "Delegation awaiting you" },
-  delegCount: { ar: "طلب إنابة", en: "delegation requests" },
-  review: { ar: "مراجعة", en: "Review" },
-  presentToday: { ar: "حاضرون اليوم", en: "Present today" },
-  lastRun: { ar: "آخر مسير", en: "Latest run" },
-  open: { ar: "فتح", en: "Open" },
-  noProfile: {
-    ar: "لا ملف موظف مرتبط بحسابك — راجع مدير الموارد البشرية",
-    en: "No employee profile linked to your account",
+  customize: { ar: "تخصيص اللوحة", en: "Customize" },
+  done: { ar: "تمّ", en: "Done" },
+  arrange: { ar: "ترتيب", en: "Arrange" },
+  save: { ar: "حفظ", en: "Save" },
+  saving: { ar: "جارٍ الحفظ…", en: "Saving…" },
+  saved: { ar: "حُفظت لوحتك", en: "Saved" },
+  cancel: { ar: "إلغاء", en: "Cancel" },
+  pick: {
+    ar: "اختر ما تريد متابعته — المتاح لك حسب دورك",
+    en: "Pick what to follow — limited to your role",
+  },
+  empty: {
+    ar: "لا بطاقات مختارة — اضغط «تخصيص اللوحة»",
+    en: "No cards selected — press Customize",
   },
 };
 
-type Approval = { id: number };
-type Run = {
-  id: number; period: string; total_net: string; status_label: string;
-};
-type Board = { total: number; counts: Record<string, number> };
-type Ws = { permissions: string[]; roles?: { scope: string }[] };
-
-function money(v: string) {
-  const n = Number(v);
-  return Number.isFinite(n)
-    ? n.toLocaleString("en-US", { minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2 })
-    : v;
-}
+type Avail = { key: string; name: string; size: string; group: string;
+               selected: boolean };
+type Group = { key: string; name: string };
 
 export default function HomePage() {
   const { L } = useT(T);
-
-  const [ws, setWs] = useState<Ws | null>(null);
-  const [empId, setEmpId] = useState<number | null>(null);
   const [name, setName] = useState("");
-  /** ق-75: إنابات تنتظر قراري — تخصّ كل موظف لا الإداري وحده */
-  const [delegCount, setDelegCount] = useState(0);
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [run, setRun] = useState<Run | null>(null);
-  const [board, setBoard] = useState<Board | null>(null);
+  const [data, setData] = useState<Record<string, Widget>>({});
   const [busy, setBusy] = useState(true);
-  const [noProfile, setNoProfile] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [avail, setAvail] = useState<Avail[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
 
-  useEffect(() => {
-    apiGet<Ws>("/me/workspace/")
-      .then(setWs)
-      .catch(() => setWs({ permissions: [] }));
+  // ترتيب البطاقات وأحجامها — يسحبها المستخدم فتُحفظ.
+  const [layout, setLayout] = useState<{ key: string; size?: string }[]>([]);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [arranging, setArranging] = useState(false);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    try {
+      const ws = await apiGet<{ person?: { first_name?: string } }>(
+        "/me/workspace/");
+      setName(ws.person?.first_name || "");
+      const pref = await apiGet<{ layout: { key: string; size?: string }[] }>(
+        "/me/dashboard/");
+      setLayout(pref.layout || []);
+      setData(await apiGet<Record<string, Widget>>("/me/dashboard/data/"));
+    } catch {
+      /* اللوحة تُعرض فارغة لا بيضاء */
+    } finally { setBusy(false); }
   }, []);
 
-  /**
-   * ق-68: شاشة الإجازات العامة محجوبة عن المشرف — يصل لطلبات فريقه
-   * من «إدارة الفريق». فالزر يوجّه لما يملكه فعلًا، وإلا أعاده
-   * حارس المسارات للرئيسية من حيث جاء.
-   */
-  const approvalsHref = (ws?.roles ?? []).some(
-    (r) => r.scope !== "own" && r.scope !== "team")
-    ? "/leaves" : "/team/requests";
+  useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!ws) return;
+  const openEditor = async () => {
+    const d = await apiGet<{ available: Avail[]; groups: Group[];
+                             selected: string[] }>("/me/dashboard/");
+    setAvail(d.available);
+    setGroups(d.groups);
+    setPicked(d.selected);
+    setEditing(true);
+  };
 
-    const perms = new Set(ws.permissions ?? []);
-    const isAdmin = (ws.roles ?? []).some((r) => r.scope !== "own");
+  const toggle = (k: string) =>
+    setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
 
-    // ق-75: إنابات تنتظر قراري — تخصّ كل موظف لا الإداري وحده
-    apiGet<{ incoming: { status: string }[] }>("/me/delegations/")
-      .then((d) => setDelegCount(
-        (d.incoming || []).filter((x) => x.status === "pending").length))
-      .catch(() => setDelegCount(0));
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiPut("/me/dashboard/", { widget_keys: picked });
+      setEditing(false);
+      setMsg(L("saved"));
+      setTimeout(() => setMsg(""), 3000);
+      await load();
+    } finally { setSaving(false); }
+  };
 
-    const year = new Date().getFullYear();
+  const persist = useCallback(async (next: typeof layout) => {
+    setLayout(next);
+    await apiPut("/me/dashboard/", { widget_keys: next }).catch(() => null);
+    setData(await apiGet<Record<string, Widget>>("/me/dashboard/data/")
+      .catch(() => ({})));
+  }, []);
 
-    Promise.all([
-      apiGet<{ employee: { employment_id: number; name_ar: string } }>(
-        "/me/profile/").catch(() => null),
-      isAdmin
-        ? apiGet<Approval[]>("/me/approvals/").catch(() => [] as Approval[])
-        : Promise.resolve([] as Approval[]),
-      isAdmin && perms.has("payroll.view")
-        ? apiGet<Run[]>(`/payroll/runs/?year=${year}`).catch(() => [] as Run[])
-        : Promise.resolve([] as Run[]),
-      isAdmin && perms.has("attendance.view")
-        ? apiGet<Board>("/attendance/daily/").catch(() => null)
-        : Promise.resolve(null),
-    ]).then(([me, a, runs, b]) => {
-      if (me?.employee) {
-        setEmpId(me.employee.employment_id);
-        setName(me.employee.name_ar);
-      } else {
-        setNoProfile(true);
-      }
-      setApprovals(a);
-      setRun(runs.length > 0 ? runs[0] : null);
-      setBoard(b);
-      setBusy(false);
+  const onDrop = (target: string) => {
+    if (!dragKey || dragKey === target) return;
+    const next = [...layout];
+    const from = next.findIndex((x) => x.key === dragKey);
+    const to = next.findIndex((x) => x.key === target);
+    if (from < 0 || to < 0) return;
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setDragKey(null);
+    persist(next);
+  };
+
+  const cycleSize = (k: string) => {
+    const order = ["sm", "md", "lg"];
+    const next = layout.map((x) => {
+      if (x.key !== k) return x;
+      const cur = x.size || data[k]?.size || "md";
+      return { ...x, size: order[(order.indexOf(cur) + 1) % order.length] };
     });
-  }, [ws]);
+    persist(next);
+  };
 
-  if (busy) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
-        {L("loading")}
-      </div>
-    );
-  }
-
-  const isAdmin = (ws?.roles ?? []).some((r) => r.scope !== "own");
+  const keys = layout.length
+    ? layout.map((x) => x.key).filter((k) => data[k])
+    : Object.keys(data);
 
   return (
     <div className="stack">
-      <h1>
-        {L("welcome")}{name ? `، ${name}` : ""}
-      </h1>
+      <div className="spread">
+        <h1 style={{ margin: 0 }}>
+          {L("welcome")}{name ? `، ${name}` : ""}
+        </h1>
+        <div className="row" style={{ gap: 6 }}>
+          <button className={`btn btn-sm ${arranging ? "btn-primary" : ""}`}
+                  onClick={() => setArranging((v) => !v)}>
+            {arranging ? L("done") : L("arrange")}
+          </button>
+          <button className="btn btn-sm" onClick={openEditor}>
+            <IcSettings size={15} /> {L("customize")}
+          </button>
+        </div>
+      </div>
 
-      {/* البصمة — أول ما يحتاجه يوميًا */}
+      {msg && <div className="card" style={{ borderColor: "var(--ok)" }}>
+        <IcCheck /> {msg}
+      </div>}
+
       <PunchCard />
 
-      {/* ق-75: إنابة تنتظر قرارك — لكل موظف لا الإداري وحده */}
-      {delegCount > 0 && (
-        <Link href="/me/track" className="card" style={{
-          padding: 18, display: "block",
-          borderInlineStartWidth: 4,
-          borderInlineStartColor: "var(--teal)",
-        }}>
-          <div className="spread">
-            <div className="row">
-              <IcAlert size={20} />
-              <div>
-                <div style={{ fontWeight: 600, color: "var(--teal)" }}>
-                  {L("delegAwaiting")}
-                </div>
-                <div className="muted" style={{ fontSize: ".88rem" }}>
-                  <span className="num">{delegCount}</span>{" "}
-                  {L("delegCount")}
-                </div>
-              </div>
+      {busy ? (
+        <div className="card" style={{ padding: 40, textAlign: "center",
+                                       color: "var(--ink-3)" }}>
+          {L("loading")}
+        </div>
+      ) : keys.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: "center",
+                                       color: "var(--ink-3)" }}>
+          {L("empty")}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 14,
+                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+          {keys.map((k) => (
+            <div key={k}
+                 draggable={arranging}
+                 onDragStart={() => setDragKey(k)}
+                 onDragOver={(e) => arranging && e.preventDefault()}
+                 onDrop={() => onDrop(k)}
+                 style={{
+                   gridColumn: (data[k]?.size === "lg" ? "1 / -1"
+                     : data[k]?.size === "md" ? "span 2" : "span 1"),
+                   cursor: arranging ? "grab" : "default",
+                   opacity: dragKey === k ? 0.5 : 1,
+                 }}>
+              <WidgetCard w={data[k]} arranging={arranging}
+                          onResize={() => cycleSize(k)} />
             </div>
-            <span className="btn btn-sm">{L("review")}</span>
-          </div>
-        </Link>
+          ))}
+        </div>
       )}
 
-      {/* لوحة المدير */}
-      {isAdmin && (
-        <>
-          {approvals.length > 0 && (
-            <Link href={approvalsHref} className="card" style={{
-              padding: 18, display: "block",
-              borderInlineStartWidth: 4,
-              borderInlineStartColor: "var(--copper)",
-            }}>
-              <div className="spread">
-                <div className="row">
-                  <IcAlert size={20} />
-                  <div>
-                    <div style={{ fontWeight: 600, color: "var(--copper)" }}>
-                      {L("awaiting")}
-                    </div>
-                    <div className="muted" style={{ fontSize: ".88rem" }}>
-                      <span className="num">{approvals.length}</span>{" "}
-                      {L("requests")}
-                    </div>
+      {editing && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+          display: "grid", placeItems: "center", padding: 20, zIndex: 70,
+        }} onClick={() => setEditing(false)}>
+          <div className="card" style={{ padding: 24, maxWidth: 620,
+                                         width: "100%", maxHeight: "80vh",
+                                         overflowY: "auto" }}
+               onClick={(e) => e.stopPropagation()}>
+            <div className="spread" style={{ marginBottom: 4 }}>
+              <h3 style={{ margin: 0 }}>{L("customize")}</h3>
+              <button className="btn btn-ghost btn-sm"
+                      onClick={() => setEditing(false)}>
+                <IcX size={15} />
+              </button>
+            </div>
+            <div className="muted" style={{ fontSize: ".85rem",
+                                            marginBottom: 16 }}>
+              {L("pick")}
+            </div>
+
+            {groups.map((g) => {
+              const items = avail.filter((a) => a.group === g.key);
+              if (!items.length) return null;
+              return (
+                <div key={g.key} style={{ marginBottom: 18 }}>
+                  <div style={{ fontWeight: 600, fontSize: ".85rem",
+                                color: "var(--teal)", marginBottom: 8 }}>
+                    {g.name}
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {items.map((a) => (
+                      <label key={a.key} className="row"
+                             style={{ gap: 10, cursor: "pointer",
+                                      padding: "6px 8px",
+                                      borderRadius: "var(--radius-sm)",
+                                      background: picked.includes(a.key)
+                                        ? "var(--teal-soft)" : "transparent" }}>
+                        <input type="checkbox"
+                               checked={picked.includes(a.key)}
+                               onChange={() => toggle(a.key)} />
+                        <span style={{ fontSize: ".9rem" }}>{a.name}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
-                <span className="btn btn-sm">{L("review")}</span>
-              </div>
-            </Link>
-          )}
+              );
+            })}
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 14,
-          }}>
-            {board && (
-              <div className="card" style={{ padding: 18 }}>
-                <div className="row" style={{ marginBottom: 8 }}>
-                  <IcClock size={18} />
-                  <span className="muted" style={{ fontSize: ".85rem" }}>
-                    {L("presentToday")}
-                  </span>
-                </div>
-                <div style={{ fontSize: "1.6rem", fontWeight: 600,
-                              color: "var(--ok)" }}>
-                  <span className="num">{board.counts?.present ?? 0}</span>
-                  <span className="muted" style={{ fontSize: "1rem" }}>
-                    {" / "}<span className="num">{board.total}</span>
-                  </span>
-                </div>
-                <Link href="/attendance" className="btn btn-sm"
-                  style={{ marginTop: 12, width: "100%" }}>
-                  {L("open")}
-                </Link>
-              </div>
-            )}
-
-            {run && (
-              <div className="card" style={{ padding: 18 }}>
-                <div className="row" style={{ marginBottom: 8 }}>
-                  <IcPayroll size={18} />
-                  <span className="muted" style={{ fontSize: ".85rem" }}>
-                    {L("lastRun")}
-                  </span>
-                </div>
-                <div style={{ fontSize: "1.35rem", fontWeight: 600 }}>
-                  <span className="num">{money(run.total_net)}</span>
-                </div>
-                <div className="spread" style={{ marginTop: 6 }}>
-                  <span className="muted" style={{ fontSize: ".85rem" }}>
-                    <span className="num">{run.period}</span>
-                  </span>
-                  <span className="badge">{run.status_label}</span>
-                </div>
-                <Link href={`/payroll/${run.id}`} className="btn btn-sm"
-                  style={{ marginTop: 12, width: "100%" }}>
-                  {L("open")}
-                </Link>
-              </div>
-            )}
+            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+              <button className="btn btn-primary" onClick={save}
+                      disabled={saving}>
+                {saving ? L("saving") : L("save")}
+              </button>
+              <button className="btn" onClick={() => setEditing(false)}>
+                {L("cancel")}
+              </button>
+            </div>
           </div>
-        </>
-      )}
-
-      {/* الملف الكامل — لا زر ولا انتقال */}
-      {empId ? (
-        <EmployeeProfileView employmentId={empId} />
-      ) : noProfile ? (
-        <div className="card" style={{
-          padding: 32, textAlign: "center", color: "var(--copper)",
-        }}>
-          <IcAlert size={22} />
-          <div style={{ marginTop: 8 }}>{L("noProfile")}</div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

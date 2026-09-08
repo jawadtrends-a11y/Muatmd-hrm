@@ -57,7 +57,12 @@ async function request<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  // شرطة نهائية دائمًا: جانغو بـAPPEND_SLASH يعيد التوجيه، ولا
+  // يستطيع حمل بيانات POST معه — فينكسر الطلب بـ500 لا بخطأ مفهوم.
+  // والإصلاح هنا لا في كل نداء: فلا يتكرّر مع كل مسار جديد.
+  const clean = path.startsWith("http") || path.includes("?")
+    || path.endsWith("/") ? path : `${path}/`;
+  const url = clean.startsWith("http") ? clean : `${API_BASE}${clean}`;
 
   let res: Response;
   try {

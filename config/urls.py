@@ -8,6 +8,7 @@ from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.accounts import api_company as accounts_company_api
+from apps.core.api import dashboard as dashboard_api
 from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
 from apps.employees import api as employees_api
@@ -68,6 +69,11 @@ urlpatterns = [
     path("api/company/settings/", accounts_company_api.company_settings,
          name="company-settings"),
     # مبدّل الشركات — لمن له توظيف في أكثر من شركة
+    # ق-106: لوحة الرئيسية — الكتالوج والتفضيلات والبيانات
+    path("api/me/dashboard/", dashboard_api.dashboard_prefs,
+         name="dashboard-prefs"),
+    path("api/me/dashboard/data/", dashboard_api.dashboard_data,
+         name="dashboard-data"),
     path("api/me/companies/", accounts_company_api.my_companies,
          name="my-companies"),
     path("api/me/companies/switch/", accounts_company_api.switch_company,
