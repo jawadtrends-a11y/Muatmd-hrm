@@ -28,6 +28,46 @@ def _channel_allowed(account_id, person_id, event_key, channel) -> bool:
     return True if pref is None else pref.is_enabled
 
 
+def _locale_of(person_id, fallback="ar"):
+    from apps.employees.models import Person
+    loc = (Person.objects.filter(id=person_id)
+           .values_list("preferred_locale", flat=True).first())
+    return loc or fallback
+
+
+def _email_of(person_id):
+    from apps.employees.models import Person
+    return (Person.objects.filter(id=person_id)
+            .values_list("email", flat=True).first() or "").strip()
+
+
+def _deliver_email(*, account_id, company_id, notif, person_id,
+                   event_key, locale, context):
+    """
+    إرسال فعليّ للبريد — كان الصفّ يُنشأ pending ويقف.
+
+    وفشله لا يُسقط الإشعار داخل النظام: الموظف يراه في الجرس
+    ولو لم يصله بريد.
+    """
+    from apps.notifications.services.sender import send_email
+
+    to = _email_of(person_id)
+    if not to:
+        return DeliveryStatus.SKIPPED, "لا بريد للموظف"
+    try:
+        r = render(event_key, Channel.EMAIL, locale, context, account_id)
+    except TemplateNotFound:
+        r = {"subject": notif.title, "body": notif.body}
+    ok = send_email(
+        to=to, subject=r["subject"] or notif.title,
+        text=r["body"] or notif.body,
+        html=context.get("html_body") or None,
+        company_id=company_id,
+        attachments=context.get("attachments") or None)
+    return ((DeliveryStatus.SENT, "") if ok
+            else (DeliveryStatus.FAILED, "تعذّر الإرسال"))
+
+
 @shared_task(base=AccountTask, bind=True, max_retries=3)
 def dispatch_notification(self, *, account_id, event_key, company_id=None,
                           context=None, actor_person_id=None, recipients=None,
@@ -43,7 +83,9 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
     created = []
 
     for person_id in recipients:
-        locale = context.get("recipient_locale", "ar")
+        # لغة المستقبل من ملفّه — لا لغة واحدة للجميع. فمن ضبط
+        # الإنجليزية يقرأ إشعاره بها ولو أرسله عربيّ.
+        locale = _locale_of(person_id, context.get("recipient_locale", "ar"))
         try:
             rendered = render(event_key, Channel.IN_APP, locale,
                               context, account_id)
@@ -67,11 +109,21 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
                     status=DeliveryStatus.SKIPPED,
                     error="معطّل في تفضيلات المستخدم")
                 continue
+            if channel == Channel.IN_APP:
+                st, err = DeliveryStatus.SENT, ""
+            elif channel == Channel.EMAIL:
+                st, err = _deliver_email(
+                    account_id=account_id, company_id=company_id,
+                    notif=notif, person_id=person_id, event_key=event_key,
+                    locale=locale, context=context)
+            else:
+                # واتساب وإشعار الجوال — لا مزوّد بعد (ق-90)
+                st, err = DeliveryStatus.PENDING, ""
             NotificationDelivery.objects.create(
                 account_id=account_id, notification=notif, channel=channel,
-                status=(DeliveryStatus.SENT if channel == Channel.IN_APP
-                        else DeliveryStatus.PENDING),
-                attempted_at=timezone.now() if channel == Channel.IN_APP else None,
+                status=st, error=err,
+                attempted_at=(timezone.now()
+                              if st != DeliveryStatus.PENDING else None),
             )
 
     return {"event": event_key, "notifications": created,

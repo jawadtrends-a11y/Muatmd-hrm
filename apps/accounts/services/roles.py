@@ -46,6 +46,8 @@ DEFAULT_ROLES = {
             "payslips.view_own", "payslips.view_team", "payslips.view_all",
             "saudization.view", "compliance.view",
             "access.view",
+            # كل موظف يرى ما يصله من إعلانات
+            "announcements.view",
         ],
     },
     RoleCode.HR_MANAGER: {
@@ -60,6 +62,7 @@ DEFAULT_ROLES = {
             "employees.create", "employees.edit",
             "employees.terminate", "employees.documents",
             "employees.invite",
+            "announcements.view", "announcements.send_company",
             "audit.view",
             "persons.view_cross_company",
             "attendance.view", "attendance.view_all",
@@ -90,6 +93,7 @@ DEFAULT_ROLES = {
             "employees.view", "employees.view_all",
             "employees.create", "employees.edit",
             "employees.documents", "employees.invite",
+            "announcements.view", "announcements.send_company",
             "audit.view",
             "persons.view_cross_company",
             "attendance.view", "attendance.view_all", "attendance.edit",
@@ -117,6 +121,8 @@ DEFAULT_ROLES = {
             "requests.view", "requests.create", "requests.approve",
             "requests.manage",
             "payslips.view_own", "payslips.view_team",
+            # ق-102: يعلن لإدارته وحدها — والنطاق في اسم الصلاحية
+            "announcements.view", "announcements.send_department",
         ],
     },
     RoleCode.SUPERVISOR: {
@@ -131,6 +137,7 @@ DEFAULT_ROLES = {
             "requests.view", "requests.create", "requests.approve",
             "requests.manage",
             "payslips.view_own", "payslips.view_team",
+            "announcements.view",
         ],
     },
     RoleCode.EMPLOYEE: {
@@ -141,6 +148,7 @@ DEFAULT_ROLES = {
             "leaves.view", "leaves.create",
             "requests.view", "requests.create",
             "payslips.view_own",
+            "announcements.view",
         ],
     },
 }

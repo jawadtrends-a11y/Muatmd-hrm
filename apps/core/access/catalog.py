@@ -48,6 +48,14 @@ PERMISSIONS = [
     _p("company.edit",        "account", "تعديل بيانات الشركة"),
 
     # الهيكل التنظيمي
+    # ق-102: الإعلانات — النطاق في اسم الصلاحية نفسها، فمدير
+    # الإدارة يعلن لإدارته ولا يخاطب الشركة كلها.
+    _p("announcements.view",           "announcements", "عرض الإعلانات",
+       "View announcements"),
+    _p("announcements.send_department", "announcements",
+       "إرسال إعلان لإدارته", "Send announcement to own department"),
+    _p("announcements.send_company",   "announcements",
+       "إرسال إعلان لكل الشركة", "Send announcement company-wide"),
     _p("org.view",            "org", "عرض الهيكل التنظيمي"),
     _p("org.manage",          "org", "إدارة الفروع والأقسام والمسميات"),
 

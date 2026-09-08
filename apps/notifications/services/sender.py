@@ -28,7 +28,7 @@ def reply_to_for(company_id=None) -> str:
 
 
 def send_email(*, to, subject, text, html=None, company_id=None,
-               reply_to=None, fail_silently=True) -> bool:
+               reply_to=None, attachments=None, fail_silently=True) -> bool:
     """
     إرسال رسالة واحدة. يرجع True إن قبِلها المزوّد.
 
@@ -48,6 +48,11 @@ def send_email(*, to, subject, text, html=None, company_id=None,
     )
     if html:
         msg.attach_alternative(html, "text/html")
+
+    # المرفقات: (اسم، بايتات، نوع) — تُرفق في البريد كما في النظام،
+    # فمن يقرأ التعميم في بريده لا يحتاج فتح النظام ليرى ملفّه.
+    for name, content, mimetype in (attachments or []):
+        msg.attach(name, content, mimetype)
 
     rt = reply_to if reply_to is not None else reply_to_for(company_id)
     if rt:

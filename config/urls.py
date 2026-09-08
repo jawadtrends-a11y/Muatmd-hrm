@@ -9,6 +9,7 @@ from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.accounts import api_company as accounts_company_api
 from apps.accounts import api_invites as accounts_invites_api
+from apps.notifications import api_announcements as announcements_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
 from apps.payroll import api_outputs as outputs_api
@@ -75,6 +76,11 @@ urlpatterns = [
          accounts_invites_api.invite_preview, name="invite-preview"),
     path("api/join/<str:token>/accept/",
          accounts_invites_api.invite_accept, name="invite-accept"),
+    # ق-102: الإعلانات
+    path("api/announcements/", announcements_api.announcements,
+         name="announcements"),
+    path("api/me/announcements/", announcements_api.my_announcements,
+         name="my-announcements"),
     path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
     path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
     path("api/employees/", employees_api.employees, name="employees"),

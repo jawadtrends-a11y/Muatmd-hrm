@@ -148,3 +148,9 @@ class NotificationDelivery(AccountScopedModel):
     class Meta:
         verbose_name = _("تسليم إشعار")
         verbose_name_plural = _("تسليمات الإشعارات")
+
+
+# الإعلانات — تركب على المحرّك أعلاه ولا تلتفّ عليه
+from apps.notifications.models_announcement import (  # noqa: E402,F401
+    Announcement, AnnouncementAttachment, AnnouncementKind, AudienceType,
+)

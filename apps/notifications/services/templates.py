@@ -15,6 +15,16 @@ from apps.notifications.models import Channel, NotificationTemplate
 
 # (subject_ar, body_ar, subject_en, body_en, subject_ur, body_ur)
 TEMPLATES = {
+    # ق-102: نصّ الإعلان نفسه هو الرسالة — فالقالب غلافٌ رقيق
+    # يحمله ولا يزيد عليه سطورًا لا يريدها المرسِل.
+    "announcement.published": (
+        "{{title}}",
+        "{{body}}\n\n— {{company_name}}",
+        "{{title}}",
+        "{{body}}\n\n— {{company_name}}",
+        "{{title}}",
+        "{{body}}\n\n— {{company_name}}",
+    ),
     "employee.hired": (
         "موظف جديد: {{employee_name}}",
         "انضم {{employee_name}} إلى {{company_name}} بتاريخ {{join_date}} بمسمى {{job_title}}.",

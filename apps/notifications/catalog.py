@@ -104,6 +104,16 @@ EVENTS = [
        ("in_app", "email"), mandatory=True),
     _e("subscription.downgraded", "account", "تنزيل الباقة",
        ("in_app", "email"), mandatory=True),
+    # ق-102: الإعلانات — داخل النظام دائمًا، والبريد يقرّره
+    # المرسِل لا تفضيلات المستقبل: التعزية والقرار الإداريّ لا
+    # يُترك وصولهما لإعداد نسيه الموظف.
+    _e("announcement.published", "announcements", "إعلان جديد",
+       ("in_app", "email"), mandatory=True),
+    # ق-102: الإعلانات — داخل النظام دائمًا، والبريد يقرّره
+    # المرسِل لا تفضيلات المستقبل: التعزية والقرار الإداريّ لا
+    # يُترك وصولهما لإعداد نسيه الموظف.
+    _e("announcement.published", "announcements", "إعلان جديد",
+       ("in_app", "email"), mandatory=True),
     _e("access.role_changed", "access", "تغيير صلاحياتك",
        ("in_app", "email"), mandatory=True),
 ]

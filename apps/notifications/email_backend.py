@@ -7,6 +7,7 @@
 وهي واجهة جانغو قياسية: كل send_mail و EmailMultiAlternatives
 يمرّ عليها بلا تعديل، وتبديل المزوّد يمسّ هذا الملف وحده.
 """
+import base64
 import json
 import logging
 import urllib.error
@@ -63,6 +64,20 @@ class BrevoBackend(BaseEmailBackend):
             payload["cc"] = [{"email": a} for a in msg.cc]
         if msg.bcc:
             payload["bcc"] = [{"email": a} for a in msg.bcc]
+
+        # المرفقات — Brevo يقبلها base64 باسمها.
+        files = []
+        for att in getattr(msg, "attachments", []) or []:
+            if isinstance(att, tuple) and len(att) >= 2:
+                name, content = att[0], att[1]
+                if isinstance(content, str):
+                    content = content.encode("utf-8")
+                files.append({
+                    "name": name,
+                    "content": base64.b64encode(content).decode("ascii"),
+                })
+        if files:
+            payload["attachment"] = files
 
         # ردّ الموظف يصل الشركة لا الفراغ — تُمرَّر من المُرسِل.
         reply = (msg.extra_headers or {}).get("Reply-To")
