@@ -1,0 +1,141 @@
+"""
+الباقات والاشتراك — ما يراه العميل (ق-108).
+
+يرى الباقات المعروضة بمزاياها، ويكتب عدد موظفيه فيرى السعر —
+والضريبة ورسم الإعداد ظاهران قبل أن يدفع.
+"""
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from apps.accounts.models_billing import Feature, Plan
+from apps.accounts.models_billing_v2 import BillingCycle
+from apps.accounts.services import billing_v2 as billing
+from apps.core.access.gate import Gate
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def public_plans(request):
+    """
+    الباقات المعروضة — بمزاياها التراكمية وسعر الموظف.
+
+    والمزايا تُعرض تراكمية: الباقة الأعلى «تشمل ما قبلها بالإضافة
+    إلى…» — فلا يقرأ العميل قائمةً مكرّرة ثلاث مرّات.
+    """
+    Gate.require(request.user, "account.view")
+
+    feats = {f.feature_key: f for f in Feature.objects.all()}
+    plans = list(Plan.objects.filter(is_public=True, is_active=True)
+                 .order_by("tier_order", "id"))
+
+    out = []
+    seen = set()
+    for p in plans:
+        tier = p.price_tiers.order_by("from_employees").first()
+        keys = set(p.features.values_list("feature_key", flat=True))
+        new_keys = keys - seen
+        rows = []
+        for k in sorted(new_keys):
+            f = feats.get(k)
+            if f is None:
+                continue
+            rows.append({"key": k, "name_ar": f.name_ar,
+                         "name_en": f.name_en,
+                         "value": p.features.get(feature_key=k).value,
+                         "value_type": f.value_type})
+        seen |= keys
+        out.append({
+            "id": p.id, "code": p.code,
+            "name_ar": p.name_ar, "name_en": p.name_en,
+            "monthly": str(tier.price_per_employee_monthly) if tier else None,
+            "annual": str(tier.price_per_employee_yearly) if tier else None,
+            "setup_fee": str(p.setup_fee),
+            "trial_days": p.trial_days,
+            "min_employees": p.min_billable_employees,
+            "features_new": rows,
+            "inherits_from": (plans[plans.index(p) - 1].name_ar
+                              if plans.index(p) > 0 else ""),
+        })
+    return Response({"plans": out})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def price_quote(request):
+    """
+    عرض سعر — {"plan_id", "employees", "cycle", "with_setup"}.
+
+    يُحسب لحظيًّا وهو يكتب العدد، فلا مفاجأة عند الدفع.
+    """
+    Gate.require(request.user, "account.view")
+    d = request.data
+    plan = Plan.objects.filter(id=d.get("plan_id"), is_active=True).first()
+    if plan is None:
+        return Response({"detail": "الباقة غير متاحة"},
+                        status=status.HTTP_404_NOT_FOUND)
+    cycle = d.get("cycle") or BillingCycle.MONTHLY
+    if cycle not in BillingCycle.values:
+        return Response({"detail": "دورة غير معروفة"}, status=400)
+    try:
+        employees = int(d.get("employees") or 0)
+    except (TypeError, ValueError):
+        return Response({"detail": "عدد غير صحيح"}, status=400)
+
+    try:
+        q = billing.quote(plan=plan, employees=employees, cycle=cycle,
+                          with_setup=bool(d.get("with_setup")))
+    except billing.BillingError as e:
+        return Response({"detail": str(e)}, status=400)
+    return Response(q)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_subscription(request):
+    """
+    اشتراكي — حالته وأيامه المتبقّية وعدده المشترَك به.
+
+    ومن تجاوز عدده المشترَك به يرى الفرق المستحقّ بالأيام قبل أن
+    يُطالَب به — فلا فاتورة تفاجئه.
+    """
+    from apps.accounts.models_billing_v2 import AccountSubscription
+    from apps.employees.models import Employment, EmploymentStatus
+
+    Gate.require(request.user, "account.view")
+    ctx = getattr(request, "account_ctx", None)
+    account_id = getattr(ctx, "account_id", None)
+
+    sub = AccountSubscription.objects.filter(
+        account_id=account_id).select_related("plan").first()
+    active = Employment.objects.filter(
+        account_id=account_id, status=EmploymentStatus.ACTIVE).count()
+
+    if sub is None:
+        return Response({"has_subscription": False,
+                         "active_employees": active})
+
+    out = {
+        "has_subscription": True,
+        "state": sub.state,
+        "state_label": sub.get_state_display(),
+        "plan": sub.plan.name_ar if sub.plan else None,
+        "plan_id": sub.plan_id,
+        "cycle": sub.cycle,
+        "subscribed_employees": sub.subscribed_employees,
+        "active_employees": active,
+        "trial_ends_at": sub.trial_ends_at,
+        "period_end": sub.current_period_end,
+        "days_remaining": billing.days_remaining(sub),
+        "auto_renew": sub.auto_renew,
+    }
+
+    over = active - (sub.subscribed_employees or 0)
+    if over > 0 and sub.plan:
+        try:
+            out["overage"] = billing.prorated_addition(
+                subscription=sub, added=over)
+        except billing.BillingError as e:
+            out["overage_error"] = str(e)
+    return Response(out)

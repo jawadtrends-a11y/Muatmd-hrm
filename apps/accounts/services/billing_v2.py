@@ -419,3 +419,120 @@ def is_writable(subscription):
     return subscription.state in (
         SubscriptionState.TRIAL, SubscriptionState.ACTIVE,
         SubscriptionState.GRACE, SubscriptionState.PAST_DUE)
+
+
+def days_remaining(subscription, as_of=None):
+    """الأيام المتبقّية في الفترة الحالية — صفرٌ إن انتهت."""
+    as_of = as_of or date.today()
+    end = subscription.current_period_end
+    if end is None or end <= as_of:
+        return 0
+    return (end - as_of).days
+
+
+def prorated_addition(*, subscription, added, as_of=None):
+    """
+    فرق إضافة موظفين على اشتراك قائم — **بالأيام لا بالأشهر** (ق-108).
+
+    فمن أضاف موظفًا وبقي ٨٧ يومًا يدفع عن ٨٧ يومًا بالضبط، لا عن
+    ثلاثة أشهر مقرّبة ولا عن سنة كاملة.
+
+        الفرق = (سعر الموظف للدورة ÷ أيام الدورة) × المتبقّي × العدد
+
+    ويرجع dict فيه التفصيل — فالعميل يرى كيف حُسب.
+    """
+    if added <= 0:
+        raise BillingError("عدد الإضافة يجب أن يكون أكبر من صفر")
+    plan = subscription.plan
+    if plan is None:
+        raise BillingError("لا باقة في هذا الاشتراك")
+
+    as_of = as_of or date.today()
+    remaining = days_remaining(subscription, as_of)
+    if remaining <= 0:
+        raise BillingError("لا فترة سارية — جدّد الاشتراك أولًا")
+
+    start = subscription.current_period_start or as_of
+    cycle_days = (subscription.current_period_end - start).days or 1
+
+    current = subscription.subscribed_employees or 0
+    # سعر الوحدة بالشريحة التي يقع فيها العدد **بعد** الإضافة:
+    # فمن عبَر حدّ شريحة أرخص يستفيد منها فورًا.
+    total_after, billable_after, tier = price_for(
+        plan, current + added, subscription.cycle)
+    total_before, billable_before, _ = price_for(
+        plan, current, subscription.cycle) if current else (Decimal("0"), 0, tier)
+
+    unit_period = r2((total_after - total_before) / max(added, 1))
+    amount = r2(unit_period * added * Decimal(remaining) / Decimal(cycle_days))
+
+    return {
+        "added": added,
+        "employees_before": current,
+        "employees_after": current + added,
+        "days_remaining": remaining,
+        "cycle_days": cycle_days,
+        "unit_full_period": str(unit_period),
+        "amount": str(amount),
+    }
+
+
+VAT_RATE = Decimal("0.15")
+
+
+def quote(*, plan, employees, cycle, with_setup=False, vat_rate=None):
+    """
+    عرض سعر مفصَّل — ما يراه العميل قبل أن يدفع (ق-108).
+
+    سعر واحد للموظف بلا شرائح: `unit × العدد`. ورسم الإعداد
+    اختياريّ ويُدفع **مرّة واحدة** فلا يدخل فاتورة التجديد.
+
+    والضريبة تُضاف على المجموع، والأسعار المعلنة **غير شاملة**.
+    """
+    if employees < 1:
+        raise BillingError("عدد الموظفين يجب أن يكون واحدًا فأكثر")
+
+    billable = max(employees, plan.min_billable_employees or 1)
+    tier = plan.price_tiers.order_by("from_employees").first()
+    if tier is None:
+        raise BillingError("لا سعر مضبوط لهذه الباقة")
+
+    unit = (tier.price_per_employee_monthly if cycle == BillingCycle.MONTHLY
+            else (tier.price_per_employee_yearly
+                  or tier.price_per_employee_monthly * 12))
+    base = (plan.base_fee_monthly if cycle == BillingCycle.MONTHLY
+            else plan.base_fee_monthly * 12)
+
+    subscription = r2(unit * billable + base)
+    setup = r2(plan.setup_fee) if with_setup else Decimal("0")
+    subtotal = r2(subscription + setup)
+
+    # النسبة من إعدادات المنصّة لا ثابتًا في الكود: فتغييرها قرار
+    # نظاميّ يقع، وثابتٌ مدفون يحتاج نشرًا لتعديله (ق-50).
+    if vat_rate is None:
+        from apps.accounts.models_platform import get_settings
+        st = get_settings()
+        pct = getattr(st, "vat_rate", None)
+        rate = (Decimal(str(pct)) / 100) if pct is not None else VAT_RATE
+    else:
+        rate = Decimal(str(vat_rate))
+    vat = r2(subtotal * rate)
+
+    return {
+        "plan_code": plan.code,
+        "plan_name": plan.name_ar,
+        "cycle": cycle,
+        "employees": employees,
+        "billable_employees": billable,
+        "unit_price": str(r2(unit)),
+        "subscription": str(subscription),
+        "setup_fee": str(setup),
+        "with_setup": bool(with_setup),
+        "subtotal": str(subtotal),
+        "vat_rate": str(rate),
+        "vat": str(vat),
+        "total": str(r2(subtotal + vat)),
+        # التجديد بلا رسم الإعداد — والعميل يراه قبل أن يدفع
+        "renewal_subtotal": str(subscription),
+        "renewal_total": str(r2(subscription + r2(subscription * rate))),
+    }

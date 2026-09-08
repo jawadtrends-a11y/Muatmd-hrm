@@ -58,6 +58,12 @@ class Plan(models.Model):
         _("الحد الأدنى للفوترة"), default=1)
     max_employees = models.PositiveIntegerField(_("الحد الأقصى للموظفين"),
                                                 null=True, blank=True)
+    # ق-108: رسم الإعداد الأوّليّ — **مرّة واحدة** لا يتكرّر في
+    # التجديد، ويختاره العميل. وهو غير base_fee_monthly المتكرّر.
+    setup_fee = models.DecimalField(
+        _("رسم الإعداد الأوّليّ"), max_digits=10, decimal_places=2,
+        default=0, help_text=_("يُدفع مرّة واحدة — ولا يدخل التجديد"))
+
     trial_days = models.PositiveSmallIntegerField(_("أيام التجربة"), default=14)
     is_public  = models.BooleanField(_("معروضة للعملاء"), default=True)
     is_active  = models.BooleanField(_("مفعّلة"), default=True)

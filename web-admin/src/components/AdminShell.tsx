@@ -22,6 +22,7 @@ const PUBLIC = ["/login"];
 const T: Dict = {
   dashboard: { ar: "المؤشرات", en: "Dashboard" },
   accounts: { ar: "الحسابات", en: "Accounts" },
+  plans: { ar: "الباقات", en: "Plans" },
   discounts: { ar: "الخصومات", en: "Discounts" },
   settings: { ar: "إعدادات المنصة", en: "Platform settings" },
   logout: { ar: "خروج", en: "Sign out" },
@@ -40,6 +41,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", key: "dashboard", icon: IcHome, cap: "dashboard.view" },
   { href: "/accounts", key: "accounts", icon: IcUsers, cap: "accounts.view" },
+  { href: "/plans", key: "plans", icon: IcWallet, cap: "accounts.view" },
   { href: "/discounts", key: "discounts", icon: IcWallet,
     cap: "discounts.manage" },
   { href: "/settings", key: "settings", icon: IcSettings,

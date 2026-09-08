@@ -8,6 +8,7 @@ from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.accounts import api_company as accounts_company_api
+from apps.accounts import api_subscribe as subscribe_api
 from apps.core.api import dashboard as dashboard_api
 from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
@@ -22,6 +23,7 @@ from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
 from apps.accounts import api_platform_auth as platform_auth_api
 from apps.accounts import api_admin as platform_admin_api
+from apps.accounts import api_plans as plans_api
 from apps.accounts import api_auth as client_auth
 from apps.leaves import api as leaves_api
 from apps.notifications import api as notifications_api
@@ -66,6 +68,11 @@ urlpatterns = [
     path("api/payroll/components/<int:component_id>/", payroll_api.component_detail, name="pay-component-detail"),
     path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
     # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
+    # ق-108: الباقات والاشتراك — ما يراه العميل
+    path("api/plans/", subscribe_api.public_plans, name="public-plans"),
+    path("api/plans/quote/", subscribe_api.price_quote, name="price-quote"),
+    path("api/account/my-subscription/", subscribe_api.my_subscription,
+         name="my-subscription"),
     path("api/company/settings/", accounts_company_api.company_settings,
          name="company-settings"),
     # مبدّل الشركات — لمن له توظيف في أكثر من شركة
@@ -180,6 +187,10 @@ urlpatterns = [
     path("platform/invoices/<int:invoice_id>/mark-paid/", platform_admin_api.admin_mark_invoice_paid, name="platform-mark-paid"),
     path("platform/discounts/", platform_admin_api.admin_discounts, name="platform-discounts"),
     path("platform/discounts/<int:discount_id>/", platform_admin_api.admin_discount_detail, name="platform-discount"),
+    # ق-108: الباقات — الأسماء والأسعار والمزايا يضبطها مالك المنصّة
+    path("platform/plans/", plans_api.plans, name="platform-plans"),
+    path("platform/plans/<int:plan_id>/", plans_api.plan_detail,
+         name="platform-plan"),
     path("platform/settings/", platform_admin_api.platform_settings, name="platform-settings"),
     path("platform/dashboard/", platform_admin_api.admin_dashboard, name="platform-dashboard"),
     # مصادقة العملاء بالرموز (ق-53) — منفصلة عن platform/auth

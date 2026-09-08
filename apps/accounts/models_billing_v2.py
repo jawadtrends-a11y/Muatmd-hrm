@@ -332,6 +332,12 @@ class AccountSubscription(AccountScopedModel):
     next_billing_date = models.DateField(_("تاريخ التجديد"), null=True,
                                          blank=True, db_index=True)
 
+    # ق-108: العدد المشترَك به — يُثبَّت عند الاشتراك ولا يتغيّر
+    # بتغيّر الموظفين. ومن زاد موظفًا يدفع فرقه بالأيام المتبقية،
+    # فلا تُفاجئه فاتورة ولا يُطالَب بسنة عن يوم.
+    subscribed_employees = models.PositiveIntegerField(
+        _("عدد الموظفين المشترَك به"), default=0)
+
     auto_renew = models.BooleanField(_("تجديد تلقائي"), default=True)
     saved_card = models.ForeignKey(
         SavedCard, on_delete=models.SET_NULL, null=True, blank=True,
