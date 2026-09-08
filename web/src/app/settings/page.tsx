@@ -15,6 +15,11 @@ const T: Dict = {
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
+  company: { ar: "بيانات المنشأة", en: "Company details" },
+  companyHint: {
+    ar: "السجل التجاري والأرقام النظامية وبريد التواصل",
+    en: "Registration, statutory numbers and contact email",
+  },
   notifTpl: { ar: "قوالب الإشعارات", en: "Notification templates" },
   notifTplHint: {
     ar: "نصّ كل إشعار في قنواته",
@@ -309,6 +314,17 @@ function PayrollPanel({
         }}>
           {L("general")}
         </h3>
+        {perms.has("company.view") && (
+        <Link href="/settings/company" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("company")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("companyHint")}
+          </span>
+        </Link>
+        )}
         {perms.has("access.view") && (
         <Link href="/settings/users" className="spread" style={{
           padding: "13px 20px", color: "var(--ink-2)",

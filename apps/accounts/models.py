@@ -126,6 +126,13 @@ class Company(TimeStampedModel):
     activity_code = models.CharField(_("رمز النشاط"), max_length=20, blank=True)
     entity_size = models.CharField(_("حجم المنشأة"), max_length=20, blank=True)
 
+    # ق-99: بريد الردّ — إلى أين يصل ردّ الموظف على بريد النظام.
+    # لكل شركة بريدها: فالنظام متعدّد المستأجرين، وردّ موظف شركةٍ
+    # لا يجوز أن يصل شركة أخرى. وفارغًا يسقط الحقل ولا يُرسَل خاويًا.
+    contact_email = models.EmailField(
+        _("بريد التواصل"), blank=True,
+        help_text=_("يصله ردّ الموظفين على رسائل النظام"))
+
     fiscal_year_start_month = models.PositiveSmallIntegerField(
         _("بداية السنة المالية"), default=1,
     )

@@ -7,6 +7,7 @@ from apps.core.api import access as access_api
 from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
+from apps.accounts import api_company as accounts_company_api
 from apps.employees import api as employees_api
 from apps.attendance import api as attendance_api
 from apps.payroll import api_outputs as outputs_api
@@ -60,6 +61,9 @@ urlpatterns = [
     path("api/payroll/components/<int:component_id>/flags/", payroll_api.component_flags, name="pay-component-flags"),
     path("api/payroll/components/<int:component_id>/", payroll_api.component_detail, name="pay-component-detail"),
     path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
+    # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
+    path("api/company/settings/", accounts_company_api.company_settings,
+         name="company-settings"),
     path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
     path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
     path("api/employees/", employees_api.employees, name="employees"),
