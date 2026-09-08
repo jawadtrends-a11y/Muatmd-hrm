@@ -86,7 +86,9 @@ def publish(announcement, *, recipients, attachments=None):
         # ويرتدّ للعربي إن لم تملأ الشركة اسمها الإنجليزي.
         "company_name_en": ((company.legal_name_en or company.legal_name_ar)
                             if company else ""),
-        "link_url": f"/announcements/{announcement.id}",
+        # يفتح أرشيف الإشعارات لا صفحة مستقلّة: الأرشيف يعرض
+        # النصّ كاملًا بمرفقاته، وصفحةٌ ثالثة تكرّره.
+        "link_url": "/me/notifications",
         "via_email": announcement.via_email,
         "attachments": attachments or [],
     }

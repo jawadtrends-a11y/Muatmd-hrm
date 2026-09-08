@@ -45,6 +45,8 @@ const T: Dict = {
   myTrack: { ar: "طلباتي", en: "My Requests" },
   myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
   myLetters: { ar: "خطاباتي", en: "My Letters" },
+  announcements: { ar: "الإعلانات", en: "Announcements" },
+  myNotifications: { ar: "إشعاراتي", en: "My notifications" },
   myAccount: { ar: "حسابي", en: "My Account" },
   sites: { ar: "مواقع العمل", en: "Work Sites" },
   settings: { ar: "الإعدادات", en: "Settings" },
@@ -141,6 +143,11 @@ const NAV: NavItem[] = [
     perms: ["employees.view"], needsScope: true },
   { href: "/payroll", key: "payroll", icon: IcPayroll,
     perms: ["payroll.view"], needsScope: true },
+  // ق-102: يظهر لمن يملك أيًّا من صلاحيتَي الإرسال — والشاشة
+  // نفسها تحصر مدير الإدارة بإدارته
+  { href: "/announcements", key: "announcements", icon: IcDoc,
+    perms: ["announcements.send_company",
+            "announcements.send_department"] },
   { href: "/reports", key: "reports", icon: IcChart,
     perms: ["payroll.view", "employees.view"], needsScope: true },
   // ق-68: مدير الإدارة يرى الهيكل، ويبدّل موقع عمل موظفيه من
@@ -164,6 +171,7 @@ const NAV: NavItem[] = [
   { href: "/me/letters", key: "myLetters", icon: IcDoc,
     perms: ["requests.create"] },
   // ق-58: حسابي لكل مستخدم — صورته ولغته وكلمة مروره
+  { href: "/me/notifications", key: "myNotifications", icon: IcAlert },
   { href: "/me/account", key: "myAccount", icon: IcUser },
 ];
 

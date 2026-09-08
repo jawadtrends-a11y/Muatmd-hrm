@@ -79,8 +79,6 @@ urlpatterns = [
     # ق-102: الإعلانات
     path("api/announcements/", announcements_api.announcements,
          name="announcements"),
-    path("api/me/announcements/", announcements_api.my_announcements,
-         name="my-announcements"),
     path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
     path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
     path("api/employees/", employees_api.employees, name="employees"),
@@ -230,6 +228,8 @@ urlpatterns = [
     path("api/notifications/templates/", notifications_api.notification_templates, name="notification-templates"),
     path("api/notifications/templates/<int:template_id>/", notifications_api.notification_template_detail, name="notification-template-detail"),
     path("api/me/notifications/", notifications_api.my_notifications, name="my-notifications"),
+    path("api/me/notifications/archive/", notifications_api.notifications_archive,
+         name="notifications-archive"),
     path("api/me/notifications/read/", notifications_api.mark_read, name="notifications-read"),
     path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),
     # إلغاء الطلب — لمقدّمه قبل أول قرار (ق-81)

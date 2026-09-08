@@ -154,26 +154,3 @@ def announcements(request):
 
     return Response({**_serialize(a), "recipient_count": count},
                     status=status.HTTP_201_CREATED)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def my_announcements(request):
-    """ما وصل الموظف — من إشعاراته لا من الإعلانات كلّها."""
-    from apps.notifications.models import Notification
-    from apps.notifications.models_announcement import EVENT_KEY
-
-    pid = _my_person_id(request)
-    if not pid:
-        return Response([])
-    qs = Notification.objects.filter(
-        recipient_person_id=pid, event_key=EVENT_KEY
-    ).order_by("-created_at")[:100]
-    return Response([{
-        "id": n.id,
-        "announcement_id": (n.payload or {}).get("announcement_id"),
-        "kind": (n.payload or {}).get("kind", "general"),
-        "title": n.title, "body": n.body,
-        "created_at": n.created_at.isoformat(),
-        "read_at": n.read_at.isoformat() if n.read_at else None,
-    } for n in qs])

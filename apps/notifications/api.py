@@ -46,6 +46,79 @@ def my_notifications(request):
     })
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notifications_archive(request):
+    """
+    أرشيف الإشعارات — للمراجعة لا للتنبيه.
+
+    الجرس يعرض ما يستحقّ الانتباه الآن، وهذه تُرجع الأقدم أيضًا
+    بترقيم صفحات: من فاته إشعار قبل شهر يجده هنا، ويقرأ نصّه
+    كاملًا بمرفقاته.
+    """
+    person = _person(request)
+    if person is None:
+        return Response({"total": 0, "unread": 0, "rows": [], "has_more": False})
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    size = 25
+    start = (page - 1) * size
+
+    # معزول ذاتيًا: مقيَّد بالمستقبل نفسه
+    qs = Notification.objects.filter(recipient_person_id=person.id)
+    kind = request.GET.get("event_key")
+    if kind:
+        qs = qs.filter(event_key=kind)
+
+    total = qs.count()
+    rows = list(qs[start:start + size + 1])
+    has_more = len(rows) > size
+    rows = rows[:size]
+
+    from apps.notifications.models_announcement import (
+        Announcement, EVENT_KEY)
+    ann_ids = [(n.payload or {}).get("announcement_id")
+               for n in rows if n.event_key == EVENT_KEY]
+    ann_ids = [i for i in ann_ids if i]
+    atts = {}
+    if ann_ids:
+        for a in Announcement.objects.filter(
+                id__in=ann_ids).prefetch_related("attachments__stored_file"):
+            atts[a.id] = [{
+                "id": x.stored_file_id,
+                "name": x.stored_file.original_name,
+                "size": x.stored_file.size_label,
+            } for x in a.attachments.all()]
+
+    out = []
+    for n in rows:
+        p = n.payload or {}
+        aid = p.get("announcement_id")
+        out.append({
+            "id": n.id,
+            "title": n.title,
+            "body": n.body,
+            "event_key": n.event_key,
+            "kind": p.get("kind") or "",
+            "link_url": n.link_url,
+            "is_read": n.read_at is not None,
+            "created_at": n.created_at,
+            "attachments": atts.get(aid, []),
+        })
+
+    return Response({
+        "total": total,
+        "unread": Notification.objects.filter(
+            recipient_person_id=person.id, read_at__isnull=True).count(),
+        "rows": out,
+        "page": page,
+        "has_more": has_more,
+    })
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def mark_read(request):
