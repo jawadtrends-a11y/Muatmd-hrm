@@ -22,7 +22,7 @@ import {
 } from "@/components/Icons";
 import NotificationBell from "@/components/NotificationBell";
 
-const PUBLIC_PATHS = ["/login", "/accept-invitation", "/signup"];
+const PUBLIC_PATHS = ["/login", "/join", "/accept-invitation", "/signup"];
 
 const T: Dict = {
   home: { ar: "الرئيسية", en: "Home" },

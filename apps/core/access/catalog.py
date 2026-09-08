@@ -58,6 +58,10 @@ PERMISSIONS = [
     _p("employees.edit",      "employees", "تعديل بيانات موظف"),
     _p("employees.terminate", "employees", "إنهاء خدمة موظف"),
     _p("employees.documents", "employees", "إدارة وثائق الموظفين"),
+    # ق-94: الدعوة تفتح باب النظام — صلاحية مستقلّة عن تعديل
+    # البيانات، فقد تريد الشركة من يعدّل ولا يدعو.
+    _p("employees.invite",    "employees", "دعوة موظف للانضمام",
+       "Invite employee to join"),
     _p("audit.view", "employees", "عرض سجل العمليات"),
     _p("persons.view_cross_company", "employees",
        "رؤية ارتباطات الشخص في شركات أخرى (بلا بيانات مالية)"),

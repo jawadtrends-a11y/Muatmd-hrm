@@ -263,8 +263,12 @@ def member_list(request):
         m = getattr(user, "account_membership", None) if user else None
         rows.append({
             "id": e.id,
+            # ق-94: الدعوة تُوجَّه للشخص لا للتوظيف — والخلط بينهما
+            # يدعو شخصًا آخر. فيُرسل الرقمان صريحين.
+            "person_id": e.person_id,
             "employee_no": e.employee_no,
             "name_ar": e.person.display_name,
+            "email": e.person.email or "",
             "department": e.department.name_ar if e.department else None,
             "username": user.username if user else None,
             "roles": ([a.role.name_ar

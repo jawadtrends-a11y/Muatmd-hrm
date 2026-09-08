@@ -158,6 +158,12 @@ from apps.accounts.models_access import (  # noqa: E402,F401
 )
 
 
+# دعوات الانضمام (ق-94)
+from apps.accounts.models_invite import (  # noqa: E402,F401
+    JoinInvite, InviteStatus,
+)
+
+
 # نماذج الاشتراكات والفوترة
 from apps.accounts.models_billing import (  # noqa: E402,F401
     Feature, Plan, PlanPriceTier, PlanFeature,
