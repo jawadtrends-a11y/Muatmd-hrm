@@ -52,7 +52,13 @@ class Features:
         from apps.accounts.models_billing_v2 import (
             AccountSubscription, SubscriptionState)
 
-        bundle = {k: True for k in CORE_FEATURE_KEYS}
+        # ق-118: **لا مزايا مجّانية دائمة** (قرار جواد) — والستّ
+        # التي كانت «أساسية مجّانية» هي **الباقة الأساسية** نفسها،
+        # تُنال بالاشتراك. والمجّانيّ الوحيد تجربةُ سبعة أيام عليها.
+        #
+        # فبلا اشتراك سارٍ لا تُفتح ميزة: من انتهى اشتراكه يقرأ ولا
+        # يعمل، وإلا بقي لبّ النظام مجّانًا فأُفرغ الاشتراك من معناه.
+        bundle = {}
         account_id = (Company.objects.filter(id=company_id)
                       .values_list("account_id", flat=True).first())
         sub = (AccountSubscription.objects
@@ -62,7 +68,20 @@ class Features:
                                   SubscriptionState.PAST_DUE,
                                   SubscriptionState.GRACE])
                .select_related("plan").first())
+        # التجربة بلا باقة مختارة تُمنح **الأساسية** — أدنى المعروضة
+        # ترتيبًا، فالمجرّب يرى ما سيشتريه لا أكثر.
         if sub and sub.plan_id is None:
+            if sub.state == SubscriptionState.TRIAL:
+                from apps.accounts.models_billing import Plan
+                trial_plan = (Plan.objects
+                              .filter(is_public=True, is_active=True)
+                              .order_by("tier_order", "id").first())
+                if trial_plan is not None:
+                    for pf in trial_plan.features.all():
+                        bundle[pf.feature_key] = (
+                            True if pf.value == "true"
+                            else False if pf.value == "false"
+                            else pf.value)
             sub = None
         if sub:
             for pf in sub.plan.features.all():

@@ -169,3 +169,46 @@ def test_no_hint_when_no_plan_opens_it(env):
 
     _subscribe(env, env["basic"])
     assert upgrade_hint(env["company_id"], "nitaqat_simulator") is None
+
+
+# ══════════ لا مزايا مجّانية دائمة (ق-118) ══════════
+
+def test_no_subscription_means_no_features(env):
+    """
+    ⚠️⚠️ الأهمّ: بلا اشتراك سارٍ **لا تُفتح ميزة**.
+
+    والستّ التي كانت «أساسية مجّانية» هي الباقة الأساسية نفسها،
+    تُنال بالاشتراك — وإلا بقي لبّ النظام مجّانًا فأُفرغ الاشتراك
+    من معناه.
+    """
+    with account_scope(env["account_id"]):
+        AccountSubscription.objects.filter(
+            account_id=env["account_id"]).update(
+                state=SubscriptionState.READ_ONLY, plan=None)
+    Features.invalidate(env["company_id"])
+
+    assert Features.bundle(env["company_id"]) == {}
+    for key in ("attendance", "payroll", "leaves", "employee_files"):
+        assert not Features.enabled(env["company_id"], key), key
+
+
+def test_trial_gets_the_entry_plan(env):
+    """
+    والتجربة تُمنح **الباقة الأساسية** — أدنى المعروضة ترتيبًا.
+
+    فالمجرّب يرى ما سيشتريه لا أكثر: سبعة أيام على الأساسية
+    (قرار جواد).
+    """
+    Plan.objects.filter(id=env["basic"].id).update(tier_order=1,
+                                                   is_public=True)
+    Plan.objects.filter(id=env["top"].id).update(tier_order=3,
+                                                 is_public=True)
+    with account_scope(env["account_id"]):
+        AccountSubscription.objects.filter(
+            account_id=env["account_id"]).update(
+                state=SubscriptionState.TRIAL, plan=None)
+    Features.invalidate(env["company_id"])
+
+    assert Features.enabled(env["company_id"], "payroll")
+    assert not Features.enabled(env["company_id"], "api_access"), (
+        "التجربة فتحت مزايا فوق الأساسية")
