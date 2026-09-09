@@ -144,11 +144,47 @@ def confirm_payment(payment_id_or_moyasar_id):
     """
     payment = Payment.objects.filter(
         moyasar_payment_id=payment_id_or_moyasar_id).first()
-    if payment is None:
+    if payment is None and str(payment_id_or_moyasar_id).isdigit():
+        # الرقم الداخليّ فقط: البحث بـid بمعرّف ميسر النصّي ينهار
+        # بـ500 بدل أن يقول «غير موجودة».
         payment = Payment.objects.filter(
-            id=payment_id_or_moyasar_id).first()
+            id=int(payment_id_or_moyasar_id)).first()
     if payment is None:
-        raise PaymentError("عملية الدفع غير موجودة")
+        # ق-109: نموذج ميسر الجاهز ينشئ الدفع بنفسه ولا يمرّ
+        # بـpay_invoice — فلا صفّ عندنا. نسأل ميسر عن العملية
+        # ونربطها بالفاتورة من metadata التي مرّرناها للنموذج.
+        data = moyasar.fetch_payment(str(payment_id_or_moyasar_id))
+        meta = (data.get("metadata") or {})
+        try:
+            invoice_id = int(meta.get("invoice_id") or 0)
+        except (TypeError, ValueError):
+            invoice_id = 0
+        # العائد من البنك بلا جلسة، فلا سياق حساب — وRLS يحجب
+        # الفاتورة. نقرأ حسابها بدالّة معزولة ثم نعمل داخل سياقه.
+        from django.db import connection
+
+        from apps.core.tenancy.context import account_scope
+
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT account_id FROM app_invoice_account(%s)",
+                [invoice_id])
+            row = cur.fetchone()
+        if not row:
+            raise PaymentError("عملية الدفع غير موجودة")
+
+        with account_scope(row[0]):
+            invoice = Invoice.objects.filter(id=invoice_id).first()
+            if invoice is None:
+                raise PaymentError("عملية الدفع غير موجودة")
+            payment = Payment.objects.create(
+                account_id=invoice.account_id, invoice=invoice,
+                amount=invoice.total, status=PaymentStatus.INITIATED,
+                moyasar_payment_id=str(payment_id_or_moyasar_id))
+            _apply_response(payment, data)
+            if payment.status == PaymentStatus.PAID:
+                _on_paid(payment, data)
+            return payment
 
     if not payment.moyasar_payment_id:
         raise PaymentError("العملية بلا معرّف لدى ميسر")

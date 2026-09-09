@@ -45,6 +45,15 @@ const T: Dict = {
   },
   activeSub: { ar: "اشتراكك الحالي", en: "Your subscription" },
   daysLeft: { ar: "يومًا متبقّية", en: "days remaining" },
+  payTitle: { ar: "إتمام الاشتراك", en: "Complete subscription" },
+  payFor: { ar: "الفاتورة", en: "Invoice" },
+  payAmount: { ar: "المبلغ المستحقّ", en: "Amount due" },
+  payHint: {
+    ar: "بيانات بطاقتك تُرسل لبوابة الدفع مباشرةً — ولا تمرّ بخوادمنا",
+    en: "Card details go straight to the payment gateway",
+  },
+  preparing: { ar: "جارٍ التجهيز…", en: "Preparing…" },
+  close: { ar: "إغلاق", en: "Close" },
 };
 
 type Feat = { key: string; name_ar: string; name_en: string;
@@ -59,6 +68,11 @@ type Quote = {
   subscription: string; setup_fee: string; subtotal: string;
   vat: string; total: string; renewal_total: string;
   unit_price: string; billable_employees: number;
+};
+type Checkout = {
+  invoice_id: number; invoice_no: string; total: string;
+  publishable_key: string; callback_url: string;
+  amount_halalas: number; employees: number;
 };
 type Sub = {
   has_subscription: boolean; active_employees: number;
@@ -77,6 +91,8 @@ export default function SubscribePage() {
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [checkout, setCheckout] = useState<Checkout | null>(null);
+  const [paying, setPaying] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -113,6 +129,59 @@ export default function SubscribePage() {
     })();
     return () => { cancelled = true; };
   }, [plans, count, cycle, setup]);
+
+  const startCheckout = async (p: Plan) => {
+    setPaying(p.id); setErr("");
+    try {
+      const d = await apiPost<Checkout>("/account/checkout/", {
+        plan_code: p.code, cycle, employees: count,
+        with_setup: !!setup[p.id],
+      });
+      setCheckout(d);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setPaying(null); }
+  };
+
+  // نموذج ميسر الجاهز: بيانات البطاقة تذهب إليه مباشرةً ولا تمرّ
+  // بخوادمنا (ق-47). ونحمّل نصّه عند الحاجة لا في كل صفحة.
+  useEffect(() => {
+    if (!checkout) return;
+    const CSS = "https://cdn.moyasar.com/mpf/1.15.0/moyasar.css";
+    const JS = "https://cdn.moyasar.com/mpf/1.15.0/moyasar.js";
+
+    if (!document.querySelector(`link[href="${CSS}"]`)) {
+      const l = document.createElement("link");
+      l.rel = "stylesheet"; l.href = CSS;
+      document.head.appendChild(l);
+    }
+
+    const init = () => {
+      const w = window as unknown as {
+        Moyasar?: { init: (o: Record<string, unknown>) => void };
+      };
+      if (!w.Moyasar) return;
+      w.Moyasar.init({
+        element: ".mysr-form",
+        amount: checkout.amount_halalas,
+        currency: "SAR",
+        description: `اشتراك معتمد HRM — ${checkout.invoice_no}`,
+        publishable_api_key: checkout.publishable_key,
+        callback_url: checkout.callback_url,
+        // البطاقة وحدها الآن: Apple Pay يشترط تسجيل النطاق في
+        // ميسر ومعرّف التاجر — وبدونها يحجب حقول البطاقة بأخطائه.
+        methods: ["creditcard"],
+        metadata: { invoice_id: checkout.invoice_id },
+      });
+    };
+
+    const existing = document.querySelector(`script[src="${JS}"]`);
+    if (existing) { init(); return; }
+    const sc = document.createElement("script");
+    sc.src = JS;
+    sc.onload = init;
+    document.body.appendChild(sc);
+  }, [checkout]);
 
   const money = (v?: string) =>
     v ? Number(v).toLocaleString("en-US", { minimumFractionDigits: 2,
@@ -275,13 +344,55 @@ export default function SubscribePage() {
 
               <button className="btn btn-primary"
                       style={{ marginTop: 16, width: "100%", height: 42 }}
-                      onClick={() => setMsg(L("soon"))}>
-                {L("start")}
+                      disabled={paying !== null}
+                      onClick={() => startCheckout(p)}>
+                {paying === p.id ? L("preparing") : L("start")}
               </button>
             </div>
           );
         })}
       </div>
+
+      {checkout && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(16,28,38,.5)",
+          display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+          overflowY: "auto",
+        }}>
+          <div className="card" style={{ padding: 24, maxWidth: 460,
+                                         width: "100%" }}>
+            <div className="spread">
+              <h3 style={{ margin: 0 }}>{L("payTitle")}</h3>
+              <button className="btn btn-ghost btn-sm"
+                      onClick={() => setCheckout(null)}>
+                {L("close")}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 14, display: "grid", gap: 6,
+                          fontSize: ".9rem" }}>
+              <div className="spread">
+                <span className="muted">{L("payFor")}</span>
+                <span className="num">{checkout.invoice_no}</span>
+              </div>
+              <div className="spread" style={{ fontWeight: 700 }}>
+                <span>{L("payAmount")}</span>
+                <span className="num">
+                  {money(checkout.total)} {L("sar")}
+                </span>
+              </div>
+            </div>
+
+            <div className="mysr-form" style={{ marginTop: 18 }} />
+
+            <div className="muted" style={{ fontSize: ".78rem",
+                                            marginTop: 12,
+                                            textAlign: "center" }}>
+              {L("payHint")}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

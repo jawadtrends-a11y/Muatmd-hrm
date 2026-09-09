@@ -148,8 +148,14 @@ const T: Dict = {
   autoRenew: { ar: "التجديد التلقائي", en: "Auto renewal" },
   paymentMethod: { ar: "طريقة الدفع", en: "Payment method" },
   savedCard: { ar: "البطاقة المحفوظة", en: "Saved card" },
-  invoices: { ar: "الفواتير", en: "Invoices" },
-  invoiceNo: { ar: "رقم الفاتورة", en: "Invoice No." },
+  invoices: { ar: "سجلّ المدفوعات", en: "Payment history" },
+  payDate: { ar: "التاريخ", en: "Date" },
+  payMethod: { ar: "الوسيلة", en: "Method" },
+  payPeriod: { ar: "الفترة", en: "Period" },
+  invoiceNote: {
+    ar: "تصلك الفاتورة الضريبية بالبريد فور نجاح الدفع",
+    en: "Your tax invoice arrives by email once payment succeeds",
+  },
   amount: { ar: "المبلغ", en: "Amount" },
   status: { ar: "الحالة", en: "Status" },
   dueDate: { ar: "الاستحقاق", en: "Due" },
@@ -189,13 +195,12 @@ type Subscription = {
   saved_card: { brand: string; last_four: string } | null;
 };
 
-type Invoice = {
-  id: number;
-  invoice_no: string;
-  total: string;
-  status_label: string;
-  due_date: string | null;
+type PaymentRow = {
+  id: number; date: string; amount: string;
+  status: string; status_label: string; paid: boolean;
+  period: string; method: string; last4: string;
 };
+
 
 function money(v: unknown) {
   const n = Number(v);
@@ -595,16 +600,16 @@ function SubscriptionPanel({
   L: (k: string, f?: string) => string;
 }) {
   const [sub, setSub] = useState<Subscription | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
     Promise.all([
       apiGet<Subscription>("/account/subscription/").catch(() => null),
-      apiGet<Invoice[]>("/account/invoices/").catch(() => []),
+      apiGet<PaymentRow[]>("/account/payments/").catch(() => []),
     ]).then(([s, inv]) => {
       setSub(s);
-      setInvoices(inv);
+      setPayments(inv);
       setBusy(false);
     });
   }, []);
@@ -685,9 +690,14 @@ function SubscriptionPanel({
 
       <div className="card" style={{ overflow: "hidden" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
-          <h3 style={{ fontSize: "1rem" }}>{L("invoices")}</h3>
+          <div>
+            <h3 style={{ fontSize: "1rem", margin: 0 }}>{L("invoices")}</h3>
+            <div className="muted" style={{ fontSize: ".8rem", marginTop: 2 }}>
+              {L("invoiceNote")}
+            </div>
+          </div>
         </div>
-        {invoices.length === 0 ? (
+        {payments.length === 0 ? (
           <div style={{ padding: 32, textAlign: "center", color: "var(--ink-3)" }}>
             {L("empty")}
           </div>
@@ -695,25 +705,33 @@ function SubscriptionPanel({
           <table className="table">
             <thead>
               <tr>
-                <th style={{ textAlign: "end" }}>{L("invoiceNo")}</th>
+                <th style={{ textAlign: "end" }}>{L("payDate")}</th>
                 <th style={{ textAlign: "end" }}>{L("amount")}</th>
-                <th style={{ textAlign: "end" }}>{L("dueDate")}</th>
+                <th style={{ textAlign: "end" }}>{L("payPeriod")}</th>
+                <th>{L("payMethod")}</th>
                 <th>{L("status")}</th>
               </tr>
             </thead>
             <tbody>
-              {invoices.map((i) => (
-                <tr key={i.id}>
+              {payments.map((p) => (
+                <tr key={p.id}>
                   <td style={{ textAlign: "end" }}>
-                    <span className="num">{i.invoice_no}</span>
+                    <span className="num">{p.date}</span>
                   </td>
                   <td style={{ textAlign: "end", fontWeight: 600 }}>
-                    <span className="num">{money(i.total)}</span>
+                    <span className="num">{money(p.amount)}</span>
                   </td>
-                  <td style={{ textAlign: "end" }}>
-                    {i.due_date ? <span className="num">{i.due_date}</span> : "—"}
+                  <td style={{ textAlign: "end" }} className="muted">
+                    <span className="num">{p.period || "—"}</span>
                   </td>
-                  <td><span className="badge">{i.status_label}</span></td>
+                  <td className="muted">
+                    {p.method ? `${p.method} ••${p.last4}` : "—"}
+                  </td>
+                  <td>
+                    <span className={p.paid ? "badge badge-ok" : "badge"}>
+                      {p.status_label}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

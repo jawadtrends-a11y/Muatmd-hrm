@@ -150,6 +150,38 @@ def invoices(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def my_payments(request):
+    """
+    سجلّ مدفوعاتي (ق-110) — ما دفعه ومتى، لا فواتيرَ ولا أرقامها.
+
+    فاتورة النظام الداخلية سجلٌّ محاسبيّ لا يراه العميل: الفاتورة
+    التي تصله زكاتيةٌ تصدر من نظام معتمد المحاسبي بعد نجاح الدفع.
+    وعرضُ فاتورتين لدفعةٍ واحدة يُربكه.
+    """
+    from apps.accounts.models_billing_v2 import Payment, PaymentStatus
+
+    Gate.require(request.user, "account.view")
+    # معزول ذاتيًا: مقيَّد بحساب المنفّذ
+    qs = Payment.objects.filter(
+        account_id=_account_id(request)).select_related(
+            "invoice").order_by("-created_at")[:50]
+
+    return Response([{
+        "id": p.id,
+        "date": p.created_at.date(),
+        "amount": str(p.amount),
+        "status": p.status,
+        "status_label": p.get_status_display(),
+        "paid": p.status == PaymentStatus.PAID,
+        "period": (f"{p.invoice.period_start} — {p.invoice.period_end}"
+                   if p.invoice_id else ""),
+        "method": p.card_brand or "",
+        "last4": p.card_last_four or "",
+    } for p in qs])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def invoice_detail(request, invoice_id):
     """تفاصيل فاتورة بسطورها."""
     Gate.require(request.user, "account.view")

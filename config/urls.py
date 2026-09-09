@@ -165,12 +165,20 @@ urlpatterns = [
     # api/billing/* أعلاه التي تخص اشتراك الشركة بباقة
     path("api/account/subscription/", acct_billing.subscription_status, name="acct-subscription"),
     path("api/account/plans/", acct_billing.available_plans, name="acct-plans"),
+    # ق-110: العميل يرى مدفوعاته لا فواتيرنا الداخلية — والفاتورة
+    # الزكاتية تصله من نظام معتمد المحاسبي.
+    path("api/account/payments/", acct_billing.my_payments,
+         name="acct-payments"),
     path("api/account/invoices/", acct_billing.invoices, name="acct-invoices"),
     path("api/account/invoices/<int:invoice_id>/", acct_billing.invoice_detail, name="acct-invoice-detail"),
     path("api/account/checkout/", acct_billing.start_checkout, name="acct-checkout"),
     path("api/account/invoices/<int:invoice_id>/pay/", acct_billing.pay_invoice, name="acct-pay"),
     path("api/account/auto-renew/", acct_billing.toggle_auto_renew, name="acct-auto-renew"),
     path("api/account/cards/", acct_billing.saved_cards, name="acct-cards"),
+    # ق-109: عودة الدفع تذهب لصفحة الواجهة، وهي تستدعي هذا
+    # للتأكيد — فالعميل يرى نتيجةً مفهومة لا JSON خامًا.
+    path("api/billing/confirm/", acct_billing.payment_callback,
+         name="payment-confirm"),
     path("billing/callback", acct_billing.payment_callback, name="payment-callback"),
     # ══ لوحة المنصة (ق-51) — معزولة عن مسارات العملاء ══
     path("platform/auth/login/", platform_auth_api.platform_login, name="platform-login"),
