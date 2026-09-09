@@ -90,3 +90,48 @@ def test_pricing_exposes_no_customer_data(plans):
     text = str(j)
     for leak in ("account", "subscription_id", "employee_no", "person"):
         assert leak not in text, f"تسريب: {leak}"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_customer_cannot_write_plans(plans, rls_enforced_late):
+    """
+    ⚠️ العميل لا يكتب الباقات — ولو نادى المسار.
+
+    فهي كتالوج المنصّة: يقرؤها الجميع، ويكتبها من لا سياق حساب
+    له. والعميل يعمل دائمًا داخل سياق حسابه.
+    """
+    from decimal import Decimal as D
+
+    from django.db import IntegrityError, InternalError, ProgrammingError
+
+    from apps.accounts.services.provisioning import provision_account
+    from apps.core.tenancy.context import account_scope
+
+    r = provision_account(slug="plan-w", display_name_ar="حساب",
+                          company_name_ar="شركة", is_sandbox=True)
+    rls_enforced_late()
+
+    from django.db import connection, transaction
+
+    with account_scope(r.account_id):
+        # المعاملة تُكسر بخطأ القاعدة — فنعزلها في atomic
+        # فرعيّ وإلا سقط التفكيك بعدها.
+        with pytest.raises((ProgrammingError, InternalError, IntegrityError)):
+            with transaction.atomic():
+                Plan.objects.create(code="sneaky", name_ar="مدسوسة",
+                                    base_fee_monthly=D("0"),
+                                    min_billable_employees=1)
+
+    assert not Plan.objects.filter(code="sneaky").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_platform_can_write_plans(plans, rls_enforced_late):
+    """والمنصّة تكتبها — فبلا ذلك لا تُدار الباقات أصلًا."""
+    from decimal import Decimal as D
+
+    rls_enforced_late()
+    p = Plan.objects.create(code="from-platform", name_ar="من اللوحة",
+                            base_fee_monthly=D("0"),
+                            min_billable_employees=1)
+    assert Plan.objects.filter(id=p.id).exists()

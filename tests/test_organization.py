@@ -27,11 +27,39 @@ def company(db):
         return Company.objects.get(id=acct.company_id)
 
 
+def _subscribe_account(company, plan_code):
+    """
+    اشتراك الحساب بالباقة (ق-117).
+
+    ⚠️ `subscribe_company` تكتب في `CompanySubscription` المهجور —
+    والبوّابة تقرأ `AccountSubscription`. فالاختبار بالجدول الميّت
+    لا يفحص شيئًا.
+    """
+    from apps.accounts.models_billing import Plan
+    from apps.accounts.models_billing_v2 import (
+        AccountSubscription, BillingCycle, SubscriptionState)
+    from apps.core.features.gate import Features
+    from datetime import date, timedelta
+
+    plan = Plan.objects.get(code=plan_code)
+    sub, _ = AccountSubscription.objects.get_or_create(
+        account_id=company.account_id,
+        defaults={"state": SubscriptionState.ACTIVE})
+    sub.plan = plan
+    sub.cycle = BillingCycle.MONTHLY
+    sub.state = SubscriptionState.ACTIVE
+    sub.current_period_start = date.today()
+    sub.current_period_end = date.today() + timedelta(days=30)
+    sub.save()
+    Features.invalidate(company.id)
+    return sub
+
+
 @pytest.mark.django_db(transaction=True)
 def test_branch_limit_from_plan(company):
     """حد الفروع يأتي من الباقة لا من الكود."""
     with account_scope(company.account_id):
-        subscribe_company(company=company, plan_code="basic")   # حد 2
+        _subscribe_account(company, "basic")   # حد 2
         create_branch(company=company, code="B1", name_ar="فرع ١")
         create_branch(company=company, code="B2", name_ar="فرع ٢")
         with pytest.raises(LimitExceeded) as exc:
@@ -43,7 +71,7 @@ def test_branch_limit_from_plan(company):
 def test_enterprise_has_no_branch_limit(company):
     """الباقة المؤسسية: max_branches=0 يعني بلا حد."""
     with account_scope(company.account_id):
-        subscribe_company(company=company, plan_code="enterprise")
+        _subscribe_account(company, "enterprise")
         for i in range(5):
             create_branch(company=company, code=f"B{i}", name_ar=f"فرع {i}")
         assert Branch.objects.filter(company=company).count() == 5
@@ -139,7 +167,7 @@ def test_org_isolated_between_accounts(company, rls_enforced_late):
         company_name_ar="شركة أخرى", is_sandbox=True,
     )
     with account_scope(company.account_id):
-        subscribe_company(company=company, plan_code="enterprise")
+        _subscribe_account(company, "enterprise")
         create_branch(company=company, code="X", name_ar="فرع")
         create_department(company=company, code="D", name_ar="قسم")
 

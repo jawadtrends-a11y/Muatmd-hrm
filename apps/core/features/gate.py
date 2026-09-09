@@ -43,13 +43,27 @@ class Features:
         if cached is not None:
             return cached
 
-        from apps.accounts.models_billing import CompanySubscription
+        # ⚠️ ق-117: الاشتراك في **AccountSubscription** لا
+        # CompanySubscription — والثاني مهجور فارغ. فكانت البوّابة
+        # تقرأ جدولًا خاويًا وتُرجع المزايا الأساسية للجميع:
+        # **الباقة أسعارٌ بلا أثر**، ومن دفع للأساسية استعمل مزايا
+        # المؤسسية.
+        from apps.accounts.models import Company
+        from apps.accounts.models_billing_v2 import (
+            AccountSubscription, SubscriptionState)
 
         bundle = {k: True for k in CORE_FEATURE_KEYS}
-        sub = (CompanySubscription.objects
-               .filter(company_id=company_id,
-                       status__in=["trial", "active", "past_due", "grace"])
+        account_id = (Company.objects.filter(id=company_id)
+                      .values_list("account_id", flat=True).first())
+        sub = (AccountSubscription.objects
+               .filter(account_id=account_id,
+                       state__in=[SubscriptionState.TRIAL,
+                                  SubscriptionState.ACTIVE,
+                                  SubscriptionState.PAST_DUE,
+                                  SubscriptionState.GRACE])
                .select_related("plan").first())
+        if sub and sub.plan_id is None:
+            sub = None
         if sub:
             for pf in sub.plan.features.all():
                 bundle[pf.feature_key] = (
@@ -108,3 +122,54 @@ def requires_feature(feature_key: str):
             return view_func(request, *args, **kwargs)
         return wrapper
     return decorator
+
+
+def upgrade_hint(company_id: int, feature_key: str) -> dict | None:
+    """
+    أصغر باقة تفتح هذه الميزة (ق-117).
+
+    **لا أي باقة أعلى**: من هو على الأساسية ويريد ميزةً توفّرها
+    «المميزة» يُرشَّح للمميزة لا للمؤسسية — فترشيحُ الأغلى بلا
+    داعٍ يُنفّره، وقد لا تكون فيها أصلًا.
+
+    ويرجع None إن كانت الميزة مفتوحة له، أو لم تفتحها باقةٌ
+    معروضة.
+    """
+    from apps.accounts.models import Company
+    from apps.accounts.models_billing import Plan
+
+    if Features.enabled(company_id, feature_key):
+        return None
+
+    account_id = (Company.objects.filter(id=company_id)
+                  .values_list("account_id", flat=True).first())
+    current_order = -1
+    from apps.accounts.models_billing_v2 import AccountSubscription
+    sub = (AccountSubscription.objects
+           .filter(account_id=account_id).select_related("plan").first())
+    if sub and sub.plan:
+        current_order = sub.plan.tier_order
+
+    for plan in Plan.objects.filter(
+            is_public=True, is_active=True).order_by("tier_order", "id"):
+        if plan.tier_order <= current_order:
+            continue
+        pf = plan.features.filter(feature_key=feature_key).first()
+        if pf is None:
+            continue
+        # القيمة العددية تُقبل كذلك: حدٌّ أكبر ترقيةٌ أيضًا
+        if pf.value in ("false", "0", ""):
+            continue
+        tier = plan.price_tiers.order_by("from_employees").first()
+        return {
+            "feature": feature_key,
+            "plan_id": plan.id,
+            "plan_code": plan.code,
+            "plan_name": plan.name_ar,
+            "monthly": (str(tier.price_per_employee_monthly)
+                        if tier else None),
+            "annual": (str(tier.price_per_employee_yearly)
+                       if tier else None),
+            "upgrade_url": "/subscribe",
+        }
+    return None
