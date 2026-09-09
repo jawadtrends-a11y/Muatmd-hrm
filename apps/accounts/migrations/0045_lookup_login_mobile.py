@@ -39,5 +39,11 @@ GRANT EXECUTE ON FUNCTION app_lookup_login_identifier(TEXT) TO hrm_runtime;
 
 
 class Migration(migrations.Migration):
-    dependencies = [("accounts", "0044_login_mobile")]
+    dependencies = [
+        ("accounts", "0044_login_mobile"),
+        # ⚠️ بعد حذف border_number: 0028 توسّع الدالّة به و0029
+        # تنزعه — وهجرتنا تعيد كتابتها، فلا بدّ أن تقع بعدهما
+        # وبعد حذف العمود، وإلا اصطدم الترتيب بعمود غير موجود.
+        ("employees", "0011_remove_person_border_number"),
+    ]
     operations = [migrations.RunSQL(SQL, migrations.RunSQL.noop)]

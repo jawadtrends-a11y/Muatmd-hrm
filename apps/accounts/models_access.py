@@ -187,6 +187,19 @@ class RoleAssignment(models.Model):
     membership = models.ForeignKey(
         AccountMembership, on_delete=models.CASCADE, related_name="role_assignments",
     )
+    # ق-115: الدور على **التوظيف** لا على العضوية.
+    #
+    # فالعضوية بيانات دخولٍ واحدة لكل شخص، والتوظيف واحدٌ لكل
+    # شركة — فمن يعمل في شركتين بدورين مختلفين كانت أدواره تتزاحم
+    # في عضوية واحدة، وتُميَّز بحقل company_id وحده. ونسيانُ ذلك
+    # الحقل في البوابة أسرى دورَ شركةٍ في الشركات كلّها (ق-114).
+    #
+    # والشركة تأتي من التوظيف نفسه — فلا حقل يُنسى.
+    employment = models.ForeignKey(
+        "employees.Employment", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="role_assignments",
+        verbose_name=_("التوظيف"))
+
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")
     company = models.ForeignKey(
         "accounts.Company", on_delete=models.CASCADE,

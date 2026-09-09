@@ -121,9 +121,7 @@ class Gate:
         # كنمط الاستثناءات الشخصية أدناه.
         active = membership.active_company_id
         best = None
-        for assignment in membership.role_assignments.select_related("role"):
-            if assignment.company_id not in (None, active):
-                continue
+        for assignment in cls._active_assignments(membership):
             if permission_key not in assignment.role.permission_keys:
                 continue
             scope = Scope(assignment.scope)
@@ -269,6 +267,37 @@ class Gate:
         return None
 
     @classmethod
+    def _active_assignments(cls, membership):
+        """
+        إسنادات الدور السارية في الشركة النشطة (ق-115).
+
+        **الدور على التوظيف**: من يعمل في شركتين له توظيفان
+        فدوران مستقلّان، والشركة تأتي من التوظيف نفسه.
+
+        ⚠️ **والتوظيف المنتهي لا يمنح شيئًا**: من أُنهيت خدمته
+        تُنزع صلاحياته فورًا بلا تدخّل.
+
+        والإسناد بلا توظيف (مالك الحساب قبل أن يُضيف نفسه) يبقى
+        على العضوية، ويُرشَّح بحقل الشركة كالسابق.
+        """
+        from apps.employees.models import EmploymentStatus
+
+        active = membership.active_company_id
+        out = []
+        for a in membership.role_assignments.select_related(
+                "role", "employment"):
+            emp = a.employment
+            if emp is not None:
+                if emp.status != EmploymentStatus.ACTIVE:
+                    continue
+                if emp.company_id != active:
+                    continue
+            elif a.company_id not in (None, active):
+                continue
+            out.append(a)
+        return out
+
+    @classmethod
     def accessible_permissions(cls, user) -> set:
         """كل الصلاحيات الفعّالة — تُستخدم في /me/workspace."""
         membership = cls._membership(user)
@@ -276,12 +305,8 @@ class Gate:
             return set()
         if membership.is_account_owner:
             return set(PERMISSION_KEYS)
-        # ق-114: أدوار الشركة النشطة وحدها — كما في check()
-        active = membership.active_company_id
         keys = set()
-        for a in membership.role_assignments.select_related("role"):
-            if a.company_id not in (None, active):
-                continue
+        for a in cls._active_assignments(membership):
             keys |= a.role.permission_keys
 
         # الاستثناءات الشخصية (ق-67) — تُضاف وتُنزع بعد الدور

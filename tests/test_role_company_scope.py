@@ -106,3 +106,113 @@ def test_account_wide_role_applies_everywhere(env):
             u = User.objects.get(id=u.id)
             assert Gate.check(u, "employees.view_all").allowed, (
                 f"الدور العامّ لم يسرِ في {comp.code}")
+
+
+# ══════════ الدور على التوظيف (ق-115) ══════════
+
+@pytest.fixture
+def emp_env(db):
+    """موظف بتوظيفين في شركتين، ودورين مختلفين."""
+    from apps.employees.services.hiring import (
+        create_employment, create_person)
+    from datetime import date
+
+    r = provision_account(slug="role-emp", display_name_ar="حساب",
+                          company_name_ar="الأولى", is_sandbox=True)
+    with account_scope(r.account_id):
+        acc = Account.objects.get(id=r.account_id)
+        c1 = Company.objects.get(id=r.company_id)
+        c2 = Company.objects.create(account=acc, code="C2",
+                                    legal_name_ar="الثانية")
+
+        u = User.objects.create_user(username="dual", password="Pw@2026xx")
+        p, _ = create_person(
+            account=acc, first_name_ar="خالد", family_name_ar="الزهراني",
+            gender="male", nationality_code="SA", id_type="national_id",
+            id_number="1044455566", mobile="0504445556", user=u)
+        e1, _, _ = create_employment(person=p, company=c1,
+                                     employee_no="D-1",
+                                     join_date=date(2024, 1, 1))
+        e2, _, _ = create_employment(person=p, company=c2,
+                                     employee_no="D-2",
+                                     join_date=date(2024, 1, 1))
+
+        m = AccountMembership.objects.create(user=u, account=acc,
+                                             active_company=c1)
+        RoleAssignment.objects.create(
+            membership=m, employment=e1,
+            role=Role.objects.get(account=acc, code="hr_manager"),
+            company=c1, scope=Scope.COMPANY.value)
+        RoleAssignment.objects.create(
+            membership=m, employment=e2,
+            role=Role.objects.get(account=acc, code="employee"),
+            company=c2, scope=Scope.OWN.value)
+
+        yield {"account_id": r.account_id, "user": u, "m": m,
+               "c1": c1, "c2": c2, "e1": e1, "e2": e2}
+
+
+def test_employment_role_is_scoped_to_its_company(emp_env):
+    """
+    ⚠️ الدور على التوظيف: من يعمل في شركتين له دوران مستقلّان.
+
+    والشركة تأتي من التوظيف نفسه — فلا حقل يُنسى كما نُسي في
+    ق-114.
+    """
+    u, m = emp_env["user"], emp_env["m"]
+    with account_scope(emp_env["account_id"]):
+        m.active_company = emp_env["c1"]
+        m.save(update_fields=["active_company"])
+        assert Gate.check(User.objects.get(id=u.id),
+                          "employees.view_all").allowed
+
+        m.active_company = emp_env["c2"]
+        m.save(update_fields=["active_company"])
+        assert not Gate.check(User.objects.get(id=u.id),
+                              "employees.view_all").allowed
+
+
+def test_terminated_employment_grants_nothing(emp_env):
+    """
+    ⚠️⚠️ **التوظيف المنتهي لا يمنح شيئًا**.
+
+    فمن أُنهيت خدمته تُنزع صلاحياته فورًا بلا تدخّل — وبقاؤها
+    يعني موظفًا مفصولًا يقرأ ملفّات زملائه.
+    """
+    from apps.employees.models import Employment, EmploymentStatus
+
+    u, m = emp_env["user"], emp_env["m"]
+    with account_scope(emp_env["account_id"]):
+        m.active_company = emp_env["c1"]
+        m.save(update_fields=["active_company"])
+        assert Gate.check(User.objects.get(id=u.id),
+                          "employees.view_all").allowed
+
+        Employment.objects.filter(id=emp_env["e1"].id).update(
+            status=EmploymentStatus.TERMINATED)
+
+        assert not Gate.check(User.objects.get(id=u.id),
+                              "employees.view_all").allowed, (
+            "موظف مفصول ما زال يحمل صلاحياته")
+
+
+def test_owner_without_employment_keeps_access(emp_env):
+    """
+    ومالك الحساب يعمل قبل أن يُضيف نفسه موظفًا.
+
+    فإسناده بلا توظيف، ويُرشَّح بحقل الشركة كالسابق — ولولا ذلك
+    لبقي المالك بلا صلاحيات حتى يوظّف نفسه.
+    """
+    with account_scope(emp_env["account_id"]):
+        acc = Account.objects.get(id=emp_env["account_id"])
+        u2 = User.objects.create_user(username="owner2", password="Pw@2026xx")
+        m2 = AccountMembership.objects.create(
+            user=u2, account=acc, active_company=emp_env["c1"],
+            is_account_owner=False)
+        RoleAssignment.objects.create(
+            membership=m2, employment=None,
+            role=Role.objects.get(account=acc, code="hr_manager"),
+            company=emp_env["c1"], scope=Scope.COMPANY.value)
+
+        assert Gate.check(User.objects.get(id=u2.id),
+                          "employees.view_all").allowed

@@ -47,6 +47,14 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("accounts", "0027_login_identifier_lookup"),
+        # ⚠️ الدالّة تذكر Person.border_number — فلا بدّ أن تُطبَّق
+        # **قبل** حذفه (employees.0011). وبلا هذا الاعتماد قد يقع
+        # الحذف أوّلًا فتصطدم بعمود غير موجود: نجت قاعدة الإنتاج
+        # بترتيبها التاريخيّ، وسقطت قاعدة الاختبار المبنيّة من الصفر.
+        ("employees", "0010_employment_termination_pending_from"),
+    ]
+    run_before = [
+        ("employees", "0011_remove_person_border_number"),
     ]
 
     operations = [
