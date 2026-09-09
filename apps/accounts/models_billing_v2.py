@@ -152,6 +152,12 @@ class Invoice(AccountScopedModel):
         help_text=_("ذروة الفترة — أساس الاحتساب"))
     note = models.TextField(_("ملاحظة"), blank=True)
 
+    # ق-108: فاتورة فرق إضافة موظفين — تُميَّز صراحةً لا بالتخمين
+    # من تواريخها، فسدادها يرفع العدد المشترَك به لا يجدّد الفترة.
+    is_overage = models.BooleanField(_("فاتورة فرق"), default=False)
+    overage_employees = models.PositiveIntegerField(
+        _("عدد الموظفين المضافين"), default=0)
+
     class Meta:
         verbose_name = _("فاتورة اشتراك")
         verbose_name_plural = _("فواتير الاشتراكات")

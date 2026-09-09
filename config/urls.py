@@ -73,6 +73,8 @@ urlpatterns = [
     path("api/plans/quote/", subscribe_api.price_quote, name="price-quote"),
     path("api/account/my-subscription/", subscribe_api.my_subscription,
          name="my-subscription"),
+    path("api/account/pay-overage/", subscribe_api.pay_overage,
+         name="pay-overage"),
     path("api/company/settings/", accounts_company_api.company_settings,
          name="company-settings"),
     # مبدّل الشركات — لمن له توظيف في أكثر من شركة

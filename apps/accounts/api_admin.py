@@ -297,7 +297,8 @@ def admin_activate(request, account_id):
             custom_price=(Decimal(str(request.data["custom_price"]))
                           if request.data.get("custom_price") else None),
             setup_fee=(Decimal(str(request.data["setup_fee"]))
-                       if request.data.get("setup_fee") else None))
+                       if request.data.get("setup_fee") else None),
+            employees=request.data.get("employees"))
 
     _log(request, "subscription.activate", account=acc,
          detail={"plan": plan.code, "cycle": cycle,
@@ -307,6 +308,7 @@ def admin_activate(request, account_id):
     return Response({
         "state": sub.state, "plan": plan.name_ar,
         "period_end": sub.current_period_end,
+        "employees": sub.subscribed_employees,
         "payment_method": sub.get_payment_method_display(),
     })
 

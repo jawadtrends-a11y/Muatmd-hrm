@@ -4,6 +4,8 @@
 يرى الباقات المعروضة بمزاياها، ويكتب عدد موظفيه فيرى السعر —
 والضريبة ورسم الإعداد ظاهران قبل أن يدفع.
 """
+from decimal import Decimal
+
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -139,3 +141,90 @@ def my_subscription(request):
         except billing.BillingError as e:
             out["overage_error"] = str(e)
     return Response(out)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pay_overage(request):
+    """
+    دفع فرق الموظفين الزائدين (ق-108).
+
+    من زاد موظفوه على عدده المشترَك به يدفع الفرق **بالأيام
+    المتبقّية** — ثم يُرفع عدده المشترَك به، فلا يُطالَب به ثانيةً
+    في نفس الفترة.
+
+    والفاتورة تُنشأ بمبلغ الفرق وحده — لا بفاتورة فترة كاملة.
+    """
+    from django.conf import settings
+    from django.db import transaction
+
+    from apps.accounts.models_billing_v2 import (
+        AccountSubscription, Invoice, InvoiceLine, InvoiceStatus)
+    from apps.employees.models import Employment, EmploymentStatus
+
+    Gate.require(request.user, "account.manage")
+    ctx = getattr(request, "account_ctx", None)
+    account_id = getattr(ctx, "account_id", None)
+
+    sub = AccountSubscription.objects.filter(
+        account_id=account_id).select_related("plan").first()
+    if sub is None or sub.plan is None:
+        return Response({"detail": "لا اشتراك فعّال"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    active = Employment.objects.filter(
+        account_id=account_id, status=EmploymentStatus.ACTIVE).count()
+    added = active - (sub.subscribed_employees or 0)
+    if added <= 0:
+        return Response({"detail": "لا زيادة تستوجب دفعًا"}, status=400)
+
+    try:
+        calc = billing.prorated_addition(subscription=sub, added=added)
+    except billing.BillingError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    amount = Decimal(calc["amount"])
+    if amount <= 0:
+        # عبَر لشريحة أرخص أو لا فرق — يُرفع عدده بلا مطالبة
+        AccountSubscription.objects.filter(id=sub.id).update(
+            subscribed_employees=active)
+        return Response({"paid": False, "free": True,
+                         "employees": active,
+                         "detail": "لا مبلغ مستحقّ — رُفع عددك"})
+
+    vat = billing.r2(amount * Decimal(str(billing.quote(
+        plan=sub.plan, employees=1, cycle=sub.cycle)["vat_rate"])))
+
+    with transaction.atomic():
+        inv = Invoice.objects.create(
+            account_id=account_id, invoice_no=billing._next_invoice_no(),
+            period_start=sub.current_period_start,
+            period_end=sub.current_period_end,
+            cycle=sub.cycle, subtotal=amount,
+            headcount=added, status=InvoiceStatus.DRAFT,
+            is_overage=True, overage_employees=added)
+        InvoiceLine.objects.create(
+            invoice=inv,
+            description_ar=(f"إضافة {added} موظفًا — "
+                            f"{calc['days_remaining']} يومًا متبقّية"),
+            quantity=added, unit_price=billing.r2(amount / added),
+            amount=amount)
+        inv.total_before_vat = amount
+        inv.vat_amount = vat
+        inv.total = billing.r2(amount + vat)
+        inv.save()
+        billing.issue_invoice(inv)
+
+    return Response({
+        "invoice_id": inv.id,
+        "invoice_no": inv.invoice_no,
+        "added": added,
+        "employees_after": active,
+        "days_remaining": calc["days_remaining"],
+        "before_vat": str(inv.total_before_vat),
+        "vat_amount": str(inv.vat_amount),
+        "total": str(inv.total),
+        "publishable_key": settings.MOYASAR_PUBLISHABLE_KEY,
+        "callback_url": settings.MOYASAR_CALLBACK_URL,
+        "amount_halalas": int(inv.total * 100),
+    }, status=status.HTTP_201_CREATED)

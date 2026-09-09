@@ -27,6 +27,29 @@ const T: Dict = {
   daysLeft: { ar: "المتبقي", en: "Days left" },
   unpaid: { ar: "فواتير معلّقة", en: "Unpaid" },
   impersonate: { ar: "دخول للدعم", en: "Support access" },
+  activate: { ar: "تفعيل", en: "Activate" },
+  extend: { ar: "تمديد", en: "Extend" },
+  activateTitle: { ar: "تفعيل اشتراك يدويًّا", en: "Activate manually" },
+  activateHint: {
+    ar: "للشركات التي تدفع بتحويل بنكي — يُفعَّل بلا مرور بالبوابة",
+    en: "For bank-transfer customers — no gateway involved",
+  },
+  extendTitle: { ar: "تمديد الاشتراك", en: "Extend subscription" },
+  extendHint: {
+    ar: "يمدّد التجربة أو المهلة إلى تاريخ تختاره",
+    en: "Extends trial or grace to a chosen date",
+  },
+  fPlan: { ar: "الباقة", en: "Plan" },
+  fCycle: { ar: "الدورة", en: "Cycle" },
+  fMonthly: { ar: "شهري", en: "Monthly" },
+  fAnnual: { ar: "سنوي", en: "Annual" },
+  fEmployees: { ar: "عدد الموظفين المتفق عليه", en: "Agreed employees" },
+  fStart: { ar: "بداية الفترة", en: "Period start" },
+  fUntil: { ar: "حتى تاريخ", en: "Until" },
+  fNote: { ar: "ملاحظة", en: "Note" },
+  fCustomPrice: { ar: "سعر خاص (اختياري)", en: "Custom price (optional)" },
+  go: { ar: "تنفيذ", en: "Apply" },
+  cancel2: { ar: "إلغاء", en: "Cancel" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   empty: { ar: "لا حسابات", en: "No accounts" },
   total: { ar: "الإجمالي", en: "Total" },
@@ -148,6 +171,10 @@ export default function AccountsPage() {
   const [busy, setBusy] = useState(true);
   const [dialog, setDialog] = useState<Account | null>(null);
   const [acting, setActing] = useState(false);
+  const [actDialog, setActDialog] = useState<Account | null>(null);
+  const [extDialog, setExtDialog] = useState<Account | null>(null);
+  const [plans, setPlans] = useState<{ id: number; code: string;
+                                       name_ar: string }[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -156,9 +183,12 @@ export default function AccountsPage() {
       pGet<{ accounts: Account[] }>("/platform/accounts/")
         .then((d) => d.accounts)
         .catch(() => [] as Account[]),
-    ]).then(([u, a]) => {
+      pGet<{ plans: { id: number; code: string; name_ar: string }[] }>(
+        "/platform/plans/").then((d) => d.plans).catch(() => []),
+    ]).then(([u, a, p]) => {
       setUser(u);
       setRows(a);
+      setPlans(p);
       setBusy(false);
     });
   }, []);
@@ -184,7 +214,41 @@ export default function AccountsPage() {
     }
   }
 
+  async function reload() {
+    const d = await pGet<{ accounts: Account[] }>("/platform/accounts/")
+      .catch(() => ({ accounts: [] as Account[] }));
+    setRows(d.accounts);
+  }
+
+  async function doActivate(body: Record<string, unknown>) {
+    if (!actDialog) return;
+    setActing(true); setError("");
+    try {
+      // ق-46: العملية غير قابلة للتراجع، فتُرسل بتأكيد صريح
+      await pPost(`/platform/accounts/${actDialog.account_id}/activate/`,
+                  { ...body, confirm: true });
+      setActDialog(null);
+      await reload();
+    } catch (e) {
+      setError((e as AdminError).message);
+    } finally { setActing(false); }
+  }
+
+  async function doExtend(body: Record<string, unknown>) {
+    if (!extDialog) return;
+    setActing(true); setError("");
+    try {
+      await pPost(`/platform/accounts/${extDialog.account_id}/extend/`,
+                  { ...body, confirm: true });
+      setExtDialog(null);
+      await reload();
+    } catch (e) {
+      setError((e as AdminError).message);
+    } finally { setActing(false); }
+  }
+
   const mayImpersonate = can(user, "account.impersonate");
+  const mayWrite = can(user, "account.write");
 
   return (
     <div className="stack">
@@ -298,13 +362,28 @@ export default function AccountsPage() {
                         ) : "—"}
                       </td>
                       <td style={{ textAlign: "end" }}>
-                        {mayImpersonate && (
-                          <button className="btn btn-sm"
-                            onClick={() => setDialog(r)}>
-                            <IcUser size={15} />
-                            {L("impersonate")}
-                          </button>
-                        )}
+                        <div className="row" style={{ gap: 5,
+                                                      justifyContent: "flex-end" }}>
+                          {mayWrite && (
+                            <>
+                              <button className="btn btn-sm"
+                                onClick={() => { setActDialog(r); setError(""); }}>
+                                {L("activate")}
+                              </button>
+                              <button className="btn btn-sm"
+                                onClick={() => { setExtDialog(r); setError(""); }}>
+                                {L("extend")}
+                              </button>
+                            </>
+                          )}
+                          {mayImpersonate && (
+                            <button className="btn btn-sm"
+                              onClick={() => setDialog(r)}>
+                              <IcUser size={15} />
+                              {L("impersonate")}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -325,6 +404,191 @@ export default function AccountsPage() {
         <ImpersonateDialog account={dialog} L={L} onStart={startSession}
           onClose={() => setDialog(null)} busy={acting} />
       )}
+
+      {actDialog && (
+        <ActivateDialog account={actDialog} plans={plans} L={L}
+          onApply={doActivate} onClose={() => setActDialog(null)}
+          busy={acting} />
+      )}
+
+      {extDialog && (
+        <ExtendDialog account={extDialog} L={L} onApply={doExtend}
+          onClose={() => setExtDialog(null)} busy={acting} />
+      )}
+    </div>
+  );
+}
+
+
+/* ══ تفعيل يدويّ (ق-48) ══ */
+
+function ActivateDialog({
+  account, plans, L, onApply, onClose, busy,
+}: {
+  account: Account;
+  plans: { id: number; code: string; name_ar: string }[];
+  L: (k: string, f?: string) => string;
+  onApply: (b: Record<string, unknown>) => void;
+  onClose: () => void;
+  busy: boolean;
+}) {
+  const [planCode, setPlanCode] = useState(plans[0]?.code || "");
+  const [cycle, setCycle] = useState("monthly");
+  const [employees, setEmployees] = useState(String(account.employees || 1));
+  const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  const [price, setPrice] = useState("");
+  const [note, setNote] = useState("");
+
+  return (
+    <Overlay onClose={onClose}>
+      <h3 style={{ margin: 0 }}>{L("activateTitle")}</h3>
+      <div className="muted" style={{ fontSize: ".85rem", marginTop: 4 }}>
+        {account.name} — {L("activateHint")}
+      </div>
+
+      <div className="stack" style={{ gap: 12, marginTop: 16 }}>
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fPlan")}
+          </span>
+          <select className="select" value={planCode}
+                  onChange={(e) => setPlanCode(e.target.value)}>
+            {plans.map((p) => (
+              <option key={p.id} value={p.code}>{p.name_ar}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fCycle")}
+          </span>
+          <select className="select" value={cycle}
+                  onChange={(e) => setCycle(e.target.value)}>
+            <option value="monthly">{L("fMonthly")}</option>
+            <option value="annual">{L("fAnnual")}</option>
+          </select>
+        </label>
+
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fEmployees")}
+          </span>
+          <input className="input" type="number" min={1} value={employees}
+                 onChange={(e) => setEmployees(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fStart")}
+          </span>
+          <input className="input" type="date" value={start} dir="ltr"
+                 onChange={(e) => setStart(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fCustomPrice")}
+          </span>
+          <input className="input" value={price} dir="ltr"
+                 onChange={(e) => setPrice(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fNote")}
+          </span>
+          <input className="input" value={note}
+                 onChange={(e) => setNote(e.target.value)} />
+        </label>
+      </div>
+
+      <div className="row" style={{ gap: 8, marginTop: 18 }}>
+        <button className="btn btn-primary" disabled={busy || !planCode}
+                onClick={() => onApply({
+                  plan_code: planCode, cycle,
+                  employees: Number(employees) || 1,
+                  period_start: start,
+                  custom_price: price || undefined,
+                  note,
+                })}>
+          {busy ? "…" : L("go")}
+        </button>
+        <button className="btn" onClick={onClose}>{L("cancel2")}</button>
+      </div>
+    </Overlay>
+  );
+}
+
+
+/* ══ تمديد (ق-48) ══ */
+
+function ExtendDialog({
+  account, L, onApply, onClose, busy,
+}: {
+  account: Account;
+  L: (k: string, f?: string) => string;
+  onApply: (b: Record<string, unknown>) => void;
+  onClose: () => void;
+  busy: boolean;
+}) {
+  const plus = new Date();
+  plus.setDate(plus.getDate() + 14);
+  const [until, setUntil] = useState(plus.toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+
+  return (
+    <Overlay onClose={onClose}>
+      <h3 style={{ margin: 0 }}>{L("extendTitle")}</h3>
+      <div className="muted" style={{ fontSize: ".85rem", marginTop: 4 }}>
+        {account.name} — {L("extendHint")}
+      </div>
+
+      <div className="stack" style={{ gap: 12, marginTop: 16 }}>
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fUntil")}
+          </span>
+          <input className="input" type="date" value={until} dir="ltr"
+                 onChange={(e) => setUntil(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fNote")}
+          </span>
+          <input className="input" value={note}
+                 onChange={(e) => setNote(e.target.value)} />
+        </label>
+      </div>
+
+      <div className="row" style={{ gap: 8, marginTop: 18 }}>
+        <button className="btn btn-primary" disabled={busy || !until}
+                onClick={() => onApply({ until, note })}>
+          {busy ? "…" : L("go")}
+        </button>
+        <button className="btn" onClick={onClose}>{L("cancel2")}</button>
+      </div>
+    </Overlay>
+  );
+}
+
+
+/* ══ غلاف النوافذ ══ */
+
+function Overlay({ children, onClose }: {
+  children: React.ReactNode; onClose: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+      overflowY: "auto",
+    }}>
+      <div className="card" style={{ padding: 24, maxWidth: 420,
+                                     width: "100%" }}
+           onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
     </div>
   );
 }

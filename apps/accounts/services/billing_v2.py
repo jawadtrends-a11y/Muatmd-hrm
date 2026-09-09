@@ -103,9 +103,26 @@ def resolve_discount(*, account, cycle, subtotal, coupon_code=None,
 # ══════════ الفواتير ══════════
 
 def _next_invoice_no():
+    """
+    مرجع المطالبة التالي — **أقصى مستعمل + ١** لا عدد الصفوف.
+
+    ⚠️ ليست فاتورة زكاتية: الفاتورة الضريبية تصدر من نظام معتمد
+    المحاسبي (ق-111)، وهذا **سجلّ مطالبة داخليّ** يربط الدفعة
+    بالاشتراك — فبادئته SUB لا INV كيلا يلتبسا.
+
+    ⚠️ والعدّ كان يعيد الترقيم للوراء عند أي حذف فيصطدم بقيد
+    التفرّد، **ويعدّ داخل عزل الحساب** فيبدأ كل حساب من واحد
+    وتتصادم المراجع بين الحسابات.
+    """
+    from django.db import connection
+
     year = date.today().year
-    n = Invoice.objects.filter(invoice_no__startswith=f"INV-{year}").count()
-    return f"INV-{year}-{n + 1:06d}"
+    prefix = f"SUB-{year}-"
+    # SECURITY DEFINER لتجاوز العزل: نقرأ رقمًا لا بيانات
+    with connection.cursor() as cur:
+        cur.execute("SELECT app_max_invoice_seq(%s)", [prefix])
+        last = cur.fetchone()[0] or 0
+    return f"{prefix}{last + 1:06d}"
 
 
 def period_end_for(start, cycle):
@@ -305,7 +322,7 @@ def mark_paid(invoice, actor=None, note=""):
 @transaction.atomic
 def activate_manually(*, subscription, plan, cycle, period_start,
                       activated_by, payment_method=None, note="",
-                      custom_price=None, setup_fee=None):
+                      custom_price=None, setup_fee=None, employees=None):
     """
     يسند باقة بلا مرور بالبوابة (ق-48).
 
@@ -328,6 +345,10 @@ def activate_manually(*, subscription, plan, cycle, period_start,
         subscription.custom_price = custom_price
     if setup_fee is not None:
         subscription.setup_fee_amount = setup_fee
+    # ق-108: العدد المتفق عليه يُثبَّت هنا كما يُثبَّت عند الدفع
+    # الإلكتروني — فلا يُفوتَر المفعَّل يدويًّا على ذروة موظفيه.
+    if employees:
+        subscription.subscribed_employees = int(employees)
     subscription.save()
 
     from apps.core.services.audit import log_action

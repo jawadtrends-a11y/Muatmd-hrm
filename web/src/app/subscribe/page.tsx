@@ -46,7 +46,7 @@ const T: Dict = {
   activeSub: { ar: "اشتراكك الحالي", en: "Your subscription" },
   daysLeft: { ar: "يومًا متبقّية", en: "days remaining" },
   payTitle: { ar: "إتمام الاشتراك", en: "Complete subscription" },
-  payFor: { ar: "الفاتورة", en: "Invoice" },
+  payFor: { ar: "مرجع العملية", en: "Reference" },
   payAmount: { ar: "المبلغ المستحقّ", en: "Amount due" },
   payHint: {
     ar: "بيانات بطاقتك تُرسل لبوابة الدفع مباشرةً — ولا تمرّ بخوادمنا",

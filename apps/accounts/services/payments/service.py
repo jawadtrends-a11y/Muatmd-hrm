@@ -206,7 +206,23 @@ def _on_paid(payment, data):
     """يُنفَّذ عند تأكيد الدفع: سداد الفاتورة وحفظ البطاقة."""
     from apps.accounts.services.billing_v2 import mark_paid
 
-    mark_paid(payment.invoice, note=f"دفع إلكتروني {payment.moyasar_payment_id}")
+    invoice = payment.invoice
+    mark_paid(invoice, note=f"دفع إلكتروني {payment.moyasar_payment_id}")
+
+    # ق-108: فاتورة الفرق المدفوعة ترفع العدد المشترَك به — فلا
+    # يُطالَب به ثانيةً في نفس الفترة. والعلم صريح في الفاتورة لا
+    # مستنتَجًا من تواريخها.
+    from apps.accounts.models_billing_v2 import AccountSubscription
+
+    if getattr(invoice, "is_overage", False) and invoice.overage_employees:
+        sub = AccountSubscription.objects.filter(
+            account_id=invoice.account_id).first()
+        if sub:
+            new_count = ((sub.subscribed_employees or 0)
+                         + invoice.overage_employees)
+            AccountSubscription.objects.filter(id=sub.id).update(
+                subscribed_employees=new_count)
+            logger.info("رُفع العدد المشترَك به إلى %s", new_count)
 
     meta = data.get("metadata") or {}
     if meta.get("save_card") == "1":

@@ -24,7 +24,7 @@ const T: Dict = {
     ar: "لم يُخصم من بطاقتك شيء — جرّب مرّة أخرى أو استعمل بطاقة غيرها",
     en: "Nothing was charged — try again or use another card",
   },
-  invoice: { ar: "الفاتورة", en: "Invoice" },
+  invoice: { ar: "مرجع العملية", en: "Reference" },
   amount: { ar: "المبلغ", en: "Amount" },
   home: { ar: "الرئيسية", en: "Home" },
   retry: { ar: "المحاولة ثانية", en: "Try again" },
