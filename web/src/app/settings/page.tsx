@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcPayroll, IcUsers, IcWallet } from "@/components/Icons";
 
@@ -83,6 +83,13 @@ const T: Dict = {
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   noAccess: { ar: "لا صلاحية لهذا القسم", en: "No access to this section" },
   noSub: { ar: "لا اشتراك لهذا الحساب بعد", en: "No subscription yet" },
+  overTitle: { ar: "موظفون زائدون عن اشتراكك", en: "Employees over your plan" },
+  overBody: {
+    ar: "لديك {n} موظفًا زائدًا — والمستحقّ {a} ريالًا عن {d} يومًا متبقّية",
+    en: "{n} extra employees — {a} SAR for the remaining {d} days",
+  },
+  overPay: { ar: "دفع الفرق", en: "Pay the difference" },
+  overPaying: { ar: "جارٍ التجهيز…", en: "Preparing…" },
   browsePlans: { ar: "عرض الباقات والاشتراك", en: "View plans" },
   noSubHint: {
     ar: "يُفعّله مدير المنصة — راجعه لتفعيل اشتراك منشأتك",
@@ -193,6 +200,15 @@ type Subscription = {
   period_end: string | null;
   days_left: number | null;
   saved_card: { brand: string; last_four: string } | null;
+};
+
+type Overage = {
+  added: number; amount: string; days_remaining: number;
+  employees_after: number;
+};
+type MySub = {
+  subscribed_employees?: number; active_employees?: number;
+  overage?: Overage;
 };
 
 type PaymentRow = {
@@ -600,15 +616,20 @@ function SubscriptionPanel({
   L: (k: string, f?: string) => string;
 }) {
   const [sub, setSub] = useState<Subscription | null>(null);
+  const [mine, setMine] = useState<MySub | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [busy, setBusy] = useState(true);
+  const [paying, setPaying] = useState(false);
+  const [checkout, setCheckout] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     Promise.all([
       apiGet<Subscription>("/account/subscription/").catch(() => null),
+      apiGet<MySub>("/account/my-subscription/").catch(() => null),
       apiGet<PaymentRow[]>("/account/payments/").catch(() => []),
-    ]).then(([s, inv]) => {
+    ]).then(([s, m, inv]) => {
       setSub(s);
+      setMine(m);
       setPayments(inv);
       setBusy(false);
     });
@@ -643,8 +664,44 @@ function SubscriptionPanel({
     );
   }
 
+  const over = mine?.overage;
+
+  const payOverage = async () => {
+    setPaying(true);
+    try {
+      setCheckout(await apiPost<Record<string, unknown>>(
+        "/account/pay-overage/", {}));
+    } catch {
+      /* الرسالة تظهر بالشريط نفسه */
+    } finally { setPaying(false); }
+  };
+
   return (
     <div className="stack">
+      {over && Number(over.amount) > 0 && (
+        <div className="card" style={{
+          padding: 18, borderColor: "var(--copper)",
+          background: "var(--copper-soft)",
+        }}>
+          <div style={{ fontWeight: 600 }}>{L("overTitle")}</div>
+          <div style={{ fontSize: ".88rem", marginTop: 6 }}>
+            {L("overBody")
+              .replace("{n}", String(over.added))
+              .replace("{a}", over.amount)
+              .replace("{d}", String(over.days_remaining))}
+          </div>
+          <button className="btn btn-primary" style={{ marginTop: 12 }}
+                  disabled={paying} onClick={payOverage}>
+            {paying ? L("overPaying") : L("overPay")}
+          </button>
+        </div>
+      )}
+
+      {checkout != null && (
+        <OveragePay data={checkout} L={L}
+                    onClose={() => setCheckout(null)} />
+      )}
+
       <div className="card" style={{ padding: 20 }}>
         <Row label={L("plan")}>
           <strong>{sub.plan || L("none")}</strong>
@@ -791,6 +848,70 @@ export default function SettingsPage() {
 
       {section === "payroll" && <PayrollPanel L={L} />}
       {section === "subscription" && <SubscriptionPanel L={L} />}
+    </div>
+  );
+}
+
+
+/* ══ نافذة دفع الفرق (ق-112) ══ */
+
+function OveragePay({ data, L, onClose }: {
+  data: Record<string, unknown>;
+  L: (k: string, f?: string) => string;
+  onClose: () => void;
+}) {
+  // نموذج ميسر نفسه: بيانات البطاقة لا تمرّ بخوادمنا (ق-47).
+  useEffect(() => {
+    const CSS = "https://cdn.moyasar.com/mpf/1.15.0/moyasar.css";
+    const JS = "https://cdn.moyasar.com/mpf/1.15.0/moyasar.js";
+    if (!document.querySelector(`link[href="${CSS}"]`)) {
+      const l = document.createElement("link");
+      l.rel = "stylesheet"; l.href = CSS;
+      document.head.appendChild(l);
+    }
+    const init = () => {
+      const w = window as unknown as {
+        Moyasar?: { init: (o: Record<string, unknown>) => void };
+      };
+      if (!w.Moyasar) return;
+      w.Moyasar.init({
+        element: ".mysr-over",
+        amount: data.amount_halalas,
+        currency: "SAR",
+        description: `فرق موظفين — ${data.invoice_no}`,
+        publishable_api_key: data.publishable_key,
+        callback_url: data.callback_url,
+        methods: ["creditcard"],
+        metadata: { invoice_id: data.invoice_id },
+      });
+    };
+    const existing = document.querySelector(`script[src="${JS}"]`);
+    if (existing) { init(); return; }
+    const sc = document.createElement("script");
+    sc.src = JS;
+    sc.onload = init;
+    document.body.appendChild(sc);
+  }, [data]);
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.5)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+      overflowY: "auto",
+    }}>
+      <div className="card" style={{ padding: 24, maxWidth: 440,
+                                     width: "100%" }}
+           onClick={(e) => e.stopPropagation()}>
+        <div className="spread">
+          <h3 style={{ margin: 0 }}>{L("overPay")}</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>×</button>
+        </div>
+        <div className="spread" style={{ marginTop: 12, fontWeight: 700 }}>
+          <span>{L("amount")}</span>
+          <span className="num">{String(data.total)}</span>
+        </div>
+        <div className="mysr-over" style={{ marginTop: 18 }} />
+      </div>
     </div>
   );
 }

@@ -173,3 +173,45 @@ def test_reference_does_not_collide_across_accounts(env, plan,
                 cycle=BillingCycle.MONTHLY, subtotal=Decimal("10"),
                 total=Decimal("11.50"), status=InvoiceStatus.DRAFT)
             refs.add(no)
+
+
+def test_effect_applies_once_only(env):
+    """
+    ⚠️⚠️ الأثر مرّة واحدة مهما تكرّر التأكيد.
+
+    صفحة نتيجة الدفع تستدعي التأكيد في **كل فتح** — وكان كل
+    استدعاء يرفع العدد ثانيةً. فمن فتحها عشر مرّات رُفع عدده
+    ثلاثين موظفًا، ويُفوتَر عليهم في التجديد.
+    """
+    with account_scope(env["account_id"]):
+        sub = AccountSubscription.objects.get(account_id=env["account_id"])
+        sub.plan = env["plan"]
+        sub.cycle = BillingCycle.MONTHLY
+        sub.state = SubscriptionState.ACTIVE
+        sub.subscribed_employees = 10
+        sub.current_period_start = date.today()
+        sub.current_period_end = date.today() + timedelta(days=30)
+        sub.save()
+
+        inv = Invoice.objects.create(
+            account_id=env["account_id"],
+            invoice_no=billing._next_invoice_no(),
+            period_start=sub.current_period_start,
+            period_end=sub.current_period_end,
+            cycle=sub.cycle, subtotal=Decimal("45"),
+            total_before_vat=Decimal("45"), vat_amount=Decimal("6.75"),
+            total=Decimal("51.75"), headcount=3,
+            status=InvoiceStatus.ISSUED,
+            is_overage=True, overage_employees=3)
+
+        pay = Payment.objects.create(
+            account_id=env["account_id"], invoice=inv,
+            amount=inv.total, status=PaymentStatus.PAID,
+            moyasar_payment_id="t-repeat")
+
+        for _ in range(5):
+            _on_paid(pay, {"metadata": {}})
+
+        sub.refresh_from_db()
+        assert sub.subscribed_employees == 13, (
+            f"تضاعف الأثر: {sub.subscribed_employees}")

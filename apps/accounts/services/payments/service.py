@@ -207,6 +207,15 @@ def _on_paid(payment, data):
     from apps.accounts.services.billing_v2 import mark_paid
 
     invoice = payment.invoice
+
+    # ⚠️ الأثر مرّة واحدة: صفحة النتيجة تستدعي التأكيد في كل فتح،
+    # وكل استدعاء كان يرفع العدد ثانيةً — فمن فتحها عشر مرّات رُفع
+    # عدده ثلاثين. والفاتورة المسدَّدة سابقًا لا تُطبَّق ثانيةً.
+    if invoice.status == InvoiceStatus.PAID:
+        logger.info("مطالبة مسدَّدة سابقًا — لا أثر جديد: %s",
+                    invoice.invoice_no)
+        return
+
     mark_paid(invoice, note=f"دفع إلكتروني {payment.moyasar_payment_id}")
 
     # ق-108: فاتورة الفرق المدفوعة ترفع العدد المشترَك به — فلا
