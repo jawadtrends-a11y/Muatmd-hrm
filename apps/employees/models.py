@@ -458,3 +458,10 @@ from apps.employees.models_profile import (  # noqa: E402,F401
 from apps.employees.models_changes import (  # noqa: E402,F401
     ChangeStatus, ChangeType, JobChange,
 )
+
+
+# الجزاءات التأديبية (ق-119)
+from apps.employees.models_penalties import (  # noqa: E402,F401
+    Penalty, PenaltyDegree, PenaltyKind, PenaltyStatus,
+    ViolationCategory, ViolationType,
+)

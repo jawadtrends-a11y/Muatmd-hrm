@@ -35,6 +35,19 @@ class Feature(models.Model):
                                       help_text=_("متاحة لكل الباقات، لا تُطفأ"))
     sort_order  = models.IntegerField(_("الترتيب"), default=0)
 
+    # ق-120: القاعدة مصدر الحقيقة — تُضاف الميزة وتُعدَّل من لوحة
+    # المنصّة بلا نشر. والكود يشير إليها بمفتاحها فحسب.
+    #
+    # ⚠️ **is_implemented** يمنع بيع الوهم: ميزةٌ بلا كود يحرسها لا
+    # تظهر في الباقات — فالعميل يدفع لما لا وجود له وهو لا يدري.
+    is_implemented = models.BooleanField(
+        _("مبنيّة في النظام"), default=False,
+        help_text=_("غير المبنيّة لا تظهر في الباقات ولا تُباع"))
+    guarded_at = models.CharField(
+        _("موضع الحراسة"), max_length=255, blank=True,
+        help_text=_("المسار أو الخدمة التي تفحصها — للتوثيق"))
+    is_active = models.BooleanField(_("مفعّلة"), default=True)
+
     class Meta:
         verbose_name = _("ميزة")
         verbose_name_plural = _("المزايا")

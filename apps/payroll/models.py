@@ -233,6 +233,13 @@ class PayrollSettings(CompanyScopedModel):
         _("عتبة الفروقات %"), max_digits=5, decimal_places=2, default=10,
         help_text=_("تغيّر الصافي بأكثر من هذه النسبة يظهر في شاشة المراجعة"))
 
+    # ق-119: خصم الجزاءات — سقفٌ عامّ للشركة.
+    #
+    # مطفأ = الجزاءات تُوثَّق ولا تُخصم في النظام كلّه، فمن يكتفي
+    # بالتوثيق يُطفئه مرّة بدل أن يُلغي الخصم في كل جزاء.
+    penalties_deduct_enabled = models.BooleanField(
+        _("خصم الجزاءات من الرواتب"), default=True)
+
     class Meta:
         verbose_name = _("إعدادات رواتب")
         verbose_name_plural = _("إعدادات الرواتب")

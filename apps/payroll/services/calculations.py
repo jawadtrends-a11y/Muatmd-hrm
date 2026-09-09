@@ -166,6 +166,32 @@ def calculate_absence_deduction(*, unpaid_days: Decimal,
     return r2(daily_rate(monthly_wage, days_per_month) * Decimal(unpaid_days))
 
 
+# ⚠️ ق-121: الساعة تُحتسب على **ثماني ساعات دائمًا** (قرار جواد)
+# — مهما كان دوام الموظف الفعليّ. فأجر الساعة ثابتٌ لا يتغيّر
+# بطول الفترة، وإلا صارت دقيقة قصير الدوام أغلى من دقيقة غيره
+# على الأجر نفسه.
+STANDARD_WORK_MINUTES_PER_DAY = 480
+
+
+def calculate_late_deduction(*, late_minutes: int,
+                            monthly_wage: Decimal,
+                            days_per_month: int = 30) -> Decimal:
+    """
+    خصم التأخير — **بمقدار الدقائق فعلًا** لا بيوم مقطوع (ق-121).
+
+    فمن تأخّر ٤٥ دقيقة يُخصم أجر ٤٥ دقيقة، لا ربع يوم ولا يومًا.
+    والجزاء التأديبيّ شيءٌ آخر يُوقَّع فوقه عند التكرار: فحسم
+    الوقت استيفاءُ أجرٍ لم يُعمَل، والجزاء تأديب.
+
+    والقسمة على **ثماني ساعات دائمًا** — لا على فترة الموظف.
+    """
+    if late_minutes <= 0:
+        return Decimal("0")
+    per_minute = (daily_rate(monthly_wage, days_per_month)
+                  / Decimal(STANDARD_WORK_MINUTES_PER_DAY))
+    return r2(per_minute * Decimal(late_minutes))
+
+
 # ══════════ تحمّل الشركة لحصة الموظف (ق-29) ══════════
 
 @dataclass(frozen=True)
