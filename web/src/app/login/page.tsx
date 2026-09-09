@@ -2,6 +2,7 @@
 
 /** شاشة الدخول — تُعرض بلا هيكل (PUBLIC_PATHS في AppShell). */
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { apiPost, setToken, ApiError } from "@/lib/api";
@@ -10,6 +11,11 @@ import { IcGlobe, IcMoon, IcSun } from "@/components/Icons";
 
 const T: Dict = {
   title: { ar: "تسجيل الدخول", en: "Sign in" },
+  forgot: { ar: "نسيت كلمة المرور؟", en: "Forgot password?" },
+  noAccount: { ar: "ليس لديك حساب؟", en: "No account?" },
+  createOne: { ar: "أنشئ حساب شركة", en: "Create a company account" },
+  toSite: { ar: "الموقع الرئيسي", en: "Main site" },
+  toAcc: { ar: "معتمد المحاسبي", en: "Muatmd Accounting" },
   subtitle: { ar: "نظام الموارد البشرية — معتمد", en: "Muatmd HR System" },
   username: {
     ar: "البريد أو رقم الهوية أو الجوال",
@@ -81,12 +87,10 @@ export default function LoginPage() {
 
         <div className="card" style={{ padding: 32 }}>
           <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{
-              fontSize: "1.7rem", fontWeight: 600, color: "var(--teal)",
-              marginBottom: 4,
-            }}>
-              معتمد
-            </div>
+            {/* الشعار بدل الاسم نصًّا — الهوية أول ما يراه الداخل */}
+            <img src="/logo.png" alt="معتمد"
+                 style={{ height: 96, width: "auto", margin: "0 auto 8px",
+                          display: "block" }} />
             <div className="muted" style={{ fontSize: ".92rem" }}>
               {L("subtitle")}
             </div>
@@ -125,6 +129,34 @@ export default function LoginPage() {
               {busy ? L("submitting") : L("submit")}
             </button>
           </form>
+
+          <div style={{ textAlign: "center", marginTop: 18 }}>
+            <Link href="/password/forgot" className="muted"
+                  style={{ fontSize: ".86rem" }}>
+              {L("forgot")}
+            </Link>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--line)", marginTop: 18,
+                        paddingTop: 16, textAlign: "center",
+                        fontSize: ".86rem" }}>
+            <span className="muted">{L("noAccount")} </span>
+            <Link href="/signup" style={{ color: "var(--teal)",
+                                          fontWeight: 500 }}>
+              {L("createOne")}
+            </Link>
+          </div>
+        </div>
+
+        {/* تذييل: المنافذ الأخرى لمعتمد — فمن وصل هنا خطأً يجد طريقه */}
+        <div className="row" style={{ justifyContent: "center", gap: 8,
+                                      marginTop: 18, flexWrap: "wrap" }}>
+          <a href="https://muatmd.sa" className="btn btn-ghost btn-sm">
+            {L("toSite")}
+          </a>
+          <a href="https://acc.muatmd.sa" className="btn btn-ghost btn-sm">
+            {L("toAcc")}
+          </a>
         </div>
       </div>
     </div>

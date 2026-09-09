@@ -9,6 +9,7 @@ from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.accounts import api_company as accounts_company_api
 from apps.accounts import api_subscribe as subscribe_api
+from apps.accounts import api_signup as signup_api
 from apps.core.api import dashboard as dashboard_api
 from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
@@ -69,6 +70,14 @@ urlpatterns = [
     path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
     # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
     # ق-108: الباقات والاشتراك — ما يراه العميل
+    # ق-113: التسجيل الذاتيّ والاستعادة — عامّة بلا توثيق
+    path("api/signup/", signup_api.signup, name="signup"),
+    path("api/signup/verify/<str:token>/", signup_api.signup_verify,
+         name="signup-verify"),
+    path("api/password/forgot/", signup_api.password_forgot,
+         name="password-forgot"),
+    path("api/password/reset/<str:token>/", signup_api.password_reset,
+         name="password-reset"),
     path("api/plans/", subscribe_api.public_plans, name="public-plans"),
     path("api/plans/quote/", subscribe_api.price_quote, name="price-quote"),
     path("api/account/my-subscription/", subscribe_api.my_subscription,

@@ -112,8 +112,18 @@ class Gate:
         if override is not None and not override.granted:
             return Decision(False, Scope.OWN, "منزوعة باستثناء شخصي")
 
+        # ⚠️ ق-114: الدور يخصّ شركةً بعينها — والقراءة بلا ترشيح
+        # تمنح صاحبَ دورٍ عالٍ في شركة صلاحياتِه في الشركات كلّها.
+        # فمن هو «مدير موارد» في واحدة و«موظف» في أخرى كان يحمل
+        # صلاحيات المدير فيهما.
+        #
+        # والدور بلا شركة (company_id=None) عامٌّ على الحساب —
+        # كنمط الاستثناءات الشخصية أدناه.
+        active = membership.active_company_id
         best = None
         for assignment in membership.role_assignments.select_related("role"):
+            if assignment.company_id not in (None, active):
+                continue
             if permission_key not in assignment.role.permission_keys:
                 continue
             scope = Scope(assignment.scope)
@@ -266,8 +276,12 @@ class Gate:
             return set()
         if membership.is_account_owner:
             return set(PERMISSION_KEYS)
+        # ق-114: أدوار الشركة النشطة وحدها — كما في check()
+        active = membership.active_company_id
         keys = set()
         for a in membership.role_assignments.select_related("role"):
+            if a.company_id not in (None, active):
+                continue
             keys |= a.role.permission_keys
 
         # الاستثناءات الشخصية (ق-67) — تُضاف وتُنزع بعد الدور

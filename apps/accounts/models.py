@@ -209,3 +209,9 @@ from apps.accounts.models_admin import (  # noqa: E402,F401
 from apps.accounts.models_tokens import (  # noqa: E402,F401
     AuthToken, DeviceKind, generate_token, hash_token,
 )
+
+
+# التسجيل الذاتيّ واستعادة كلمة المرور (ق-113)
+from apps.accounts.models_signup import (  # noqa: E402,F401
+    PasswordReset, SignupRequest, SignupStatus,
+)
