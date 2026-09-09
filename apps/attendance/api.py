@@ -401,6 +401,8 @@ _CAL_LABEL = {
     "holiday": ("عطلة", "Holiday"),
     "weekend": ("يوم راحة", "Weekend"),
     "leave": ("إجازة", "On leave"),
+    "not_started": ("لم تبدأ ساعات العمل", "Shift not started"),
+    "absent": ("غائب", "Absent"),
     "no_record": ("لا سجل", "No record"),
 }
 
@@ -412,6 +414,9 @@ def _calendar_status(day, company_id, employments):
     يوم العطلة أو الراحة أو الإجازة معروف قبل أي بصمة، وعرضه
     «لا سجل» يُخفي الحقيقة ويُقلق المدير بلا سبب.
     """
+    from django.utils import timezone
+
+    from apps.attendance.models import DayStatus
     from apps.attendance.services.rules import effective_shift
     from apps.leaves.services.leave_requests import leave_dates_in_range
     from apps.organization.models import Holiday
@@ -420,6 +425,9 @@ def _calendar_status(day, company_id, employments):
                               start_date__lte=day,
                               end_date__gte=day).exists():
         return {e.id: "holiday" for e in employments}
+
+    now = timezone.localtime()
+    today = now.date()
 
     out = {}
     weekday = (day.weekday() + 1) % 7          # الأحد = 0
@@ -432,6 +440,23 @@ def _calendar_status(day, company_id, employments):
                    else {0, 1, 2, 3, 4})
         if weekday not in working:
             out[e.id] = "weekend"
+            continue
+
+        # ق-122: **الغياب هو الأصل** (قرار جواد) — يوم عملٍ بلا
+        # بصمة غيابٌ من لحظة بدء فترته، لا بانقضاء اليوم. فمن لم
+        # يبصم عند البداية يُسجَّل غائبًا، ويتحوّل «متأخّرًا» إن
+        # بصم بعدها.
+        #
+        # وقبل بدء الفترة لا حكم بعد: «لم تبدأ ساعات العمل».
+        if day > today:
+            out[e.id] = "not_started"
+            continue
+        if day == today:
+            start = shift.start_time if shift else None
+            if start is not None and now.time() < start:
+                out[e.id] = "not_started"
+                continue
+        out[e.id] = DayStatus.ABSENT
     return out
 
 

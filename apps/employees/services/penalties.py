@@ -37,6 +37,12 @@ MAX_SUSPENSION_DAYS_PER_MONTH = Decimal("5")
 MAX_DEDUCTION_DAYS_PER_VIOLATION = Decimal("5")
 # وما تجاوز أجر يومٍ واحد يلزمه محضر بسماع أقوال الموظف
 STATEMENT_REQUIRED_ABOVE_DAYS = Decimal("1")
+# ⚠️ المادة (٧٣): تسقط سابقة المخالفة وتُعدّ كأن لم تكن إذا مضت
+# **سنة كاملة** من تاريخ ارتكابها دون ارتكاب مخالفة مماثلة.
+DEFAULT_RESET_DAYS = 365
+# ⚠️ المادة (٦٩): لا يجوز اتهام العامل بمخالفة مضى على **كشفها**
+# أكثر من ثلاثين يومًا، ولا توقيع الجزاء بعد ثبوتها بأكثر منها.
+MAX_DAYS_SINCE_VIOLATION = 30
 
 
 class PenaltyError(Exception):
@@ -49,89 +55,100 @@ class PenaltyError(Exception):
 #
 # (الرمز، المخالفة، التصنيف، [(تكرار، جزاء، أيام)])
 DEFAULT_VIOLATIONS = [
-    ("LATE-15", "التأخر عن موعد العمل حتى ١٥ دقيقة بلا إذن",
+    # ١. مخالفات مواعيد العمل والانضباط العام
+    ("LATE-15", "التأخر حتى ١٥ دقيقة (دون تعطيل للعمل)",
      ViolationCategory.ATTENDANCE, [
          (1, PenaltyKind.WARNING, "0"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.05"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.10"),
+         (4, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+     ]),
+    ("LATE-30", "التأخر من ١٥ إلى ٣٠ دقيقة",
+     ViolationCategory.ATTENDANCE, [
+         (1, PenaltyKind.WAGE_DEDUCTION, "0.10"),
          (2, PenaltyKind.WAGE_DEDUCTION, "0.25"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "0.5"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.50"),
          (4, PenaltyKind.WAGE_DEDUCTION, "1"),
      ]),
-    ("LATE-30", "التأخر أكثر من ١٥ دقيقة ودون ٣٠ بلا إذن",
+    ("LATE-60", "التأخر أكثر من ٦٠ دقيقة دون عذر",
      ViolationCategory.ATTENDANCE, [
          (1, PenaltyKind.WAGE_DEDUCTION, "0.25"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "0.5"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.50"),
          (3, PenaltyKind.WAGE_DEDUCTION, "1"),
          (4, PenaltyKind.WAGE_DEDUCTION, "2"),
      ]),
-    ("EARLY-OUT", "الانصراف قبل نهاية الدوام بلا إذن",
+    ("EARLY-OUT", "الانصراف قبل الموعد المحدد دون إذن",
      ViolationCategory.ATTENDANCE, [
-         (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "0.5"),
+         (1, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.50"),
          (3, PenaltyKind.WAGE_DEDUCTION, "1"),
          (4, PenaltyKind.WAGE_DEDUCTION, "2"),
      ]),
-    ("ABSENT-1", "الغياب يومًا بلا عذر مقبول",
-     ViolationCategory.ATTENDANCE, [
-         (1, PenaltyKind.WAGE_DEDUCTION, "1"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "2"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "3"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "5"),
-     ]),
-    ("NO-PUNCH", "عدم التوقيع بالحضور أو الانصراف",
+    # ⚠️ الغياب: **خصم اليوم** استيفاءُ أجرٍ لم يُعمَل، **والجزاء
+    # فوقه** — فالدرجات هنا هي الزيادة التأديبية لا خصم اليوم.
+    ("ABSENT-1", "الغياب بدون إذن أو عذر مشروع (يوم واحد)",
      ViolationCategory.ATTENDANCE, [
          (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WARNING, "0"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "0.5"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.50"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "1"),
+         (4, PenaltyKind.WAGE_DEDUCTION, "2"),
+     ]),
+    ("LEAVE-SITE", "ترك مكان العمل أثناء الساعات دون إذن",
+     ViolationCategory.ATTENDANCE, [
+         (1, PenaltyKind.WAGE_DEDUCTION, "0.10"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.50"),
          (4, PenaltyKind.WAGE_DEDUCTION, "1"),
      ]),
-    ("SLEEP", "النوم أثناء العمل",
+
+    # ٢. مخالفات تنظيم العمل والتصرف السلوكي
+    ("NEGLECT-EQUIP", "إهمال الأجهزة والآلات دون تلف جسيم",
      ViolationCategory.WORK_ORG, [
          (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "1"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "2"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "3"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.50"),
+         (4, PenaltyKind.WAGE_DEDUCTION, "1"),
      ]),
-    ("LEAVE-SITE", "ترك مكان العمل أثناء الدوام بلا إذن",
-     ViolationCategory.WORK_ORG, [
-         (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "0.5"),
+    ("SMOKING", "التدخين في الأماكن المحظورة بالمنشأة",
+     ViolationCategory.SAFETY, [
+         (1, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.50"),
          (3, PenaltyKind.WAGE_DEDUCTION, "1"),
          (4, PenaltyKind.WAGE_DEDUCTION, "2"),
      ]),
-    ("REFUSE-ORDER", "رفض تنفيذ أمر عمل مشروع",
+    ("SLEEP-NORMAL", "النوم أثناء العمل (الأعمال العادية)",
+     ViolationCategory.WORK_ORG, [
+         (1, PenaltyKind.WARNING, "0"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.50"),
+         (4, PenaltyKind.WAGE_DEDUCTION, "1"),
+     ]),
+    ("SLEEP-CRITICAL", "النوم أثناء العمل (وظائف الحراسة والتشغيل الحرج)",
      ViolationCategory.WORK_ORG, [
          (1, PenaltyKind.WAGE_DEDUCTION, "1"),
          (2, PenaltyKind.WAGE_DEDUCTION, "2"),
          (3, PenaltyKind.WAGE_DEDUCTION, "3"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "5"),
+         (4, PenaltyKind.DISMISSAL, "0"),
      ]),
-    ("NO-SAFETY", "عدم استعمال أدوات السلامة المقرَّرة",
-     ViolationCategory.SAFETY, [
+    ("MISCONDUCT", "عدم مراعاة اللياقة والأدب مع الزملاء والعملاء",
+     ViolationCategory.CONDUCT, [
          (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "1"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "2"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "3"),
+         (2, PenaltyKind.WAGE_DEDUCTION, "0.25"),
+         (3, PenaltyKind.WAGE_DEDUCTION, "0.50"),
+         (4, PenaltyKind.WAGE_DEDUCTION, "1"),
      ]),
-    ("SMOKING", "التدخين في الأماكن المحظورة",
-     ViolationCategory.SAFETY, [
+    ("QUARREL", "المهارشة أو التلاهي لفظًا داخل المنشأة",
+     ViolationCategory.CONDUCT, [
          (1, PenaltyKind.WAGE_DEDUCTION, "1"),
          (2, PenaltyKind.WAGE_DEDUCTION, "2"),
          (3, PenaltyKind.WAGE_DEDUCTION, "3"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "5"),
+         (4, PenaltyKind.DISMISSAL, "0"),
      ]),
-    ("QUARREL", "المشاجرة مع الزملاء أثناء العمل",
+    # ⚠️ المادة (٨٠): فصلٌ مباشر بلا مكافأة ولا تعويض — درجةٌ
+    # واحدة لا تدرّج فيها.
+    ("ASSAULT", "الاعتداء القولي أو الفعلي على الرؤساء أو إفشاء الأسرار",
      ViolationCategory.CONDUCT, [
-         (1, PenaltyKind.WAGE_DEDUCTION, "1"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "3"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "5"),
-         (4, PenaltyKind.SUSPENSION, "3"),
-     ]),
-    ("MISUSE", "إساءة استعمال ممتلكات المنشأة",
-     ViolationCategory.CONDUCT, [
-         (1, PenaltyKind.WARNING, "0"),
-         (2, PenaltyKind.WAGE_DEDUCTION, "1"),
-         (3, PenaltyKind.WAGE_DEDUCTION, "3"),
-         (4, PenaltyKind.WAGE_DEDUCTION, "5"),
+         (1, PenaltyKind.DISMISSAL, "0"),
      ]),
 ]
 
@@ -229,7 +246,7 @@ def deducted_days_in_month(employment, on_date):
     return sum((Decimal(d) for d in rows), Decimal("0"))
 
 
-def preview(employment, violation, on_date=None):
+def preview(employment, violation, on_date=None, occurrence=None):
     """
     ما سيقع لو وُقّع الجزاء — يُعرض قبل التوقيع.
 
@@ -237,7 +254,10 @@ def preview(employment, violation, on_date=None):
     يقرّر.
     """
     on_date = on_date or timezone.localdate()
-    occ = occurrence_for(employment, violation, on_date)
+    # ق-119: التكرار **يُقترح ويُعدَّل** — فالسوابق قد تكون خارج
+    # النظام (لائحة ورقية سابقة)، والمسؤول أدرى بملفّ موظفه.
+    auto = occurrence_for(employment, violation, on_date)
+    occ = max(int(occurrence) if occurrence else auto, 1)
     deg = degree_for(violation, occ)
     if deg is None:
         raise PenaltyError("لا درجات مضبوطة لهذه المخالفة")
@@ -273,6 +293,7 @@ def preview(employment, violation, on_date=None):
 
     return {
         "occurrence": occ,
+        "suggested_occurrence": auto,
         "kind": deg.kind,
         "deductible": deductible,
         "block_reason": ("" if deductible else
@@ -296,7 +317,8 @@ def preview(employment, violation, on_date=None):
 @transaction.atomic
 def issue(*, employment, violation, occurred_on, description,
           employee_statement, issued_by_person_id=None, on_date=None,
-          apply_deduction=True, count_occurrence=True):
+          apply_deduction=True, count_occurrence=True,
+          occurrence=None):
     """
     يوقّع الجزاء.
 
@@ -305,7 +327,19 @@ def issue(*, employment, violation, occurred_on, description,
     """
     if not (description or "").strip():
         raise PenaltyError("وصف الواقعة مطلوب")
-    p = preview(employment, violation, occurred_on)
+    p = preview(employment, violation, occurred_on,
+                occurrence=occurrence)
+
+    # ⚠️ المادة (٦٩): لا جزاء على مخالفة مضى عليها أكثر من ثلاثين
+    # يومًا — فالمنشأة التي سكتت شهرًا سقط حقّها، والتوقيع بعدها
+    # باطل يُردّ في المحكمة العمالية.
+    from django.utils import timezone as _tz
+
+    age = (_tz.localdate() - occurred_on).days
+    if age > MAX_DAYS_SINCE_VIOLATION:
+        raise PenaltyError(
+            f"مضى على المخالفة {age} يومًا — والمادة (٦٩) لا تجيز "
+            f"توقيع الجزاء بعد ثلاثين يومًا")
 
     # ⚠️ النموذج: ما تجاوز **أجر يوم واحد** يلزمه إبلاغ كتابيّ
     # وسماع أقوال وتحقيق دفاع بمحضر يودع في ملفّه. وما دونه لا.
@@ -393,99 +427,6 @@ def _daily_work_minutes(employment, day):
     return max(total - int(sh.break_minutes or 0), 60)
 
 
-def pending_board(company, start, end, employment_ids=None):
-    """
-    مخالفات الحضور التي لم يُوقَّع عليها جزاء — بحسم وقتها.
-
-    ويُعرض معها **الحالة** (تأخير · غياب · حضور غير مكتمل) ومبلغ
-    الحسم المحتسَب من الدقائق — فيقرّر المسؤول بضغطة.
-    """
-    from apps.attendance.models import AttendanceDay, DayStatus
-
-    qs = (AttendanceDay.objects
-          .filter(company=company, work_date__gte=start, work_date__lte=end)
-          .exclude(status__in=[DayStatus.HOLIDAY, DayStatus.WEEKEND,
-                               DayStatus.LEAVE, DayStatus.EXEMPT,
-                               DayStatus.NOT_SCHEDULED])
-          .select_related("employment__person"))
-    if employment_ids:
-        qs = qs.filter(employment_id__in=employment_ids)
-
-    # ما وُقّع عليه جزاءٌ في يومه لا يُعرض ثانيةً
-    signed = set(Penalty.objects.filter(
-        company=company, occurred_on__gte=start, occurred_on__lte=end,
-        status__in=[PenaltyStatus.ISSUED, PenaltyStatus.OBJECTED],
-    ).values_list("employment_id", "occurred_on"))
-
-    rows = []
-    wage_cache = {}
-    for d in qs.order_by("work_date", "employment__employee_no"):
-        late = int(d.late_minutes or 0)
-        early = int(getattr(d, "early_out_minutes", 0) or 0)
-        absent = d.status == DayStatus.ABSENT
-        if not (late or early or absent):
-            continue
-        if (d.employment_id, d.work_date) in signed:
-            continue
-
-        emp = d.employment
-        if emp.id not in wage_cache:
-            wage_cache[emp.id] = _monthly_wage(emp)
-        monthly = wage_cache[emp.id]
-
-        minutes = late + early
-        if absent:
-            amount = (Decimal(monthly) / Decimal("30")).quantize(
-                Decimal("0.01"))
-            state = "غياب"
-        else:
-            from apps.payroll.services.calculations import (
-                calculate_late_deduction)
-            amount = calculate_late_deduction(
-                late_minutes=minutes, monthly_wage=monthly,
-                daily_work_minutes=_daily_work_minutes(emp, d.work_date))
-            state = "تأخير" if late and not early else (
-                "انصراف مبكّر" if early and not late else "تأخير وانصراف")
-
-        rows.append({
-            "employment_id": emp.id,
-            "employee_no": emp.employee_no,
-            "name": emp.person.display_name,
-            "date": d.work_date,
-            "state": state,
-            "attendance_status": d.get_status_display(),
-            "late_minutes": late,
-            "early_out_minutes": early,
-            "minutes": minutes,
-            "time_deduction": str(amount),
-        })
-    return rows
-
-
-def _monthly_wage(employment):
-    """أجره الشهريّ بأساس الغياب — مصدرٌ واحد للحسمين."""
-    from apps.employees.models import SalaryStructure
-    from apps.payroll.models import ComponentType
-
-    st = (SalaryStructure.objects
-          .filter(employment=employment, effective_to__isnull=True)
-          .order_by("-effective_from").first())
-    if st is None:
-        return Decimal("0")
-    total = Decimal("0")
-    for comp, amount in st.as_lines():
-        if (comp.component_type == ComponentType.EARNING
-                and comp.is_absence_base):
-            total += Decimal(amount)
-    return total
-
-
-# ══════════ سجلّ الجزاءات المقترحة (ق-121) ══════════
-#
-# **المسؤول لا يفتح شاشةً ليبحث عن مخالف** — النظام يعرض من
-# تأخّر أو غاب أو لم يُتمّ حضوره، بحسم وقته محسوبًا، وزرُّ
-# التطبيق بجانبه. فما لا يُعرض لا يُطبَّق.
-
 def _monthly_wage(employment):
     """أجره الشهريّ بأساس الغياب — مصدرٌ واحد للحسمين."""
     from apps.employees.models import SalaryStructure
@@ -529,6 +470,19 @@ def pending_board(company, start, end, employment_ids=None):
         status__in=[PenaltyStatus.ISSUED, PenaltyStatus.OBJECTED],
     ).values_list("employment_id", "occurred_on"))
 
+    # ق-122: **الغياب هو الأصل** — ويوم عملٍ بلا سجلّ غيابٌ لا
+    # فراغ. فبلا هذا لا يظهر إلا من له سجلٌّ محفوظ، ومن لم يبصم
+    # قطُّ لا يُحاسَب أبدًا.
+    from apps.employees.models import Employment, EmploymentStatus
+
+    emps = Employment.objects.filter(
+        company=company, status=EmploymentStatus.ACTIVE
+    ).select_related("person")
+    if employment_ids:
+        emps = emps.filter(id__in=employment_ids)
+    emps = list(emps)
+    have = {(d.employment_id, d.work_date) for d in qs}
+
     rows = []
     wages = {}
     for d in qs.order_by("work_date", "employment__employee_no"):
@@ -568,6 +522,43 @@ def pending_board(company, start, end, employment_ids=None):
             "minutes": minutes,
             "time_deduction": str(amount),
         })
+
+    # ثم أيام العمل التي لا سجلّ لها — غيابٌ يُعرض للقرار
+    from datetime import timedelta as _td
+
+    from apps.attendance.api import _calendar_status
+
+    by_emp = {e.id: e for e in emps}
+    day = start
+    while day <= end:
+        for emp_id, state in _calendar_status(day, company.id, emps).items():
+            if state != DayStatus.ABSENT:
+                continue
+            if (emp_id, day) in have or (emp_id, day) in signed:
+                continue
+            emp = by_emp.get(emp_id)
+            if emp is None or (emp.join_date and day < emp.join_date):
+                continue
+
+            if emp_id not in wages:
+                wages[emp_id] = _monthly_wage(emp)
+            amount = (wages[emp_id] / Decimal("30")).quantize(Decimal("0.01"))
+
+            rows.append({
+                "employment_id": emp_id,
+                "employee_no": emp.employee_no,
+                "name": emp.person.display_name,
+                "date": day,
+                "state": "غياب",
+                "attendance_status": "غائب",
+                "late_minutes": 0,
+                "early_out_minutes": 0,
+                "minutes": 0,
+                "time_deduction": str(amount),
+            })
+        day += _td(days=1)
+
+    rows.sort(key=lambda r: (r["date"], r["employee_no"]))
     return rows
 
 

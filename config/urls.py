@@ -14,6 +14,7 @@ from apps.core.api import dashboard as dashboard_api
 from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
 from apps.employees import api as employees_api
+from apps.employees import api_penalties as penalties_api
 from apps.attendance import api as attendance_api
 from apps.attendance import api_exemptions as exemptions_api
 from apps.payroll import api_outputs as outputs_api
@@ -116,6 +117,23 @@ urlpatterns = [
     path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
     path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
     path("api/employees/", employees_api.employees, name="employees"),
+    # ق-119 وق-121: الجزاءات التأديبية — اللائحة والسجلّ والتوقيع
+    path("api/penalties/violations/", penalties_api.violations,
+         name="violations"),
+    path("api/penalties/violations/<int:violation_id>/",
+         penalties_api.violation_detail, name="violation-detail"),
+    path("api/penalties/violations/seed/", penalties_api.seed_violations,
+         name="violations-seed"),
+    path("api/penalties/board/", penalties_api.board, name="penalty-board"),
+    path("api/penalties/preview/", penalties_api.preview_penalty,
+         name="penalty-preview"),
+    path("api/penalties/issue/", penalties_api.issue_penalty,
+         name="penalty-issue"),
+    path("api/penalties/issue-batch/", penalties_api.issue_batch,
+         name="penalty-issue-batch"),
+    path("api/penalties/", penalties_api.penalty_list, name="penalty-list"),
+    path("api/penalties/<int:penalty_id>/cancel/",
+         penalties_api.cancel_penalty, name="penalty-cancel"),
     path("api/employees/<int:employment_id>/", employees_api.employee_detail, name="employee-detail"),
     path("api/employees/<int:employment_id>/salary/", employees_api.salary_structures, name="salary-structures"),
     path("api/employees/<int:employment_id>/registration/", employees_api.registration_flags, name="registration-flags"),

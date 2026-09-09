@@ -47,8 +47,8 @@ class ViolationType(CompanyScopedModel):
         default=ViolationCategory.OTHER)
     # ⚠️ المادة (٦٦): ما مضى على سابقته أكثر من المدّة يُعدّ أولى
     reset_days = models.PositiveSmallIntegerField(
-        _("مدّة سقوط التكرار (يومًا)"), default=180,
-        help_text=_("بعدها تُعامَل المخالفة معاملة الأولى"))
+        _("مدّة سقوط التكرار (يومًا)"), default=365,
+        help_text=_("المادة (٧٣): سنة كاملة من تاريخ الارتكاب"))
     # ق-119: بندٌ يُوثَّق ولا يُخصم عليه مهما كانت درجته —
     # فبعض المخالفات يُكتفى فيها بالتنبيه والإنذار.
     financial_effect = models.BooleanField(

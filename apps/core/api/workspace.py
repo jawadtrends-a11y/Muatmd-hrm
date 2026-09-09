@@ -19,6 +19,8 @@ NAV_ITEMS = [
     {"key": "leaves",      "path": "/leaves",          "icon": "calendar", "permission": "leaves.view"},
     {"key": "requests",    "path": "/requests",        "icon": "inbox",    "permission": "requests.view"},
     {"key": "payroll",     "path": "/payroll",         "icon": "wallet",   "permission": "payroll.view"},
+    # ق-119: الجزاءات — من يرى الحضور يراها، فهي منه تنشأ
+    {"key": "penalties",   "path": "/penalties",       "icon": "doc",      "permission": "attendance.view"},
     {"key": "payslips",    "path": "/payslips",        "icon": "receipt",  "permission": "payslips.view_own"},
     {"key": "saudization", "path": "/saudization",     "icon": "chart",    "permission": "saudization.view"},
     {"key": "compliance",  "path": "/compliance",      "icon": "shield",   "permission": "compliance.view"},

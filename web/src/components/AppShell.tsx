@@ -42,6 +42,7 @@ const T: Dict = {
   advances: { ar: "السلف", en: "Advances" },
   assets: { ar: "العهد", en: "Assets" },
   payroll: { ar: "الرواتب", en: "Payroll" },
+  penalties: { ar: "الجزاءات", en: "Penalties" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
   myAttendance: { ar: "حضوري", en: "My Attendance" },

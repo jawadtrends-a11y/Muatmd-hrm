@@ -5,6 +5,8 @@
 (وزارة الموارد البشرية) — تجاوزها يعرّض المنشأة للمساءلة.
 """
 from datetime import date, timedelta
+
+TODAY = date.today()
 from decimal import Decimal
 
 import pytest
@@ -38,7 +40,7 @@ def env(db):
         basic = PayComponent.objects.get(company=comp, code="BASIC")
         emp, _, _ = create_employment(
             person=p, company=comp, employee_no="P-1",
-            join_date=date(2024, 1, 1),
+            join_date=TODAY,
             salary_lines=[(basic, Decimal("6000"))])
 
         yield {"account_id": r.account_id, "company": comp,
@@ -56,12 +58,12 @@ def test_repeat_escalates_the_degree(env):
         emp = env["employment"]
         seen = []
         for i in range(3):
-            p = svc.preview(emp, v, date(2026, 3, 1))
+            p = svc.preview(emp, v, TODAY)
             seen.append(Decimal(p["days"]))
             svc.issue(employment=emp, violation=v,
-                      occurred_on=date(2026, 3, 1),
+                      occurred_on=TODAY,
                       description="تأخر", employee_statement="أفاد")
-        assert seen == [Decimal("0.25"), Decimal("0.50"), Decimal("1.00")], seen
+        assert seen == [Decimal("0.10"), Decimal("0.25"), Decimal("0.50")], seen
 
 
 def test_monthly_cap_is_five_days(env):
@@ -76,11 +78,11 @@ def test_monthly_cap_is_five_days(env):
         for i in range(4):
             try:
                 svc.issue(employment=emp, violation=v,
-                          occurred_on=date(2026, 4, 1 + i),
+                          occurred_on=TODAY - timedelta(days=i),
                           description="غياب", employee_statement="أفاد")
             except svc.PenaltyError:
                 pass
-        total = svc.deducted_days_in_month(emp, date(2026, 4, 1))
+        total = svc.deducted_days_in_month(emp, TODAY)
         assert total <= Decimal("5"), total
 
 
@@ -91,16 +93,27 @@ def test_statement_required_above_one_day(env):
     فالنموذج يوجب إبلاغه كتابةً وتحقيق دفاعه قبل توقيعه.
     """
     with account_scope(env["account_id"]):
+        # الغياب: ١ إنذار · ٢ نصف يوم · ٣ يوم · ٤ يومان
         v = _v(env, "ABSENT-1")
         emp = env["employment"]
-        # الأولى يوم — تمرّ بلا إفادة
-        svc.issue(employment=emp, violation=v, occurred_on=date(2026, 5, 1),
-                  description="غياب", employee_statement="")
-        # الثانية يومان — تُرفض بلا إفادة
+        # ⚠️ **بالتصاعد**: التكرار يعدّ ما وقع قبل تاريخ
+        # المخالفة — فالتنازل يُبقيه على واحد أبدًا.
+        for i in (3, 2, 1):
+            # الثلاثة الأولى لا تتجاوز أجر يوم — تمرّ بلا إفادة
+            svc.issue(employment=emp, violation=v,
+                      occurred_on=TODAY - timedelta(days=i),
+                      description="غياب", employee_statement="")
+
+        # والرابعة يومان — تُرفض بلا إفادة
         with pytest.raises(svc.PenaltyError):
             svc.issue(employment=emp, violation=v,
-                      occurred_on=date(2026, 5, 2),
+                      occurred_on=TODAY,
                       description="غياب", employee_statement="")
+
+        # وتمرّ بها
+        svc.issue(employment=emp, violation=v,
+                  occurred_on=TODAY,
+                  description="غياب", employee_statement="أُخطر وأفاد")
 
 
 def test_reset_days_drops_old_repeats(env):
@@ -112,11 +125,14 @@ def test_reset_days_drops_old_repeats(env):
     with account_scope(env["account_id"]):
         v = _v(env, "LATE-30")
         emp = env["employment"]
-        svc.issue(employment=emp, violation=v, occurred_on=date(2025, 1, 1),
-                  description="قديمة", employee_statement="")
-        # بعد مدّة السقوط (١٨٠ يومًا افتراضًا)
-        later = date(2025, 1, 1) + timedelta(days=v.reset_days + 10)
+        svc.issue(employment=emp, violation=v, occurred_on=TODAY,
+                  description="سابقة", employee_statement="")
+        # ⚠️ المادة (٧٣): تسقط السابقة بمضيّ **سنة كاملة**
+        assert v.reset_days == 365
+        later = TODAY + timedelta(days=v.reset_days + 10)
         assert svc.occurrence_for(emp, v, later) == 1
+        # وقبلها تُحتسب
+        assert svc.occurrence_for(emp, v, TODAY + timedelta(days=30)) == 2
 
 
 def test_documented_without_deduction(env):
@@ -129,12 +145,12 @@ def test_documented_without_deduction(env):
         v = _v(env, "ABSENT-1")
         emp = env["employment"]
         pen = svc.issue(employment=emp, violation=v,
-                        occurred_on=date(2026, 6, 1),
+                        occurred_on=TODAY,
                         description="غياب", employee_statement="أفاد",
                         apply_deduction=False)
         assert pen.amount == Decimal("0")
         assert pen.days == Decimal("0")
-        assert svc.deducted_days_in_month(emp, date(2026, 6, 1)) == 0
+        assert svc.deducted_days_in_month(emp, TODAY) == 0
         assert Penalty.objects.filter(employment=emp).exists()
 
 
@@ -147,10 +163,10 @@ def test_occurrence_not_counted_stays_at_degree(env):
     with account_scope(env["account_id"]):
         v = _v(env, "LATE-30")
         emp = env["employment"]
-        svc.issue(employment=emp, violation=v, occurred_on=date(2026, 7, 1),
+        svc.issue(employment=emp, violation=v, occurred_on=TODAY,
                   description="تأخر", employee_statement="",
                   count_occurrence=False)
-        assert svc.occurrence_for(emp, v, date(2026, 7, 2)) == 1
+        assert svc.occurrence_for(emp, v, TODAY) == 1
 
 
 def test_company_switch_disables_all_deductions(env):
@@ -159,7 +175,7 @@ def test_company_switch_disables_all_deductions(env):
         PayrollSettings.objects.filter(
             company=env["company"]).update(penalties_deduct_enabled=False)
         v = _v(env, "ABSENT-1")
-        p = svc.preview(env["employment"], v, date(2026, 8, 1))
+        p = svc.preview(env["employment"], v, TODAY)
         assert not p["deductible"]
         assert Decimal(p["days"]) == 0
 
@@ -170,7 +186,7 @@ def test_violation_without_financial_effect(env):
         v = _v(env, "ABSENT-1")
         ViolationType.objects.filter(id=v.id).update(financial_effect=False)
         v.refresh_from_db()
-        p = svc.preview(env["employment"], v, date(2026, 9, 1))
+        p = svc.preview(env["employment"], v, TODAY)
         assert not p["deductible"]
 
 
@@ -185,11 +201,11 @@ def test_pending_board_lists_unsigned_violations(env):
     with account_scope(env["account_id"]):
         AttendanceDay.objects.create(
             account_id=env["account_id"], company=env["company"],
-            employment=env["employment"], work_date=date(2026, 10, 5),
+            employment=env["employment"], work_date=TODAY,
             status=DayStatus.PRESENT, late_minutes=45)
 
-        rows = svc.pending_board(env["company"], date(2026, 10, 1),
-                                 date(2026, 10, 31))
+        rows = svc.pending_board(env["company"], TODAY,
+                                 TODAY)
         assert len(rows) == 1
         assert rows[0]["minutes"] == 45
         # ٤٥ دقيقة من ٦٠٠٠ على ثماني ساعات = ١٨.٧٥
@@ -203,15 +219,41 @@ def test_signed_day_leaves_the_board(env):
     with account_scope(env["account_id"]):
         AttendanceDay.objects.create(
             account_id=env["account_id"], company=env["company"],
-            employment=env["employment"], work_date=date(2026, 11, 3),
+            employment=env["employment"], work_date=TODAY,
             status=DayStatus.ABSENT)
 
-        rows = svc.pending_board(env["company"], date(2026, 11, 1),
-                                 date(2026, 11, 30))
+        rows = svc.pending_board(env["company"], TODAY,
+                                 TODAY)
         assert len(rows) == 1
 
         svc.issue_batch(company=env["company"], rows=rows,
                         employee_statement="أفاد")
-        after = svc.pending_board(env["company"], date(2026, 11, 1),
-                                  date(2026, 11, 30))
+        after = svc.pending_board(env["company"], TODAY,
+                                  TODAY)
         assert after == []
+
+
+def test_stale_violation_cannot_be_penalised(env):
+    """
+    ⚠️ المادة (٦٩): لا جزاء على مخالفة مضى عليها **ثلاثون يومًا**.
+
+    فالمنشأة التي سكتت شهرًا سقط حقّها، والتوقيع بعدها باطل
+    يُردّ في المحكمة العمالية.
+    """
+    with account_scope(env["account_id"]):
+        v = _v(env, "LATE-30")
+        with pytest.raises(svc.PenaltyError) as e:
+            svc.issue(employment=env["employment"], violation=v,
+                      occurred_on=TODAY - timedelta(days=45),
+                      description="تأخر قديم", employee_statement="أفاد")
+        assert "ثلاثين" in str(e.value)
+
+
+def test_fresh_violation_is_accepted(env):
+    """وما كان في المهلة يُوقَّع."""
+    with account_scope(env["account_id"]):
+        v = _v(env, "LATE-30")
+        p = svc.issue(employment=env["employment"], violation=v,
+                      occurred_on=TODAY - timedelta(days=10),
+                      description="تأخر", employee_statement="أفاد")
+        assert p.id
