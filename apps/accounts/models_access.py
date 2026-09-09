@@ -131,6 +131,12 @@ class AccountMembership(models.Model):
     مستخدم واحد = حساب واحد. الوصول لعدة شركات يتم عبر
     company_ids داخل نفس الحساب، لا بعضويات متعددة.
     """
+    # ق-113: جوال مالك الحساب من التسجيل الذاتيّ — فهو يدخل قبل أن
+    # يُضيف نفسه موظفًا، ولا ملفّ شخصٍ له بعد. ومتى أُضيف صار جواله
+    # في ملفّه، وهذا يبقى للدخول.
+    login_mobile = models.CharField(_("جوال الدخول"), max_length=20,
+                                    blank=True, db_index=True)
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name="account_membership", verbose_name=_("المستخدم"),

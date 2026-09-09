@@ -33,6 +33,14 @@ class SignupError(Exception):
     """سببٌ يُعرض للمستخدم كما هو."""
 
 
+def _norm_mobile(raw):
+    """صيغة موحّدة للجوال — فالبحث يطابق ما يُدخله المستخدم."""
+    from apps.employees.services.validators import normalize_mobile
+
+    value, err = normalize_mobile(raw or "")
+    return "" if err else (value or "")
+
+
 def _hash(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -144,7 +152,8 @@ def verify_signup(raw_token, ip=None):
         AccountMembership.objects.create(
             user=user, account=Account.objects.get(id=result.account_id),
             active_company=Company.objects.get(id=result.company_id),
-            is_account_owner=True)
+            is_account_owner=True,
+            login_mobile=_norm_mobile(req.mobile))
 
     req.status = SignupStatus.VERIFIED
     req.verified_at = timezone.now()

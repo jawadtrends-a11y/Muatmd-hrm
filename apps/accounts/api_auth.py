@@ -93,6 +93,7 @@ def _resolve_identifier(raw):
         names.update(User.objects.filter(
             email__iexact=ident).values_list("username", flat=True))
 
+
     if len(names) > 1:
         return None, "هذا المعرّف يخصّ أكثر من حساب — استخدم بريدك"
     if names:

@@ -118,3 +118,39 @@ def test_expired_reset_is_refused():
         expires_at=timezone.now() - timedelta(minutes=1))
     with pytest.raises(svc.SignupError):
         svc.apply_reset(raw, "New@123456")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_owner_logs_in_by_mobile_before_being_an_employee(rls_enforced_late):
+    """
+    ⚠️ مالك الحساب يدخل بجواله **قبل أن يُضيف نفسه موظفًا**.
+
+    والبحث يقع **قبل أن يُعرف صاحب المعرّف**، فلا سياق حساب —
+    وAccountMembership معزول بـRLS فيُحجب. فالبحث لا بدّ أن يمرّ
+    بدالّة SECURITY DEFINER ترجع اسم المستخدم وحده (كنمط ق-94).
+
+    ⚠️ والحارس يُفرض عليه العزل عمدًا: بلا ذلك يمرّ وهو لا يحرس —
+    فالقراءة بمالك القاعدة ترى كل شيء.
+    """
+    from apps.accounts.api_auth import _resolve_identifier
+    from apps.accounts.models_access import AccountMembership
+
+    _, raw = svc.create_signup(
+        company_name="شركة", full_name="جواد", email="m@example.com",
+        mobile="0501234567", password="Str0ngPass!")
+    out = svc.verify_signup(raw)
+
+    m = AccountMembership.objects.get(user_id=out["user_id"])
+    assert m.login_mobile == "+966501234567", m.login_mobile
+
+    user = User.objects.get(id=out["user_id"])
+    assert not hasattr(user, "person"), (
+        "المالك لا ملفّ شخصٍ له بعد — وهذا سبب الحاجة للحقل")
+
+    rls_enforced_late()
+
+    by_mobile, _e = _resolve_identifier("0501234567")
+    assert by_mobile == user.username, "لم يُعرف بجواله تحت العزل"
+
+    by_email, _e2 = _resolve_identifier("m@example.com")
+    assert by_email == user.username
