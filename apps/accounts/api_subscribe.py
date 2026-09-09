@@ -7,7 +7,9 @@
 from decimal import Decimal
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view, authentication_classes, permission_classes)
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -228,3 +230,89 @@ def pay_overage(request):
         "callback_url": settings.MOYASAR_CALLBACK_URL,
         "amount_halalas": int(inv.total * 100),
     }, status=status.HTTP_201_CREATED)
+
+
+# ══════════ الأسعار للعامّة (ق-116) ══════════
+#
+# صفحة الأسعار تُفتح **قبل التسجيل** ويُربط إليها من الموقع
+# الرئيسيّ — فلا توثيق لها. ولا تكشف شيئًا: الباقات المعروضة
+# وأسعارها معلنة بطبيعتها.
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def public_pricing(request):
+    """الباقات المعروضة بمزاياها التراكمية — بلا توثيق."""
+    from apps.accounts.models_platform import get_settings
+
+    feats = {f.feature_key: f for f in Feature.objects.all()}
+    plans = list(Plan.objects.filter(is_public=True, is_active=True)
+                 .order_by("tier_order", "id"))
+
+    out = []
+    seen = set()
+    for p in plans:
+        tier = p.price_tiers.order_by("from_employees").first()
+        keys = set(p.features.values_list("feature_key", flat=True))
+        rows = []
+        for k in sorted(keys - seen):
+            f = feats.get(k)
+            if f is None:
+                continue
+            rows.append({"key": k, "name_ar": f.name_ar,
+                         "name_en": f.name_en,
+                         "value": p.features.get(feature_key=k).value,
+                         "value_type": f.value_type})
+        seen |= keys
+        out.append({
+            "id": p.id, "code": p.code,
+            "name_ar": p.name_ar, "name_en": p.name_en,
+            "monthly": str(tier.price_per_employee_monthly) if tier else None,
+            "annual": str(tier.price_per_employee_yearly) if tier else None,
+            "setup_fee": str(p.setup_fee),
+            "min_employees": p.min_billable_employees,
+            "features_new": rows,
+            "inherits_from": (plans[plans.index(p) - 1].name_ar
+                              if plans.index(p) > 0 else ""),
+        })
+
+    st = get_settings()
+    return Response({
+        "plans": out,
+        "vat_rate": str(getattr(st, "vat_rate", 15)),
+        "trial_days": 7,
+    })
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def public_quote(request):
+    """
+    عرض سعر للزائر — بمعاملات الرابط لا بجسم الطلب.
+
+    والحساب في الخادم كما في صفحة المشترك: الضريبة ورسم الإعداد
+    قرارات نظامية، وحسابها مرّتين يفتح باب اختلافهما.
+    """
+    plan = Plan.objects.filter(id=request.GET.get("plan_id"),
+                               is_public=True, is_active=True).first()
+    if plan is None:
+        return Response({"detail": "الباقة غير متاحة"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    cycle = request.GET.get("cycle") or BillingCycle.MONTHLY
+    if cycle not in BillingCycle.values:
+        return Response({"detail": "دورة غير معروفة"}, status=400)
+    try:
+        employees = int(request.GET.get("employees") or 0)
+    except (TypeError, ValueError):
+        return Response({"detail": "عدد غير صحيح"}, status=400)
+    if employees > 100000:
+        return Response({"detail": "عدد كبير — تواصل معنا"}, status=400)
+
+    try:
+        return Response(billing.quote(
+            plan=plan, employees=employees, cycle=cycle,
+            with_setup=request.GET.get("with_setup") == "1"))
+    except billing.BillingError as e:
+        return Response({"detail": str(e)}, status=400)

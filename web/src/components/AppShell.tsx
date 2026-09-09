@@ -26,7 +26,7 @@ import NotificationBell from "@/components/NotificationBell";
 type CompanyOpt = { id: number; name_ar: string; name_en: string };
 
 const PUBLIC_PATHS = ["/login", "/join", "/billing/callback",
-                      "/accept-invitation", "/signup",
+                      "/accept-invitation", "/signup", "/pricing",
                       "/password"];
 
 const T: Dict = {

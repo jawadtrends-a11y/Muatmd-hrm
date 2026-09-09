@@ -78,6 +78,10 @@ urlpatterns = [
          name="password-forgot"),
     path("api/password/reset/<str:token>/", signup_api.password_reset,
          name="password-reset"),
+    # ق-116: صفحة الأسعار العامّة — تُفتح قبل التسجيل
+    path("api/pricing/", subscribe_api.public_pricing, name="public-pricing"),
+    path("api/pricing/quote/", subscribe_api.public_quote,
+         name="public-quote"),
     path("api/plans/", subscribe_api.public_plans, name="public-plans"),
     path("api/plans/quote/", subscribe_api.price_quote, name="price-quote"),
     path("api/account/my-subscription/", subscribe_api.my_subscription,
