@@ -20,6 +20,9 @@ EDITABLE = [
     "gosi_establishment_no", "mol_establishment_no",
     "activity_code", "entity_size",
     "fiscal_year_start_month", "contact_email",
+    # ق-111: العنوان الوطنيّ — الفاتورة الضريبية تُرفض بدونه
+    "building_number", "street", "district", "city", "postal_code",
+    "additional_number",
 ]
 
 
@@ -45,6 +48,16 @@ def _serialize(c):
         "entity_size": c.entity_size,
         "fiscal_year_start_month": c.fiscal_year_start_month,
         "contact_email": c.contact_email,
+        "building_number": c.building_number,
+        "street": c.street,
+        "district": c.district,
+        "city": c.city,
+        "postal_code": c.postal_code,
+        "additional_number": c.additional_number,
+        # ق-111: هل يكفي لإصدار فاتورة ضريبية؟ — الواجهة تنبّه به
+        "zatca_ready": bool(
+            c.vat_number and c.building_number and c.street
+            and c.district and c.city and c.postal_code),
         "is_active": c.is_active,
     }
 

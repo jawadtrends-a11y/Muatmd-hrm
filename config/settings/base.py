@@ -174,3 +174,14 @@ EMAIL_BACKEND = ("apps.notifications.email_backend.BrevoBackend"
                  if BREVO_API_KEY
                  else "django.core.mail.backends.console.EmailBackend")
 PUBLIC_WEB_URL = env("PUBLIC_WEB_URL", default="https://hr.muatmd.sa")
+
+# ── تكامل معتمد المحاسبي (ق-111) ──
+# الفاتورة الزكاتية تصدر من المحاسبي بعد نجاح الدفع — فهو نظام
+# الفوترة المعتمد، وHRM لا يُصدر فواتير ضريبية بنفسه.
+ACCOUNTING_API_URL = env("ACCOUNTING_API_URL",
+                         default="https://acc.muatmd.sa/api/v1")
+ACCOUNTING_API_KEY = env("ACCOUNTING_API_KEY", default="")
+# مفتاح إيقاف: التكامل مبنيّ ولا يُصدر شيئًا حتى يُفعَّل صراحةً —
+# فالفاتورة تدخل دفاتر معتمد الحقيقية، ولا تُنشأ في التطوير.
+ACCOUNTING_INVOICE_ENABLED = env.bool("ACCOUNTING_INVOICE_ENABLED",
+                                      default=False)

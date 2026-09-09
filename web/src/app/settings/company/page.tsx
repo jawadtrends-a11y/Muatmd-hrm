@@ -20,6 +20,23 @@ const T: Dict = {
   secIdentity: { ar: "الهوية النظامية", en: "Legal identity" },
   secNumbers: { ar: "الأرقام النظامية", en: "Statutory numbers" },
   secContact: { ar: "التواصل والسنة المالية", en: "Contact and fiscal year" },
+  secAddress: { ar: "العنوان الوطني", en: "National address" },
+  addressHint: {
+    ar: "مطلوب لإصدار الفاتورة الضريبية — ولا تصدر فاتورتك بدونه",
+    en: "Required for tax invoices — none is issued without it",
+  },
+  bldg: { ar: "رقم المبنى", en: "Building no." },
+  street: { ar: "الشارع", en: "Street" },
+  district: { ar: "الحي", en: "District" },
+  cityF: { ar: "المدينة", en: "City" },
+  postal: { ar: "الرمز البريدي", en: "Postal code" },
+  addl: { ar: "الرقم الإضافي", en: "Additional no." },
+  ready: { ar: "البيانات مكتملة — فاتورتك تصدر تلقائيًّا",
+           en: "Complete — invoices are issued automatically" },
+  notReady: {
+    ar: "أكمل الرقم الضريبي والعنوان الوطني لتصدر فاتورتك تلقائيًّا",
+    en: "Complete VAT number and address for automatic invoicing",
+  },
   legalAr: { ar: "الاسم النظامي", en: "Legal name" },
   legalEn: { ar: "الاسم بالإنجليزية", en: "Legal name (English)" },
   code: { ar: "رمز الشركة", en: "Company code" },
@@ -61,6 +78,13 @@ type Company = {
   entity_size: string;
   fiscal_year_start_month: number;
   contact_email: string;
+  building_number: string;
+  street: string;
+  district: string;
+  city: string;
+  postal_code: string;
+  additional_number: string;
+  zatca_ready?: boolean;
 };
 
 const MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
@@ -116,6 +140,12 @@ export default function CompanySettingsPage() {
         entity_size: data.entity_size,
         fiscal_year_start_month: data.fiscal_year_start_month,
         contact_email: data.contact_email,
+        building_number: data.building_number,
+        street: data.street,
+        district: data.district,
+        city: data.city,
+        postal_code: data.postal_code,
+        additional_number: data.additional_number,
       });
       setData(out);
       setMsg(L("saved"));
@@ -194,6 +224,31 @@ export default function CompanySettingsPage() {
         {F(L("mol"), "mol_establishment_no")}
         {F(L("activity"), "activity_code")}
         {F(L("size"), "entity_size")}
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ margin: "0 0 4px" }}>{L("secAddress")}</h3>
+        <div className="muted" style={{ fontSize: ".82rem",
+                                        marginBottom: 14 }}>
+          {L("addressHint")}
+        </div>
+        <div className="row" style={{ flexWrap: "wrap", gap: 14,
+                                      alignItems: "flex-start" }}>
+        {F(L("bldg"), "building_number", "text", undefined, 160)}
+        {F(L("street"), "street")}
+        {F(L("district"), "district")}
+        {F(L("cityF"), "city")}
+        {F(L("postal"), "postal_code", "text", undefined, 160)}
+        {F(L("addl"), "additional_number", "text", undefined, 160)}
+        </div>
+        <div style={{ marginTop: 14, padding: "10px 14px",
+                      borderRadius: "var(--radius-sm)", fontSize: ".85rem",
+                      background: data.zatca_ready
+                        ? "var(--ok-soft)" : "var(--copper-soft)",
+                      color: data.zatca_ready
+                        ? "var(--ok)" : "var(--copper)" }}>
+          {data.zatca_ready ? L("ready") : L("notReady")}
         </div>
       </div>
 

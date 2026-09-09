@@ -478,6 +478,16 @@ def platform_settings(request):
         "renewal_alert_monthly": ps.renewal_alert_monthly,
         "renewal_alert_annual": ps.renewal_alert_annual,
         "invoice_due_days": ps.invoice_due_days,
+        # ق-111: سقف البيئة — الزرّ لا يتجاوزه، واللوحة تُظهره
+        # فلا يحتار من يفعّل المزامنة ولا تعمل.
+        "accounting_env_allowed": bool(
+            __import__("django.conf", fromlist=["settings"])
+            .settings.ACCOUNTING_INVOICE_ENABLED),
+        # ق-111: سقف البيئة — الزرّ لا يتجاوزه، واللوحة تُظهره
+        # فلا يحتار من يفعّل المزامنة ولا تعمل.
+        "accounting_env_allowed": bool(
+            __import__("django.conf", fromlist=["settings"])
+            .settings.ACCOUNTING_INVOICE_ENABLED),
         "manual_retry_limit": ps.manual_retry_limit,
         "manual_retry_cooldown_hours": ps.manual_retry_cooldown_hours,
         "auto_retry_hours": ps.auto_retry_hours,

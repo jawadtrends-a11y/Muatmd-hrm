@@ -7,6 +7,8 @@
 from datetime import timedelta
 from decimal import Decimal
 
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -15,6 +17,8 @@ from apps.accounts.models_billing_v2 import (
     SavedCard,
 )
 from apps.accounts.services.payments import moyasar
+
+logger = logging.getLogger(__name__)
 
 ZERO = Decimal("0")
 
@@ -210,6 +214,21 @@ def _on_paid(payment, data):
         if token:
             save_card_token(account_id=payment.account_id, token=token,
                             data=data)
+
+    # ق-111: الفاتورة الزكاتية تصدر من معتمد المحاسبي.
+    #
+    # وفشلها **لا يُلغي الدفع ولا الاشتراك**: العميل دفع وحقّه ثابت،
+    # والفاتورة تُعاد محاولتها. ومحكومة بمفتاح إيقاف صريح — فلا
+    # تُنشأ فاتورة في دفاتر معتمد أثناء التطوير.
+    from apps.accounts.services import accounting_invoice as _acc
+    try:
+        _acc.issue_for_payment(payment)
+    except _acc.InvoiceSkipped as e:
+        logger.info("فاتورة معلَّقة: %s", e)
+    except _acc.InvoiceFailed as e:
+        logger.error("تعذّر إصدار الفاتورة الزكاتية: %s", e)
+    except Exception as e:                                # noqa: BLE001
+        logger.error("خطأ غير متوقّع في الفوترة: %s", e)
 
 
 # ══════════ البطاقات المحفوظة ══════════

@@ -133,6 +133,18 @@ class Company(TimeStampedModel):
         _("بريد التواصل"), blank=True,
         help_text=_("يصله ردّ الموظفين على رسائل النظام"))
 
+    # ق-111: العنوان الوطنيّ — الهيئة ترفض الفاتورة الضريبية بدونه،
+    # فمن لم يُكمله لا تصدر فاتورته تلقائيًّا.
+    building_number = models.CharField(_("رقم المبنى"), max_length=20,
+                                       blank=True)
+    street = models.CharField(_("الشارع"), max_length=255, blank=True)
+    district = models.CharField(_("الحي"), max_length=100, blank=True)
+    city = models.CharField(_("المدينة"), max_length=100, blank=True)
+    postal_code = models.CharField(_("الرمز البريدي"), max_length=10,
+                                   blank=True)
+    additional_number = models.CharField(_("الرقم الإضافي"), max_length=10,
+                                         blank=True)
+
     fiscal_year_start_month = models.PositiveSmallIntegerField(
         _("بداية السنة المالية"), default=1,
     )

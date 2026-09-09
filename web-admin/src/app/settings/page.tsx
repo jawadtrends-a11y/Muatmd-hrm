@@ -47,6 +47,14 @@ const T: Dict = {
   accounting: { ar: "الربط بالمحاسبي", en: "Accounting link" },
   accountingUrl: { ar: "رابط محاسبة معتمد", en: "Accounting API URL" },
   accountingEnabled: { ar: "مزامنة الفواتير", en: "Sync invoices" },
+  accHint: {
+    ar: "عند تفعيلها تصدر فاتورة زكاتية من معتمد المحاسبي فور نجاح كل دفعة",
+    en: "Issues a ZATCA invoice from Muatmd Accounting on each payment",
+  },
+  accBlocked: {
+    ar: "⚠️ مقفلة في هذه البيئة — لا فاتورة تصدر ولو فُعّلت المزامنة",
+    en: "Locked in this environment — no invoice is issued",
+  },
   save: { ar: "حفظ", en: "Save" },
   saving: { ar: "جارٍ الحفظ…", en: "Saving…" },
   saved: { ar: "حُفظت التغييرات", en: "Saved" },
@@ -193,7 +201,17 @@ export default function PlatformSettingsPage() {
       <div className="card" style={{ padding: 20 }}>
         <h2 style={{ fontSize: "1rem", marginBottom: 4 }}>{L("accounting")}</h2>
         <Row label={L("accountingUrl")}>{text("accounting_api_url")}</Row>
-        <Row label={L("accountingEnabled")}>{bool("accounting_enabled")}</Row>
+        <Row label={L("accountingEnabled")} hint={L("accHint")}>
+          {bool("accounting_enabled")}
+        </Row>
+        {!s.accounting_env_allowed && (
+          <div style={{ marginTop: 10, padding: "10px 14px",
+                        borderRadius: 8, fontSize: ".85rem",
+                        background: "var(--copper-soft)",
+                        color: "var(--copper)" }}>
+            {L("accBlocked")}
+          </div>
+        )}
       </div>
 
       <div className="row">
