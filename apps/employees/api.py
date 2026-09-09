@@ -22,6 +22,21 @@ from apps.employees.services.hiring import (
 )
 
 # الحقول المشتركة للشخص — كل ما عداها يُقرأ من ارتباط الشركة النشطة
+def _role_assignment(emp):
+    """إسناد الدور على هذا التوظيف — واحد لا أكثر."""
+    return emp.role_assignments.select_related("role").first()
+
+
+def _role_of(emp):
+    ra = _role_assignment(emp)
+    return ra.role.name_ar if ra else ""
+
+
+def _role_id_of(emp):
+    ra = _role_assignment(emp)
+    return ra.role_id if ra else None
+
+
 PERSON_SHARED_FIELDS = (
     "first_name_ar", "father_name_ar", "grandfather_name_ar",
     "family_name_ar", "full_name_en", "gender", "birth_date",
@@ -948,6 +963,14 @@ def employee_profile(request, employment_id):
         "job": {
             "job_title": localized(emp.job_title, locale=lang),
             "job_title_id": emp.job_title_id,
+            # ق-115: دوره في النظام — من RoleAssignment على توظيفه.
+            # **ولا يعدّله إلا مالك الحساب** (قرار جواد): منح
+            # الأدوار مفتاح النظام كلّه، فلا يوسَّع بمن يوزّعه.
+            "system_role": _role_of(emp),
+            "system_role_id": _role_id_of(emp),
+            "can_edit_role": bool(getattr(
+                getattr(request.user, "account_membership", None),
+                "is_account_owner", False)),
             "department": localized(emp.department, locale=lang),
             "department_id": emp.department_id,
             "branch": localized(emp.branch, locale=lang),
@@ -1031,6 +1054,65 @@ def employee_profile(request, employment_id):
     })
 
 
+# ق-115: من يُسند الأدوار ومتى
+#
+# المالك ومدير الموارد وموظف الموارد (قرار جواد). **ولا يُسند دور
+# أعلى من دور المسنِد**: وإلا صنع موظفُ الموارد مالكًا وهميًّا ثم
+# دخل به — فترقّى نفسه بلا اعتماد.
+ROLE_RANK = {
+    "employee": 1, "supervisor": 2, "dept_manager": 3,
+    "hr_staff": 4, "hr_manager": 5, "ceo": 6, "owner": 7,
+}
+
+
+def _may_assign_roles(user):
+    m = getattr(user, "account_membership", None)
+    if m is None:
+        return False, 0
+    if m.is_account_owner:
+        return True, ROLE_RANK["owner"]
+    codes = {a.role.code for a in m.role_assignments.select_related("role")}
+    if not codes & {"hr_manager", "hr_staff"}:
+        return False, 0
+    return True, max(ROLE_RANK.get(c, 0) for c in codes)
+
+
+def _apply_role(emp, role_id, actor):
+    """يُسند الدور لهذا التوظيف — أو يرفع خطأً مفهومًا."""
+    from apps.accounts.models_access import Role, RoleAssignment
+    from apps.core.access.catalog import Scope
+
+    may, my_rank = _may_assign_roles(actor)
+    if not may:
+        raise PermissionError("لا تملك إسناد الأدوار")
+
+    if not role_id:
+        emp.role_assignments.all().delete()
+        return ""
+
+    # معزول ذاتيًا: الحساب من التوظيف الذي مرّ بالبوابة — والدور
+    # كتالوجٌ لا بيانات موظفين.
+    account_id = emp.account_id
+    role = Role.objects.filter(account_id=account_id,
+                               id=role_id).first()
+    if role is None:
+        raise ValueError("دور غير معروف")
+    if ROLE_RANK.get(role.code, 99) > my_rank:
+        raise PermissionError(
+            f"لا تملك إسناد دور «{role.name_ar}» — وهو أعلى من دورك")
+
+    m = getattr(getattr(emp.person, "user", None),
+                "account_membership", None)
+
+    emp.role_assignments.all().delete()
+    RoleAssignment.objects.create(
+        membership=m, employment=emp, role=role,
+        company_id=emp.company_id,
+        scope=(role.default_scope if hasattr(role, "default_scope")
+               else Scope.OWN.value))
+    return role.name_ar
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_employee_profile(request, employment_id):
@@ -1104,6 +1186,20 @@ def update_employee_profile(request, employment_id):
                         if (key.endswith("_date") or key.endswith("_id"))
                         else value)
             changed.append(key)
+
+    # ق-115: الدور — لا يُسنده إلا المالك أو الموارد، ولا يُسند
+    # أعلى من دور المسنِد. ويُعالَج قبل الحفظ فيُردّ الرفض كاملًا.
+    role_name = None
+    if "system_role_id" in d:
+        try:
+            role_name = _apply_role(emp, d.get("system_role_id"),
+                                    request.user)
+        except PermissionError as e:
+            return Response({"detail": str(e), "code": "role_forbidden"},
+                            status=403)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        changed.append("الدور")
 
     if not changed:
         return Response({"detail": "لا حقول قابلة للتعديل"}, status=400)

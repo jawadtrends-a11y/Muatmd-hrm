@@ -36,6 +36,8 @@ const T: Dict = {
   // التبويبات
   personal: { ar: "البيانات الأساسية", en: "Personal" },
   job: { ar: "بيانات الوظيفة", en: "Job" },
+  systemRole: { ar: "الدور في النظام", en: "System role" },
+  noRole: { ar: "بلا دور", en: "No role" },
   shift: { ar: "فترة العمل", en: "Work shift" },
   costCenter: { ar: "مركز التكلفة", en: "Cost center" },
   mobilePunch: { ar: "بصمة الجوال", en: "Mobile punch" },
@@ -1164,6 +1166,7 @@ function ProfileInner({
   /** تعديل بيانات الوظيفة — لمن يملك employees.edit (ق-98) */
   const [canEditJob, setCanEditJob] = useState(false);
   const [jobTitles, setJobTitles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
@@ -1180,6 +1183,12 @@ function ProfileInner({
     apiGet<any[]>("/org/job-titles/")
       .then((r) => setJobTitles(Array.isArray(r) ? r : []))
       .catch(() => setJobTitles([]));
+
+    // ق-115: أدوار الحساب — للمالك والموارد وحدهم، وإخفاق الجلب
+    // يعني قائمةً فارغة لا شاشةً مكسورة.
+    apiGet<any>("/access/roles/")
+      .then((r) => setRoles(Array.isArray(r) ? r : (r?.roles || [])))
+      .catch(() => setRoles([]));
     apiGet<any[]>("/org/departments/")
       .then((r) => setDepts2(Array.isArray(r) ? r : []))
       .catch(() => setDepts2([]));
@@ -1457,6 +1466,15 @@ function ProfileInner({
             { key: "job_title_id", label: L("jobTitle"), kind: "select",
               options: jobTitles.map((x: any) => ({
                 value: String(x.id), label: x.name_ar })) },
+            // ق-115: الدور في النظام — لا يعدّله إلا المالك أو
+            // الموارد، والخادم يرفض ما فوق رتبة المسنِد.
+            ...(data.job.can_edit_role
+              ? [{ key: "system_role_id", label: L("systemRole"),
+                   kind: "select" as const,
+                   options: [{ value: "", label: L("noRole") },
+                             ...roles.map((x: any) => ({
+                               value: String(x.id), label: x.name_ar }))] }]
+              : []),
             { key: "department_id", label: L("department"),
               kind: "select",
               options: depts2.map((x: any) => ({
