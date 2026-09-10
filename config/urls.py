@@ -53,6 +53,11 @@ urlpatterns = [
     path("api/org/holidays/<int:holiday_id>/", org_api.holiday_detail, name="holiday-detail"),
     path("api/access/permissions/", access_api.permission_catalog, name="perm-catalog"),
     path("api/access/roles/", access_api.role_list, name="role-list"),
+    # ق-127: الأدوار المخصّصة — إنشاءً وتعديلًا وحذفًا
+    path("api/access/roles/create/", access_api.role_create,
+         name="role-create"),
+    path("api/access/roles/<int:role_id>/manage/", access_api.role_manage,
+         name="role-manage"),
     path("api/access/roles/<int:role_id>/", access_api.role_detail, name="role-detail"),
     path("api/access/roles/<int:role_id>/permissions/", access_api.role_permissions_update, name="role-perms"),
     # صلاحيات موظف بعينه (ق-67 وق-78)

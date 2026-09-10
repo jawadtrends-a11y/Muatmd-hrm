@@ -83,6 +83,121 @@ def role_detail(request, role_id):
     })
 
 
+def _company_id(request):
+    ctx = getattr(request, "account_ctx", None)
+    return getattr(ctx, "active_company_id", None)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def role_create(request):
+    """
+    إنشاء دور مخصّص (ق-127).
+
+    **الأدوار الستّة المبذورة تكفي أكثر المنشآت** — ومن احتاج
+    غيرها (مدير مشروع، مشرف وردية، مدقّق) يبنيه بصلاحياته.
+
+    ⚠️ **ولا يُنشئ دورًا أوسع من دوره**: من يملك عشر صلاحيات لا
+    يمنح خمسين — وإلا صنع دورًا فوقه ثم أسنده لنفسه.
+    """
+    from apps.accounts.models import Company
+    from apps.accounts.services.roles import set_role_permissions
+    from apps.core.features.gate import Features
+
+    Gate.require(request.user, "access.manage")
+
+    Features.require(_company_id(request), "custom_roles")
+
+    # مقيَّد بشركة المنفّذ النشطة — لا يختارها هو
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    d = request.data
+    code = str(d.get("code") or "").strip().lower()
+    name = str(d.get("name_ar") or "").strip()
+    if not code or not name:
+        return Response({"detail": "الرمز والاسم مطلوبان"}, status=400)
+    if not code.replace("_", "").isalnum():
+        return Response({"detail": "الرمز حروفٌ إنجليزية وأرقام وشرطة سفلية"},
+                        status=400)
+    # معزول ذاتيًا: الحساب من الشركة النشطة — والدور كتالوجٌ
+    # لا بيانات موظفين.
+    # مقيَّد بحساب الشركة التي مرّت أعلاه — company_id=_company_id(request)
+    if Role.objects.filter(account_id=comp.account_id,
+                           code=code).exists():
+        return Response({"detail": "الرمز مستعمل"}, status=409)
+
+    keys = d.get("permissions")
+    if not isinstance(keys, list) or not keys:
+        return Response({"detail": "اختر صلاحيةً واحدة على الأقلّ"},
+                        status=400)
+
+    # ⚠️ لا يمنح ما لا يملك
+    mine = Gate.accessible_permissions(request.user)
+    excess = set(keys) - mine
+    if excess:
+        return Response({
+            "detail": ("لا تملك منح صلاحياتٍ ليست لك: "
+                       + "، ".join(sorted(excess)[:5])),
+            "code": "permission_escalation",
+        }, status=403)
+
+    scope = d.get("default_scope") or Scope.OWN.value
+    role = Role.objects.create(
+        account=comp.account, code=code, name_ar=name,
+        name_en=str(d.get("name_en") or ""),
+        default_scope=scope, is_system=False)
+    applied = set_role_permissions(role, keys)
+
+    return Response({"id": role.id, "code": role.code,
+                     "name_ar": role.name_ar,
+                     "permissions": applied},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def role_manage(request, role_id):
+    """
+    تعديل دورٍ مخصّص أو حذفه.
+
+    ⚠️ **والمبذور لا يُحذف ولا يُعاد تسميته رمزُه**: الكود يشير
+    إليه بالرمز، وحذفه يترك النظام بلا دورٍ أساسيّ.
+    """
+    Gate.require(request.user, "access.manage")
+    role = Gate.filter_queryset(
+        request.user, "access.manage", Role.objects.all()
+    ).filter(id=role_id).first()
+    if role is None:
+        return Response({"detail": "الدور غير موجود"}, status=404)
+
+    if getattr(role, "is_system", False):
+        return Response({
+            "detail": "دورٌ أساسيّ — تُعدَّل صلاحياته ولا يُحذف",
+            "code": "system_role",
+        }, status=409)
+
+    if request.method == "DELETE":
+        used = role.assignments.count()
+        if used:
+            return Response({
+                "detail": f"مسنَدٌ لـ{used} موظفًا — انقلهم أوّلًا",
+                "code": "role_in_use",
+            }, status=409)
+        role.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "name_en"):
+        if f in d:
+            setattr(role, f, str(d[f] or ""))
+    if d.get("default_scope") in [s.value for s in Scope]:
+        role.default_scope = d["default_scope"]
+    role.save()
+    return Response({"id": role.id, "name_ar": role.name_ar})
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 @transaction.atomic

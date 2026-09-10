@@ -173,7 +173,14 @@ def provision_roles_for_account(account_id):
             defaults={
                 "name_ar": spec["name_ar"],
                 "default_scope": spec["scope"].value,
-                "is_system": code == RoleCode.OWNER,
+                # ⚠️ ق-127: **الأدوار المبذورة كلّها أساسية** — لا
+                # المالك وحده. فالكود يشير إليها برموزها (سلاسل
+                # الاعتماد، والتذكير، والودجتات)، وحذف واحدٍ منها
+                # يترك من عليه بلا صلاحيات ويكسر ما يشير إليه.
+                #
+                # وصلاحياتها تُعدَّل بحرّية — المحميّ وجودُها لا
+                # محتواها.
+                "is_system": True,
             },
         )
         if is_new:
