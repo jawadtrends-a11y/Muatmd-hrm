@@ -58,6 +58,10 @@ def _dec(v, field):
 @permission_classes([IsAuthenticated])
 def advances(request):
     """قائمة السلف وإنشاؤها."""
+    # ق-123: السلف والذمم ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company_id(request), "advances")
     company_id = _company_id(request)
     if company_id is None:
         return Response({"detail": "لا شركة نشطة"}, status=400)

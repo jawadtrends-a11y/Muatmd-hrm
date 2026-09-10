@@ -144,6 +144,75 @@ SPECS = {
         hint_ar="من أي وقت إلى أي وقت — تُحتسب بالدقيقة لا بالساعة",
         hint_en="From when to when — counted by the minute",
     ),
+    # ⚠️ كان النوع مُعرَّفًا بلا مواصفة — فيُرفض عند الإنشاء
+    # بـ«نوع طلب غير معروف». والمواصفة هي ما يجعله قابلًا للتقديم.
+    RequestType.PROFILE_UPDATE: RequestSpec(
+        code="profile_update", name_ar="طلب تحديث بيانات",
+        name_en="Profile update", icon="user",
+        required_fields=("field", "new_value", "reason"),
+        optional_fields=("note", "attachment_url"),
+        hint_ar="تعديل بياناتك الشخصية — يُعتمد من الموارد البشرية",
+        hint_en="Update your personal data — approved by HR",
+    ),
+
+    # ══ ق-124: سبعة أنواع تُكمل ما عند المنافس ══
+    RequestType.SWAP_RESTDAY: RequestSpec(
+        code="swap_restday", name_ar="طلب تبديل يوم راحة",
+        name_en="Rest day swap", icon="calendar",
+        required_fields=("work_date", "rest_date", "reason"),
+        optional_fields=("note",),
+        hint_ar="اعمل في يوم راحتك وخذ راحتك في يوم آخر",
+        hint_en="Work on your rest day and take another instead",
+    ),
+    RequestType.CUSTOM_PAYMENT: RequestSpec(
+        code="custom_payment", name_ar="طلب صرف مخصّص",
+        name_en="Custom payment", icon="wallet",
+        required_fields=("amount", "reason"),
+        optional_fields=("component_code", "note", "attachment_url"),
+        hint_ar="مبلغ خارج بنود راتبك — يُصرف باعتماد إدارتك",
+        hint_en="An amount outside your salary components",
+    ),
+    RequestType.GRIEVANCE: RequestSpec(
+        code="grievance", name_ar="طلب تظلّم",
+        name_en="Grievance", icon="alert",
+        required_fields=("subject", "reason"),
+        optional_fields=("note", "attachment_url"),
+        hint_ar="اعتراضٌ على قرار أو إجراء — يصل مدير الموارد مباشرةً",
+        hint_en="An objection — goes straight to HR",
+    ),
+    RequestType.OFFSITE: RequestSpec(
+        code="offsite", name_ar="طلب دوام خارج المكتب",
+        name_en="Offsite work", icon="location",
+        required_fields=("work_date", "location", "reason"),
+        optional_fields=("end_date", "note"),
+        hint_ar="عملٌ من موقع عميل أو فرع آخر ليوم أو أكثر",
+        hint_en="Work from a client site or another branch",
+    ),
+    RequestType.PURCHASE: RequestSpec(
+        code="purchase", name_ar="طلب مشتريات",
+        name_en="Purchase request", icon="cart",
+        required_fields=("item", "quantity", "reason"),
+        optional_fields=("estimated_cost", "note", "attachment_url"),
+        hint_ar="شراءٌ لحاجة العمل — يُعتمد قبل الصرف",
+        hint_en="A work purchase — approved before spending",
+    ),
+    RequestType.SHIFT_CHANGE: RequestSpec(
+        code="shift_change", name_ar="طلب تغيير فترة عمل",
+        name_en="Shift change", icon="clock",
+        required_fields=("shift_id", "start_date", "reason"),
+        optional_fields=("end_date", "note"),
+        hint_ar="انتقالٌ لفترة عمل أخرى من تاريخ تحدّده",
+        hint_en="Move to another shift from a chosen date",
+    ),
+    RequestType.SALARY_FIX: RequestSpec(
+        code="salary_fix", name_ar="طلب تثبيت الراتب",
+        name_en="Salary confirmation", icon="wallet",
+        required_fields=("reason",),
+        optional_fields=("effective_date", "note", "attachment_url"),
+        hint_ar="تثبيت الراتب بعد انقضاء فترة التجربة",
+        hint_en="Confirm salary after probation",
+    ),
+
 }
 
 
@@ -171,8 +240,16 @@ def eligible_types(employment):
 
     is_saudi = employment.person.nationality_code == "SA"
 
+    # ق-123: لا يُعرض إلا ما تفتحه باقته — فعرضُ نوعٍ ثم رفضه
+    # عند الإرسال إحباطٌ بلا فائدة، والترقية تُعرض في مكانها لا
+    # في وجه من همّ بالتقديم.
+    from apps.core.features.gate import Features
+
     for rtype, spec in SPECS.items():
         if rtype in HIDDEN_FROM_SERVICES:
+            continue
+        key = REQUEST_FEATURE_KEYS.get(rtype)
+        if key and not Features.enabled(employment.company_id, key):
             continue
         if spec.eligibility == "ticket_eligible":
             if is_saudi and not tickets_for_saudis:
@@ -269,6 +346,14 @@ REQUEST_FEATURE_KEYS = {
     RequestType.BUSINESS_TRIP: "req_secondment",
     RequestType.PROFILE_UPDATE: "req_profile_update",
     RequestType.ATTENDANCE_EXEMPTION: "attendance_exemption",
+    # ق-124
+    RequestType.SWAP_RESTDAY: "req_swap_restday",
+    RequestType.CUSTOM_PAYMENT: "req_custom_payment",
+    RequestType.GRIEVANCE: "req_grievance",
+    RequestType.OFFSITE: "req_offsite",
+    RequestType.PURCHASE: "req_purchase",
+    RequestType.SHIFT_CHANGE: "req_shift_change",
+    RequestType.SALARY_FIX: "req_salary_certificate",
 }
 
 

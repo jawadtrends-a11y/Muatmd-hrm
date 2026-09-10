@@ -69,6 +69,10 @@ def _my_employment(request):
 @permission_classes([IsAuthenticated])
 def leave_types(request):
     """أنواع الإجازات المتاحة وسياساتها."""
+    # ق-123: أنواع الإجازات المخصّصة ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company_id(request), "custom_leave_types")
     Gate.require(request.user, "leaves.view")
     company_id = _company_id(request)
     if company_id is None:

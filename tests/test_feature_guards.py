@@ -130,3 +130,46 @@ def test_refusal_points_to_the_right_plan(env):
         h = upgrade_hint(env["company"].id, "req_advance")
         assert h is not None
         assert h["plan_code"] == "g-big", h
+
+
+def test_new_request_types_have_specs_and_features(env):
+    """
+    ⚠️ كل نوع طلب **له مواصفة وميزة** (ق-124).
+
+    فنوعٌ بلا مواصفة يُرفض بـ«غير معروف»، وبلا ميزة يصير مجّانيًّا
+    بالسهو — وكلاهما يقع بالسكوت لا بالخطأ الظاهر.
+    """
+    from apps.leaves.services.requests import REQUEST_FEATURE_KEYS, SPECS
+
+    for value in RequestType.values:
+        rt = RequestType(value)
+        assert rt in SPECS, f"نوع بلا مواصفة: {value}"
+        assert rt in REQUEST_FEATURE_KEYS, f"نوع بلا ميزة: {value}"
+
+
+def test_types_list_hides_unpurchased(env):
+    """
+    ولا يُعرض إلا ما تفتحه باقته.
+
+    فعرضُ نوعٍ ثم رفضه عند الإرسال إحباطٌ بلا فائدة.
+    """
+    from apps.leaves.services.requests import eligible_types
+
+    with account_scope(env["account_id"]):
+        rows = eligible_types(env["employment"])
+        codes = {r["code"] for r in rows}
+        assert "leave" in codes
+        assert "advance" not in codes, "عُرض نوعٌ لم تفتحه باقته"
+
+
+def test_upgrade_shows_more_types(env):
+    """وترقية الباقة تزيد ما يُعرض."""
+    from apps.leaves.services.requests import eligible_types
+
+    with account_scope(env["account_id"]):
+        before = len(eligible_types(env["employment"]))
+        AccountSubscription.objects.filter(
+            account_id=env["account_id"]).update(plan=env["big"])
+        Features.invalidate(env["company"].id)
+        after = len(eligible_types(env["employment"]))
+        assert after > before, f"{before} → {after}"

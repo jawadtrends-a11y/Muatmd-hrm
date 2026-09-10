@@ -107,6 +107,12 @@ def dashboard_prefs(request):
 @permission_classes([IsAuthenticated])
 def dashboard_data(request):
     """بيانات الودجتات المعروضة — لا الثلاثين."""
+    # ق-123: لوحات القيادة المخصّصة ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    ctx = getattr(request, "account_ctx", None)
+    Features.require(getattr(ctx, "active_company_id", None),
+                     "custom_dashboards")
     from apps.core.services.widget_data import build
 
     perms = Gate.accessible_permissions(request.user)

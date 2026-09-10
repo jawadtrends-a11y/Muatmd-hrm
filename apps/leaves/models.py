@@ -277,6 +277,14 @@ class RequestType(models.TextChoices):
     BUSINESS_TRIP = "business_trip", _("رحلة عمل")
     PROFILE_UPDATE = "profile_update", _("تعديل بيانات")
     ATTENDANCE_EXEMPTION = "attendance_exemption", _("إعفاء من البصمة")
+    # ق-124: أنواع تُكمل ما عند المنافس — كلٌّ ميزةٌ تُباع وتُمنع
+    SWAP_RESTDAY = "swap_restday", _("تبديل يوم راحة")
+    CUSTOM_PAYMENT = "custom_payment", _("صرف مخصّص")
+    GRIEVANCE = "grievance", _("تظلّم")
+    OFFSITE = "offsite", _("دوام خارج المكتب")
+    PURCHASE = "purchase", _("مشتريات")
+    SHIFT_CHANGE = "shift_change", _("تغيير فترة عمل")
+    SALARY_FIX = "salary_fix", _("تثبيت الراتب")
 
 
 class RequestStatus(models.TextChoices):
