@@ -1099,6 +1099,167 @@ def _effect_profile_update(req):
 
 # ══════════ خريطة الآثار — بعد تعريف كل الدوال ══════════
 
+# ══════════ آثار الأنواع السبعة (ق-124) ══════════
+#
+# ⚠️ **طلبٌ يُعتمد بلا أثر ورقةٌ لا أكثر** — فلكلٍّ أثره في مكانه:
+# الحضور أو المسير أو التوظيف. وما لا أثر آليًّا له يُصرَّح به.
+
+def _effect_swap_restday(req):
+    """
+    تبديل يوم راحة: يوم العمل يُعدّ حضورًا، ويوم الراحة عطلة.
+
+    فالموظف عمل في راحته وأخذ راحته في يوم آخر — والنظام يعكس
+    ذلك، وإلا حُسب غائبًا في راحته البديلة.
+    """
+    from apps.attendance.models import AttendanceDay, DayStatus
+
+    p = req.payload
+    work_date = date.fromisoformat(str(p["work_date"]))
+    rest_date = date.fromisoformat(str(p["rest_date"]))
+
+    AttendanceDay.objects.update_or_create(
+        account_id=req.account_id, company_id=req.company_id,
+        employment=req.employment, work_date=work_date,
+        defaults={
+            "status": DayStatus.PRESENT,
+            "worked_minutes": 8 * 60,
+            "late_minutes": 0,
+            "is_manually_adjusted": True,
+            "adjustment_note": f"عمل في يوم راحة — {req.request_no}",
+        })
+    AttendanceDay.objects.update_or_create(
+        account_id=req.account_id, company_id=req.company_id,
+        employment=req.employment, work_date=rest_date,
+        defaults={
+            "status": DayStatus.WEEKEND,
+            "worked_minutes": 0,
+            "late_minutes": 0,
+            "is_manually_adjusted": True,
+            "adjustment_note": f"راحة بديلة — {req.request_no}",
+        })
+    return {"worked_on": str(work_date), "rested_on": str(rest_date)}
+
+
+def _effect_offsite(req):
+    """
+    الدوام خارج المكتب يُعدّ حضورًا كاملًا بلا بصمة.
+
+    فالموظف في موقع عميل أو فرع آخر — ومطالبتُه ببصمةٍ لا يملكها
+    تجعله غائبًا وهو يعمل.
+    """
+    from apps.attendance.models import AttendanceDay, DayStatus
+
+    p = req.payload
+    start = date.fromisoformat(str(p["work_date"]))
+    end = (date.fromisoformat(str(p["end_date"]))
+           if p.get("end_date") else start)
+    if end < start:
+        end = start
+
+    made = []
+    cursor = start
+    while cursor <= end:
+        AttendanceDay.objects.update_or_create(
+            account_id=req.account_id, company_id=req.company_id,
+            employment=req.employment, work_date=cursor,
+            defaults={
+                "status": DayStatus.PRESENT,
+                "worked_minutes": 8 * 60,
+                "late_minutes": 0,
+                "is_manually_adjusted": True,
+                "adjustment_note": (f"دوام خارج المكتب — "
+                                    f"{p.get('location', '')} "
+                                    f"({req.request_no})"),
+            })
+        made.append(str(cursor))
+        cursor += timedelta(days=1)
+    return {"days_marked": len(made), "dates": made}
+
+
+def _effect_shift_change(req):
+    """
+    تغيير فترة العمل — يُطبَّق على التوظيف من تاريخ السريان.
+
+    ⚠️ والتاريخ الماضي لا يُعاد حسابه: أيامٌ عُولجت بفترتها
+    القديمة تبقى كما هي، وإلا تبدّلت مخالفات شهرٍ مضى.
+    """
+    from apps.attendance.models import Shift, ShiftAssignment
+
+    p = req.payload
+    shift = Shift.objects.filter(
+        id=p.get("shift_id"), company_id=req.company_id).first()
+    if shift is None:
+        return {"skipped": "فترة العمل غير موجودة"}
+
+    start = date.fromisoformat(str(p["start_date"]))
+
+    # ⚠️ **إسنادٌ بتاريخ سريان** لا حقلٌ يُدهَس: الإسناد السابق
+    # يُغلق ولا يُمحى، فأيامٌ عُولجت بفترتها القديمة تبقى صحيحة.
+    ShiftAssignment.objects.filter(
+        employment=req.employment, effective_to__isnull=True,
+        effective_from__lt=start,
+    ).update(effective_to=start - timedelta(days=1))
+
+    ShiftAssignment.objects.update_or_create(
+        employment=req.employment, effective_from=start,
+        defaults={"account_id": req.account_id,
+                  "company_id": req.company_id,
+                  "shift": shift, "effective_to": None})
+    return {"shift": shift.name_ar, "from": str(start)}
+
+
+def _effect_custom_payment(req):
+    """
+    الصرف المخصّص يدخل مسير الشهر إضافةً.
+
+    فالمبلغ المعتمد يُصرف مع الراتب لا بحوالةٍ خارج النظام —
+    وإلا ضاع من السجلّ الماليّ.
+    """
+    p = req.payload
+
+    # ⚠️ **بلا أثر آليّ بعد** — وأُصرّح به بدل أن أوهم:
+    #
+    # الإضافات والخصومات تُبنى في القسيمة **وقت تشغيل المسير**،
+    # ولا جدولَ ينتظرها بين الطلب والمسير. فبند «الإضافات المعلّقة»
+    # ميزةٌ مستقلّة (`pay_additions`) تُبنى لاحقًا، وحتى ذلك
+    # يُصرف المعتمد يدويًّا في المسير.
+    return {
+        "pending_manual": True,
+        "amount": str(p.get("amount", "")),
+        "component_code": p.get("component_code") or "",
+        "note": ("اعتُمد الصرف — يُضاف في مسير الشهر يدويًّا حتى "
+                 "تُبنى الإضافات المعلّقة"),
+    }
+
+
+def _effect_salary_fix(req):
+    """
+    تثبيت الراتب: تنتهي فترة التجربة من تاريخ الاعتماد.
+
+    فالمثبَّت لا يُفصل بإجراء التجربة، وحقوقه تختلف.
+    """
+    emp = req.employment
+    if getattr(emp, "probation_end_date", None) is None:
+        return {"skipped": "لا فترة تجربة مسجّلة"}
+
+    p = req.payload
+    eff = (date.fromisoformat(str(p["effective_date"]))
+           if p.get("effective_date") else date.today())
+    emp.probation_end_date = eff
+    emp.save(update_fields=["probation_end_date"])
+    return {"confirmed_on": str(eff)}
+
+
+# ⚠️ **بلا أثر آليّ — وذلك مقصود**:
+#
+# التظلّم قرارٌ إداريّ لا حركةٌ في النظام: يُحفظ ويصل مدير
+# الموارد، والقرار فيه يكون بإجراءٍ آخر (إلغاء جزاء، تعديل بيان).
+#
+# والمشتريات تنفيذٌ خارج النظام: يُعتمد ثم يُشترى، وربطه بالمسير
+# يخلط مصروف الشركة براتب الموظف.
+
+
+
 EFFECTS = {
     RequestType.PROFILE_UPDATE: _effect_profile_update,
     RequestType.ATTENDANCE_FIX: _effect_attendance_fix,
@@ -1110,6 +1271,13 @@ EFFECTS = {
     RequestType.CERTIFICATE: _effect_certificate,
     RequestType.RESIGNATION: _effect_resignation,
     RequestType.ATTENDANCE_EXEMPTION: _effect_attendance_exemption,
+    # ق-124
+    RequestType.SWAP_RESTDAY: _effect_swap_restday,
+    RequestType.OFFSITE: _effect_offsite,
+    RequestType.SHIFT_CHANGE: _effect_shift_change,
+    RequestType.CUSTOM_PAYMENT: _effect_custom_payment,
+    RequestType.SALARY_FIX: _effect_salary_fix,
+    # التظلّم والمشتريات بلا أثر آليّ — انظر التعليق أعلاه
     # التذكرة ورحلة العمل: أثرهما مالي بسياسة المنشأة — يُصرفان
     # يدويًا أو بالمسير حسب اختيار الشركة (ق-54)
 }
