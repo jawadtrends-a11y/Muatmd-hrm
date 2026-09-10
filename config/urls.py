@@ -21,6 +21,7 @@ from apps.payroll import api_outputs as outputs_api
 from apps.attendance import api_ingest as ingest_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
+from apps.core import api_report_builder as builder_api
 from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
 from apps.accounts import api_platform_auth as platform_auth_api
@@ -190,6 +191,17 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/settlement/preview/", assets_api.settlement_preview, name="settlement-preview"),
     path("api/employees/<int:employment_id>/settlement/create/", assets_api.settlement_create, name="settlement-create"),
     path("api/settlement/reasons/", assets_api.termination_reasons_list, name="settlement-reasons"),
+    # ق-126: باني التقارير المخصّصة
+    path("api/reports/builder/sources/", builder_api.builder_sources,
+         name="builder-sources"),
+    path("api/reports/custom/", builder_api.custom_reports,
+         name="custom-reports"),
+    path("api/reports/custom/<int:report_id>/",
+         builder_api.custom_report_detail, name="custom-report-detail"),
+    path("api/reports/custom/<int:report_id>/run/", builder_api.run_custom,
+         name="run-custom-report"),
+    path("api/reports/custom/preview/",
+         lambda r: builder_api.run_custom(r, 0), name="preview-custom"),
     path("api/reports/", reports_api.reports_catalog, name="reports-catalog"),
     path("api/reports/<str:key>/", reports_api.run_report, name="run-report"),
     path("api/audit/", audit_api.audit_feed, name="audit-feed"),

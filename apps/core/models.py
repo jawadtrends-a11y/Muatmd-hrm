@@ -71,3 +71,9 @@ from apps.core.models_files import (  # noqa: E402,F401
 from apps.core.models_dashboard import (  # noqa: E402,F401
     DashboardPreference,
 )
+
+
+# باني التقارير المخصّصة (ق-126)
+from apps.core.models_report_builder import (  # noqa: E402,F401
+    CustomReport, ReportSource,
+)

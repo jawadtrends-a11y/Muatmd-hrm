@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 /**
  * شاشة التقارير (ق-40).
@@ -18,6 +19,7 @@ const T: Dict = {
     ar: "تُصدَّر إلى إكسل أو PDF",
     en: "Exportable to Excel or PDF",
   },
+  builder: { ar: "باني التقارير", en: "Report builder" },
   run: { ar: "عرض", en: "Run" },
   running: { ar: "جارٍ التشغيل…", en: "Running…" },
   excel: { ar: "إكسل", en: "Excel" },
@@ -307,11 +309,18 @@ export default function ReportsPage() {
   if (!selected) {
     return (
       <div className="stack">
-        <div>
-          <h1>{L("title")}</h1>
-          <div className="muted" style={{ fontSize: ".9rem", marginTop: 2 }}>
-            {L("subtitle")}
+        <div className="spread">
+          <div>
+            <h1>{L("title")}</h1>
+            <div className="muted" style={{ fontSize: ".9rem",
+                                            marginTop: 2 }}>
+              {L("subtitle")}
+            </div>
           </div>
+          {/* ق-126: من لم يجد تقريره يبنيه */}
+          <Link href="/reports/builder" className="btn btn-sm">
+            {L("builder")}
+          </Link>
         </div>
 
         {error && (
