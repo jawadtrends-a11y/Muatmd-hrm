@@ -77,3 +77,9 @@ from apps.core.models_dashboard import (  # noqa: E402,F401
 from apps.core.models_report_builder import (  # noqa: E402,F401
     CustomReport, ReportSource,
 )
+
+
+# قوالب الخطابات (ق-128)
+from apps.core.models_letter_templates import (  # noqa: E402,F401
+    IssuedLetter, LetterTemplate,
+)

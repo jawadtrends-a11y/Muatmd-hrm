@@ -21,6 +21,7 @@ from apps.payroll import api_outputs as outputs_api
 from apps.attendance import api_ingest as ingest_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
+from apps.core import api_letters as letters_api
 from apps.core import api_report_builder as builder_api
 from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
@@ -296,6 +297,17 @@ urlpatterns = [
     path("api/me/attendance/", attendance_api.my_attendance, name="my-attendance"),
     path("api/me/leaves-detail/", leaves_api.my_leaves_detail, name="my-leaves-detail"),
     path("api/me/letters/", leaves_api.my_letters, name="my-letters"),
+    # ق-128: قوالب الخطابات والصادر منها
+    path("api/letters/templates/", letters_api.templates,
+         name="letter-templates"),
+    path("api/letters/templates/<int:template_id>/",
+         letters_api.template_detail, name="letter-template-detail"),
+    path("api/letters/templates/<int:template_id>/preview/",
+         letters_api.preview_template, name="letter-template-preview"),
+    path("api/letters/issue/", letters_api.issue_letter,
+         name="issue-letter"),
+    path("api/letters/<int:letter_id>/", letters_api.letter_detail,
+         name="letter-detail"),
     path("api/requests/preview/", leaves_api.preview_request, name="preview-request"),
     path("api/me/account/", employees_api.my_account, name="my-account"),
     path("api/me/password/", employees_api.change_my_password, name="my-password"),
