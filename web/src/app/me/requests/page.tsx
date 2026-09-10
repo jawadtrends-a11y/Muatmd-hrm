@@ -56,6 +56,18 @@ const T: Dict = {
   destination: { ar: "الوجهة", en: "Destination" },
   purpose: { ar: "الغرض", en: "Purpose" },
   estimated_cost: { ar: "التكلفة التقديرية", en: "Estimated cost" },
+  // ق-124: حقول الأنواع السبعة
+  rest_date: { ar: "يوم الراحة البديل", en: "Replacement rest day" },
+  subject: { ar: "الموضوع", en: "Subject" },
+  location: { ar: "الموقع", en: "Location" },
+  item: { ar: "الصنف المطلوب", en: "Item" },
+  quantity: { ar: "الكمية", en: "Quantity" },
+  shift_id: { ar: "فترة العمل الجديدة", en: "New shift" },
+  component_code: { ar: "بند الصرف", en: "Payment component" },
+  effective_date: { ar: "تاريخ السريان", en: "Effective date" },
+  end_date: { ar: "تاريخ النهاية", en: "End date" },
+  field: { ar: "الحقل المراد تعديله", en: "Field to update" },
+  new_value: { ar: "القيمة الجديدة", en: "New value" },
   travel_date: { ar: "تاريخ السفر", en: "Travel date" },
   family_members: { ar: "عدد أفراد العائلة", en: "Family members" },
   certificate_type: { ar: "نوع الخطاب", en: "Certificate type" },
@@ -63,7 +75,6 @@ const T: Dict = {
   include_salary: { ar: "يتضمن الراتب", en: "Include salary" },
   last_working_day: { ar: "آخر يوم عمل", en: "Last working day" },
   hours: { ar: "عدد الساعات", en: "Hours" },
-  end_date: { ar: "تاريخ النهاية", en: "End date" },
   fix_target: { ar: "أي بصمة تصحّح؟", en: "Which punch?" },
   fixIn: { ar: "الحضور", en: "Check-in" },
   fixOut: { ar: "الانصراف", en: "Check-out" },
@@ -153,6 +164,9 @@ export default function MyRequestsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   const [reasons, setReasons] = useState<{ code: string; name_ar: string }[]>([]);
+  // ق-124: فترات الشركة — لطلب تغيير فترة العمل
+  const [shifts, setShifts] = useState<
+    { id: number; name_ar: string; name_en?: string }[]>([]);
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(true);
@@ -170,6 +184,11 @@ export default function MyRequestsPage() {
       apiGet<{ code: string; name_ar: string;
                requires_attachment?: boolean }[]>("/leaves/types/")
         .catch(() => []),
+      // ق-124: الفترات — وإخفاق الجلب قائمةٌ فارغة لا شاشة مكسورة
+      apiGet<{ shifts: { id: number; name_ar: string }[] }>(
+        "/attendance/shifts/")
+        .then((d) => d.shifts || [])
+        .catch(() => []),
       // ق-60: الموظف يرى ما يبادر به هو فقط
       apiGet<{ reasons: { code: string; name_ar: string }[] }>(
         "/payroll/termination-reasons/?initiator=employee")
@@ -179,10 +198,11 @@ export default function MyRequestsPage() {
       apiGet<{ employment_id: number; employee_no: string;
                name_ar: string }[]>("/me/deputies/")
         .catch(() => []),
-    ]).then(([t, lt, rs, dp]) => {
+    ]).then(([t, lt, sh, rs, dp]) => {
       setTypes(t.types || []);
       setNeedsSuccessor(!!t.needs_successor);
       setLeaveTypes(lt);
+      setShifts(sh);
       setReasons(rs);
       setDeputies(dp);
       setBusy(false);
@@ -408,7 +428,8 @@ export default function MyRequestsPage() {
             {selected.required_fields.map((f) => (
               <DynField key={f} name={f} required value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
-                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
+                leaveTypes={leaveTypes} terminationReasons={reasons}
+                shifts={shifts} L={L} />
             ))}
             {/* ق-70: المرفق في الإجازات — إلزامي حين يطلبه نوعها
                 (المرضية والوضع والخاصة)، اختياري في غيرها.
@@ -467,7 +488,8 @@ export default function MyRequestsPage() {
                 )?.requires_attachment}
                 value={values.attachment_url ?? ""}
                 onChange={(v) => setValues({ ...values, attachment_url: v })}
-                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
+                leaveTypes={leaveTypes} terminationReasons={reasons}
+                shifts={shifts} L={L} />
             )}
             {selected.optional_fields.filter((f) => {
               // الخليفة له حقله المخصّص أعلاه — والرسم التلقائي
@@ -486,7 +508,8 @@ export default function MyRequestsPage() {
               <DynField key={f} name={f} required={false}
                 value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
-                leaveTypes={leaveTypes} terminationReasons={reasons} L={L} />
+                leaveTypes={leaveTypes} terminationReasons={reasons}
+                shifts={shifts} L={L} />
             ))}
           </div>
 

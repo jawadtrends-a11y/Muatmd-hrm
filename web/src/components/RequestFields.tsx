@@ -72,7 +72,8 @@ export function fieldKind(name: string): string {
   if (name.endsWith("_time") || name === "first_in"
       || name === "last_out") return "time";
   if (["days", "installments", "hours", "amount", "value",
-       "estimated_cost", "family_members"].includes(name)) return "number";
+       "estimated_cost", "family_members",
+       "quantity"].includes(name)) return "number";   // ق-124
   if (name === "include_salary") return "bool";
   if (name === "attachment_url") return "attachment";
   if (name === "leave_type_code") return "leave_type";
@@ -80,7 +81,10 @@ export function fieldKind(name: string): string {
   if (name === "termination_reason") return "termination_reason";
   if (name === "asset_category") return "asset_category";
   if (name === "certificate_type") return "certificate_type";
-  if (["reason", "purpose", "note"].includes(name)) return "textarea";
+  // ق-124: فترة العمل قائمةٌ من فترات الشركة
+  if (name === "shift_id") return "shift";
+  if (["reason", "purpose", "note",
+       "subject"].includes(name)) return "textarea";
   return "text";
 }
 
@@ -184,6 +188,7 @@ function AttachmentField({
 
 export default function DynField({
   name, required, value, onChange, leaveTypes, terminationReasons, L,
+  shifts = [],
 }: {
   name: string;
   required: boolean;
@@ -191,6 +196,8 @@ export default function DynField({
   onChange: (v: string) => void;
   leaveTypes: { code: string; name_ar: string;
                 name_en?: string }[];
+  /** ق-124: فترات الشركة — لطلب تغيير فترة العمل */
+  shifts?: { id: number; name_ar: string; name_en?: string }[];
   terminationReasons: { code: string; name_ar: string; name_en?: string }[];
   L: (k: string, f?: string) => string;
 }) {
@@ -235,6 +242,16 @@ export default function DynField({
           {leaveTypes.map((t) => (
             <option key={t.code} value={t.code}>
               {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
+            </option>
+          ))}
+        </select>
+      ) : kind === "shift" ? (
+        <select className="select" value={value}
+          onChange={(e) => onChange(e.target.value)}>
+          <option value="">—</option>
+          {shifts.map((sh) => (
+            <option key={sh.id} value={String(sh.id)}>
+              {(lang === "en" ? sh.name_en : sh.name_ar) || sh.name_ar}
             </option>
           ))}
         </select>
