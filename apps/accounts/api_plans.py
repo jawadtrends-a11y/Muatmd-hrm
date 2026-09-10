@@ -16,7 +16,7 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps.accounts.api_admin import requires
+from apps.accounts.api_admin import _log, requires
 from apps.accounts.models_billing import (
     Feature, Plan, PlanFeature, PlanPriceTier)
 
@@ -166,3 +166,124 @@ def plan_detail(request, plan_id):
                 plan=p, feature_key=k, defaults={"value": v})
 
     return Response(_plan_json(p))
+
+
+# ══════════ إدارة المزايا (ق-125) ══════════
+#
+# **التحكّم الكامل**: تُضاف الميزة وتُعدَّل وتُفعَّل من اللوحة بلا
+# نشر. ⚠️ **إلا الحراسة** — فهي حقيقةٌ تقنية لا تفضيل مشغّل:
+# ميزةٌ بلا حارس في الكود لا تصير محروسة بضغطة زرّ.
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("accounts.view")
+def admin_features(request):
+    """سجل المزايا — عرضًا وإضافة."""
+    if request.method == "GET":
+        rows = []
+        for f in Feature.objects.order_by("module", "sort_order", "id"):
+            rows.append({
+                "id": f.id,
+                "feature_key": f.feature_key,
+                "module": f.module,
+                "name_ar": f.name_ar,
+                "name_en": f.name_en,
+                "description_ar": f.description_ar,
+                "value_type": f.value_type,
+                "sort_order": f.sort_order,
+                "is_active": f.is_active,
+                "is_implemented": f.is_implemented,
+                "guarded_at": f.guarded_at,
+                "plans": list(
+                    Plan.objects.filter(
+                        features__feature_key=f.feature_key
+                    ).values_list("code", flat=True)),
+            })
+        return Response({
+            "features": rows,
+            "modules": sorted({f["module"] for f in rows}),
+            "implemented": sum(1 for f in rows if f["is_implemented"]),
+            "total": len(rows),
+        })
+
+    d = request.data
+    key = str(d.get("feature_key") or "").strip()
+    if not key or not str(d.get("name_ar") or "").strip():
+        return Response({"detail": "المفتاح والاسم مطلوبان"}, status=400)
+    if Feature.objects.filter(feature_key=key).exists():
+        return Response({"detail": "المفتاح مستعمل"}, status=409)
+
+    f = Feature.objects.create(
+        feature_key=key,
+        module=d.get("module") or "other",
+        name_ar=d.get("name_ar", ""),
+        name_en=d.get("name_en", ""),
+        description_ar=d.get("description_ar", ""),
+        value_type=d.get("value_type") or "bool",
+        sort_order=int(d.get("sort_order") or 999),
+        # ⚠️ الجديدة **غير محروسة** حتى يُكتب لها كود — فلا تُباع
+        is_implemented=False, guarded_at="")
+    _log(request, "feature.create", detail={"key": key})
+    return Response({"id": f.id, "feature_key": f.feature_key},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["PUT", "DELETE"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("accounts.view")
+def admin_feature_detail(request, feature_id):
+    """تعديل ميزة أو حذفها — والمربوطة بباقة لا تُحذف."""
+    f = Feature.objects.filter(id=feature_id).first()
+    if f is None:
+        return Response({"detail": "غير موجودة"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "DELETE":
+        used = PlanFeature.objects.filter(feature_key=f.feature_key).count()
+        if used:
+            return Response(
+                {"detail": f"مربوطة بـ{used} باقة — افصلها أوّلًا",
+                 "code": "feature_in_use"}, status=409)
+        if f.is_implemented:
+            return Response(
+                {"detail": "محروسة في الكود — حذفها يترك حارسًا بلا ميزة",
+                 "code": "feature_guarded"}, status=409)
+        _log(request, "feature.delete", detail={"key": f.feature_key})
+        f.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for fld in ("module", "name_ar", "name_en", "description_ar"):
+        if fld in d:
+            setattr(f, fld, str(d[fld] or ""))
+    if "value_type" in d and d["value_type"] in ("bool", "int", "text"):
+        f.value_type = d["value_type"]
+    if "sort_order" in d:
+        f.sort_order = int(d["sort_order"] or 0)
+    if "is_active" in d:
+        f.is_active = bool(d["is_active"])
+    # ⚠️ is_implemented و guarded_at لا يُعدَّلان من اللوحة —
+    # فالحراسة من الكود، وادّعاؤها بضغطة زرّ يبيع وهمًا.
+    f.save()
+    _log(request, "feature.update", detail={"key": f.feature_key})
+    return Response({"id": f.id, "feature_key": f.feature_key})
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("accounts.view")
+def admin_features_sync(request):
+    """
+    إعادة زرع الكتالوج — تُحدّث الحراسة ولا تدوس تعديلاتك.
+
+    فبعد نشرٍ يضيف حارسًا جديدًا، تُشغَّل مرّةً فتُعلَّم الميزة
+    محروسةً.
+    """
+    from apps.accounts.services.plans import sync_feature_registry
+
+    out = sync_feature_registry()
+    _log(request, "feature.sync", detail=out)
+    return Response(out)

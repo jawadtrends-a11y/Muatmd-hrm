@@ -230,6 +230,13 @@ urlpatterns = [
     path("platform/discounts/<int:discount_id>/", platform_admin_api.admin_discount_detail, name="platform-discount"),
     # ق-108: الباقات — الأسماء والأسعار والمزايا يضبطها مالك المنصّة
     path("platform/plans/", plans_api.plans, name="platform-plans"),
+    # ق-125: إدارة المزايا من اللوحة
+    path("platform/features/", plans_api.admin_features,
+         name="platform-features"),
+    path("platform/features/sync/", plans_api.admin_features_sync,
+         name="platform-features-sync"),
+    path("platform/features/<int:feature_id>/",
+         plans_api.admin_feature_detail, name="platform-feature-detail"),
     path("platform/plans/<int:plan_id>/", plans_api.plan_detail,
          name="platform-plan"),
     path("platform/settings/", platform_admin_api.platform_settings, name="platform-settings"),
