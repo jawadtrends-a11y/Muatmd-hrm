@@ -250,6 +250,42 @@ def _validate(request_type, payload):
     return clean
 
 
+# ق-123: كل نوع طلب ميزةٌ مستقلّة تُباع وتُمنع.
+#
+# ⚠️ **بالرمز لا بالاسم**: الأسماء تُعدَّل من اللوحة والرموز تبقى.
+# وما لا مفتاح له هنا لا يُحرَس — فالإضافة الجديدة تُسجَّل ميزةً
+# من يومها، وإلا صارت مجّانية بالسهو.
+REQUEST_FEATURE_KEYS = {
+    RequestType.LEAVE: "req_leave",
+    RequestType.ADVANCE: "req_advance",
+    RequestType.TICKET: "req_travel_ticket",
+    RequestType.ASSET: "req_asset",
+    RequestType.PERMISSION: "req_permission",
+    RequestType.CERTIFICATE: "req_salary_letter",
+    RequestType.RESIGNATION: "req_resignation",
+    RequestType.OVERTIME: "req_overtime",
+    RequestType.ATTENDANCE_FIX: "req_attendance_fix",
+    RequestType.REMOTE_WORK: "req_remote_work",
+    RequestType.BUSINESS_TRIP: "req_secondment",
+    RequestType.PROFILE_UPDATE: "req_profile_update",
+    RequestType.ATTENDANCE_EXEMPTION: "attendance_exemption",
+}
+
+
+def require_request_feature(request_type, company_id):
+    """
+    يرفع 402 إن لم تفتح باقتُه هذا النوع.
+
+    ويُرشَّح لأصغر باقة تفتحه — فالرفض بلا طريقٍ للحلّ إحباط.
+    """
+    from apps.core.features.gate import Features
+
+    key = REQUEST_FEATURE_KEYS.get(request_type)
+    if key is None:
+        return True
+    return Features.require(company_id, key)
+
+
 @transaction.atomic
 def create_request(*, employment, request_type, payload, note="",
                    attachment_url="", channel="web", submit=True):
@@ -257,7 +293,13 @@ def create_request(*, employment, request_type, payload, note="",
     ينشئ طلبًا ويبني سلسلة اعتماده.
 
     الإجازة لها مسار خاص (رصيد وحضور وأجر) فتُحوَّل لخدمتها.
+
+    ⚠️ **وكل نوع طلب ميزةٌ تُشترى** (ق-123): من لم تفتحها باقته
+    لا يقدّمه — والفحص هنا لا في الشاشة، فإخفاء الزرّ تحسينُ
+    عرضٍ لا حماية.
     """
+    require_request_feature(request_type, employment.company_id)
+
     if request_type == RequestType.LEAVE:
         from apps.leaves.models import LeaveType
         from apps.leaves.services.balances import compute_days_between

@@ -185,3 +185,11 @@ ACCOUNTING_API_KEY = env("ACCOUNTING_API_KEY", default="")
 # فالفاتورة تدخل دفاتر معتمد الحقيقية، ولا تُنشأ في التطوير.
 ACCOUNTING_INVOICE_ENABLED = env.bool("ACCOUNTING_INVOICE_ENABLED",
                                       default=False)
+
+
+# ق-123: هل نحن في اختبار؟ — تعطّل به ذاكرة المزايا، فمعرّفات
+# الشركات تُعاد من واحد في كل حالة فتتلوّث الحزم.
+import sys  # noqa: E402
+
+TESTING = ("pytest" in sys.modules
+           or any("pytest" in a or a == "test" for a in sys.argv))

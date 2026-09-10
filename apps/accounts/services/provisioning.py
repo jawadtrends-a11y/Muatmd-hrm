@@ -70,6 +70,21 @@ def provision_account(
         except _billing.BillingError:
             pass          # له اشتراك أصلًا — لا نكرّره
 
+        # ق-123: **حساب التجربة يرى النظام كاملًا** — تُسند له
+        # أعلى باقة معروضة، فيجرّب ما يشتريه لا جزءًا منه.
+        #
+        # والحساب الحقيقيّ يخضع لباقته: التجربة بلا باقة تُمنح
+        # الأساسية (ق-118)، وهذا استثناء السندبوكس وحده.
+        if is_sandbox:
+            from apps.accounts.models_billing import Plan
+            from apps.accounts.models_billing_v2 import AccountSubscription
+
+            top = (Plan.objects.filter(is_public=True, is_active=True)
+                   .order_by("-tier_order").first())
+            if top is not None:
+                AccountSubscription.objects.filter(
+                    account_id=account_id).update(plan=top)
+
         comp = Company.objects.get(id=company_id)
         # مكوّنات الأجر وإعدادات الرواتب — الشركة تعدّلها بحرية (ق-9)
         provision_default_components(comp)

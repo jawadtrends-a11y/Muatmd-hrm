@@ -22,6 +22,7 @@ from apps.attendance.services.processing import (
     build_monthly_summary, process_employment_days, record_punch,
 )
 from apps.core.access.gate import Gate
+from apps.core.features.gate import Features
 from apps.employees.models import Employment
 
 
@@ -958,6 +959,8 @@ def my_punch(request):
     GET يرجع مواقعه وحالة بصمته اليوم — فيعرف قبل أن يضغط.
     POST يسجّل البصمة بعد التحقق من النطاق.
     """
+    # ق-123: بصمة الجوال والويب ميزةٌ تُشترى — والفحص هنا لا في الشاشة.
+    Features.require(_company_id(request), "mobile_punch")
     from apps.attendance.models import AttendancePunch
     from apps.attendance.models_sites import PunchMethod
     from apps.attendance.services.geofence import (
@@ -1123,6 +1126,8 @@ def punch_devices(request):
     والمفتاح يُعرض مرة واحدة عند الإنشاء ثم يُخزَّن مجزّأً: من
     يقرأ القاعدة لا ينتحل جهازًا.
     """
+    # ق-123: أجهزة البصمة ميزةٌ تُشترى — والفحص هنا لا في الشاشة.
+    Features.require(_company_id(request), "biometric_devices")
     import secrets
 
     from django.contrib.auth.hashers import make_password
@@ -1196,6 +1201,8 @@ def punch_device_detail(request, device_id):
     """
     تعديل جهاز أو حذفه — والرمز لا يُعدَّل، فالجهاز يُصادق به.
     """
+    # ق-123: أجهزة البصمة ميزةٌ تُشترى — والفحص هنا لا في الشاشة.
+    Features.require(_company_id(request), "biometric_devices")
     from apps.attendance.models_sites import PunchDevice, WorkSite
 
     Gate.require(request.user, "sites.manage")
@@ -1252,6 +1259,8 @@ def device_setup_guide(request):
     فمن يشتري جهازًا يحتاج الرابط والترويسات وشكل الجسم — لا أن
     يبحث في وثيقة منفصلة أو يسأل الدعم.
     """
+    # ق-123: أجهزة البصمة ميزةٌ تُشترى — والفحص هنا لا في الشاشة.
+    Features.require(_company_id(request), "biometric_devices")
     Gate.require(request.user, "sites.view")
 
     base = request.build_absolute_uri("/").rstrip("/")

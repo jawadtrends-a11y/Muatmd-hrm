@@ -229,8 +229,17 @@ def test_custom_price_overrides_plan(env):
 
 @pytest.mark.django_db(transaction=True)
 def test_invoice_requires_plan_or_price(env):
+    """
+    لا فاتورة بلا باقة ولا سعر متفق عليه.
+
+    ⚠️ والسندبوكس صار يُسند أعلى باقة (ق-123) — فتُنزع صراحةً
+    هنا، وإلا اختبرنا حالةً لا تقع.
+    """
     with account_scope(env["account_id"]):
         sub = _sub(env, state=SubscriptionState.ACTIVE)
+        sub.plan = None
+        sub.custom_price = None
+        sub.save(update_fields=["plan", "custom_price"])
         with pytest.raises(BillingError):
             create_invoice(subscription=sub, headcount=10)
 

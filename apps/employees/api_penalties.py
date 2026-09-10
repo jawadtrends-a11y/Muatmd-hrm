@@ -163,6 +163,10 @@ def board(request):
 
     ويمرّ بالبوابة: من نطاقه إدارتُه يرى مخالفي إدارته وحدها.
     """
+    # ق-123: المخالفات والجزاءات ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company(request), "penalties")
     from apps.accounts.models import Company
     from apps.employees.models import Employment
 
@@ -219,6 +223,10 @@ def preview_penalty(request):
 @permission_classes([IsAuthenticated])
 def issue_penalty(request):
     """توقيع جزاء على موظف."""
+    # ق-123: المخالفات والجزاءات ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company(request), "penalties")
     from apps.employees.models import Employment
 
     Gate.require(request.user, "employees.edit")
@@ -269,6 +277,10 @@ def issue_batch(request):
 
     فمن راجع سجلّ الشهر لا يفتح نافذةً لكل صفّ.
     """
+    # ق-123: الاحتساب الآليّ للمخالفات ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company(request), "auto_attendance_penalties")
     from apps.accounts.models import Company
 
     Gate.require(request.user, "employees.edit")

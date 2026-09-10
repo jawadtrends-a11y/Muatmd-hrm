@@ -38,8 +38,16 @@ class Features:
         """حزمة مزايا الشركة، مخزّنة مؤقتًا."""
         if company_id is None:
             return {}
+        # ⚠️ ق-123: لا تخزين في الاختبارات — معرّفات الشركات تُعاد
+        # من واحد في كل حالة، فحزمةُ شركةٍ سابقة تُقرأ لشركةٍ
+        # جديدة وتُرفض مزاياها بلا سبب. والتخزين تحسين أداءٍ لا
+        # سلوك، فإسقاطه هناك لا يغيّر ما يُختبَر.
+        from django.conf import settings as _st
+
+        use_cache = not getattr(_st, "TESTING", False)
+
         key = cls._cache_key(company_id)
-        cached = cache.get(key)
+        cached = cache.get(key) if use_cache else None
         if cached is not None:
             return cached
 
@@ -90,7 +98,8 @@ class Features:
                     else False if pf.value == "false"
                     else pf.value
                 )
-        cache.set(key, bundle, CACHE_TTL)
+        if use_cache:
+            cache.set(key, bundle, CACHE_TTL)
         return bundle
 
     @classmethod

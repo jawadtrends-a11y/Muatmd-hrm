@@ -142,6 +142,12 @@ def test_hint_points_to_the_smallest_plan_that_opens_it(env):
     PlanFeature.objects.create(plan=mid, feature_key="advanced_reports",
                                value="true")
 
+    # ⚠️ الباقات الحقيقية مزروعة في كل اختبار (ق-123) — فتُخفى
+    # هنا، وإلا زاحمت باقات الحارس وأربكت الترشيح.
+    Plan.objects.exclude(
+        id__in=[env["basic"].id, env["top"].id, mid.id]
+    ).update(is_public=False)
+
     Plan.objects.filter(id=env["basic"].id).update(tier_order=1)
     Plan.objects.filter(id=env["top"].id).update(tier_order=3)
 
@@ -188,7 +194,7 @@ def test_no_subscription_means_no_features(env):
     Features.invalidate(env["company_id"])
 
     assert Features.bundle(env["company_id"]) == {}
-    for key in ("attendance", "payroll", "leaves", "employee_files"):
+    for key in ("mobile_punch", "payroll", "leaves", "employee_list"):
         assert not Features.enabled(env["company_id"], key), key
 
 
@@ -199,6 +205,8 @@ def test_trial_gets_the_entry_plan(env):
     فالمجرّب يرى ما سيشتريه لا أكثر: سبعة أيام على الأساسية
     (قرار جواد).
     """
+    Plan.objects.exclude(
+        id__in=[env["basic"].id, env["top"].id]).update(is_public=False)
     Plan.objects.filter(id=env["basic"].id).update(tier_order=1,
                                                    is_public=True)
     Plan.objects.filter(id=env["top"].id).update(tier_order=3,

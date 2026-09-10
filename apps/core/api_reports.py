@@ -73,9 +73,22 @@ def run_report(request, key):
         return Response({"detail": str(e), "code": "unknown_report"},
                         status=404)
 
+    # ⚠️ **الصلاحية قبل الميزة**: من لا يملك الصلاحية يُردّ بـ403
+    # لا بدعوة ترقية — فدعوةُ موظفٍ لشراء باقةٍ ليرى تقرير
+    # الرواتب تُفشي ما لا يخصّه، وتُغري بالشراء بلا فائدة.
     Gate.require(request.user, cls.permission)
 
     comp = _company(request)
+
+    # ق-123: التقارير الأساسية في كل الباقات، والمتقدمة تُشترى —
+    # فالتقرير الماليّ ليس كتقرير الحضور.
+    from apps.core.features.gate import Features
+
+    ADVANCED = {"eosb_provision", "payroll_runs", "payroll_variance",
+                "adjustments", "advances", "expiring_documents"}
+    Features.require(getattr(comp, "id", comp),
+                     "advanced_reports" if key in ADVANCED
+                     else "reports_basic")
     if comp is None:
         return Response({"detail": "لا شركة نشطة"}, status=400)
 

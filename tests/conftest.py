@@ -113,3 +113,37 @@ def rls_enforced_late(db):
     finally:
         with connection.cursor() as cur:
             cur.execute("RESET ROLE")
+
+@pytest.fixture(autouse=True)
+def _seed_plans(db):
+    """
+    ⚠️ الباقات والمزايا تُزرع قبل كل اختبار (ق-123).
+
+    فاختبارات `transaction=True` تمسح الجداول كلّها بعد كلٍّ —
+    **بما زرعته الهجرة**. فالحساب الثاني يُنشأ بلا باقات، فلا
+    تُسنَد له واحدة وتُغلق مزاياه كلّها.
+    """
+    from apps.accounts.models_billing import Plan
+    from apps.accounts.services.plans import (
+        sync_default_plans, sync_feature_registry)
+
+    if not Plan.objects.exists():
+        sync_feature_registry()
+        sync_default_plans()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _clear_feature_cache():
+    """
+    ⚠️ ذاكرة المزايا تتلوّث بين الاختبارات (ق-123).
+
+    فالحزمة تُخزَّن بمعرّف الشركة، ومعرّفات قاعدة الاختبار تُعاد
+    من واحد في كل حالة — فحزمةُ شركةٍ سابقة تُقرأ لشركةٍ جديدة،
+    وتُرفض مزاياها بلا سبب.
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()

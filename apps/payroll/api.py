@@ -331,6 +331,10 @@ def termination_reasons(request):
 @permission_classes([IsAuthenticated])
 def payroll_runs(request):
     """قائمة المسيرات وإنشاؤها."""
+    # ق-123: مسير الرواتب ميزةٌ تُشترى.
+    from apps.core.features.gate import Features
+
+    Features.require(_company_id(request), "payroll")
     from apps.payroll.models import PayrollRun, PayrollRunType
     from apps.payroll.services.engine import PayrollError, create_run
 
