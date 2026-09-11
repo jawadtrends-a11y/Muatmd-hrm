@@ -24,6 +24,7 @@ from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
 from apps.core import api_letters as letters_api
 from apps.core import api_policies as policies_api
+from apps.core import api_tickets as tickets_api
 from apps.core import api_report_builder as builder_api
 from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
@@ -322,6 +323,12 @@ urlpatterns = [
          policies_api.acknowledge, name="policy-acknowledge"),
     path("api/me/policies/", policies_api.my_policies,
          name="my-policies"),
+    # ق-133: تذاكر الدعم
+    path("api/support/tickets/", tickets_api.tickets, name="tickets"),
+    path("api/support/tickets/<int:ticket_id>/", tickets_api.ticket_detail,
+         name="ticket-detail"),
+    path("api/support/tickets/<int:ticket_id>/close/",
+         tickets_api.close_ticket, name="ticket-close"),
     # ق-128: قوالب الخطابات والصادر منها
     path("api/letters/templates/", letters_api.templates,
          name="letter-templates"),

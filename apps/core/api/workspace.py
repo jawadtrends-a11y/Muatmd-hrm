@@ -26,6 +26,8 @@ NAV_ITEMS = [
     # ق-131: المهامّ والدليل — لكل موظف
     {"key": "tasks",       "path": "/me/tasks",        "icon": "inbox",    "permission": None},
     {"key": "directory",   "path": "/directory",       "icon": "users",    "permission": None},
+    # ق-133: الدعم — كل موظف يفتح تذكرةً ويتابعها
+    {"key": "support",     "path": "/me/support",      "icon": "doc",      "permission": None},
     {"key": "payslips",    "path": "/payslips",        "icon": "receipt",  "permission": "payslips.view_own"},
     {"key": "saudization", "path": "/saudization",     "icon": "chart",    "permission": "saudization.view"},
     {"key": "compliance",  "path": "/compliance",      "icon": "shield",   "permission": "compliance.view"},

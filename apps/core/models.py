@@ -89,3 +89,9 @@ from apps.core.models_letter_templates import (  # noqa: E402,F401
 from apps.core.models_policies import (  # noqa: E402,F401
     Policy, PolicyAcknowledgement, PolicyAudience,
 )
+
+
+# تذاكر الدعم (ق-133)
+from apps.core.models_tickets import (  # noqa: E402,F401
+    SupportTicket, TicketKind, TicketMessage, TicketPriority, TicketStatus,
+)
