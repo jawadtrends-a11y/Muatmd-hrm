@@ -83,3 +83,9 @@ from apps.core.models_report_builder import (  # noqa: E402,F401
 from apps.core.models_letter_templates import (  # noqa: E402,F401
     IssuedLetter, LetterTemplate,
 )
+
+
+# السياسات (ق-129)
+from apps.core.models_policies import (  # noqa: E402,F401
+    Policy, PolicyAcknowledgement, PolicyAudience,
+)

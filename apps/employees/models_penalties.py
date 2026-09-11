@@ -33,12 +33,51 @@ class ViolationCategory(models.TextChoices):
     OTHER = "other", _("أخرى")
 
 
+class PolicyVersion(CompanyScopedModel):
+    """
+    نسخةٌ من لائحة الجزاءات بتاريخ سريانها (ق-130).
+
+    ⚠️ **اللائحة تُنقَّح، والماضي لا يتبدّل**: من وُقّع عليه
+    بتدرّجٍ ثم عُدّلت الدرجات يبدو كأنه وُقّع بالجديد — ولا سجلّ
+    يقول ما كان ساريًا يوم وقعت المخالفة.
+
+    فمخالفةُ يناير تُقاس بلائحة يناير، ومخالفةُ مارس بالمعدَّلة.
+    **والجزاء يحفظ رقم نسخته** فيُراجَع بما كان — وهو ما يصمد
+    أمام هيئة تسوية الخلافات العمّالية.
+    """
+    number = models.PositiveSmallIntegerField(_("رقم النسخة"))
+    effective_from = models.DateField(_("سريان من"), db_index=True)
+    note = models.CharField(_("سبب التنقيح"), max_length=255, blank=True)
+
+    is_active = models.BooleanField(
+        _("سارية"), default=True,
+        help_text=_("مطفأ = نسخةٌ سابقة تُحفظ للماضي"))
+    created_by_person_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("نسخة لائحة الجزاءات")
+        verbose_name_plural = _("نسخ لائحة الجزاءات")
+        ordering = ["-effective_from", "-number"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "number"],
+                                    name="uq_polver_company_number"),
+        ]
+
+    def __str__(self):
+        return f"لائحة v{self.number} من {self.effective_from}"
+
+
 class ViolationType(CompanyScopedModel):
     """
     بند في لائحة الجزاءات — المخالفة ودرجاتها.
 
     والدرجات في `PenaltyDegree`: لكل تكرار جزاؤه.
     """
+    # ق-130: البند يتبع نسخةً — فالتنقيح ينسخ البنود ولا يدوسها
+    policy_version = models.ForeignKey(
+        PolicyVersion, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="violations", verbose_name=_("نسخة اللائحة"))
+
     code = models.CharField(_("الرمز"), max_length=30)
     name_ar = models.CharField(_("المخالفة"), max_length=255)
     name_en = models.CharField(_("بالإنجليزية"), max_length=255, blank=True)
@@ -63,8 +102,10 @@ class ViolationType(CompanyScopedModel):
         verbose_name_plural = _("لائحة الجزاءات")
         ordering = ["category", "sort_order", "id"]
         constraints = [
-            models.UniqueConstraint(fields=["company", "code"],
-                                    name="uq_violation_company_code"),
+            # ق-130: الرمز يتكرّر عبر النسخ — والتفرّد داخل النسخة
+            models.UniqueConstraint(
+                fields=["company", "policy_version", "code"],
+                name="uq_violation_version_code"),
         ]
 
     def __str__(self):
@@ -123,6 +164,11 @@ class Penalty(CompanyScopedModel):
     violation = models.ForeignKey(
         ViolationType, on_delete=models.PROTECT, related_name="penalties",
         verbose_name=_("المخالفة"))
+
+    # ⚠️ ق-130: **رقم النسخة السارية يوم الواقعة** — فمراجعةُ
+    # جزاءٍ بعد سنتين تُقاس بلائحته لا بما صارت عليه.
+    policy_version_no = models.PositiveSmallIntegerField(
+        _("نسخة اللائحة"), null=True, blank=True)
 
     occurred_on = models.DateField(_("تاريخ المخالفة"), db_index=True)
     occurrence = models.PositiveSmallIntegerField(

@@ -257,3 +257,112 @@ def test_fresh_violation_is_accepted(env):
                       occurred_on=TODAY - timedelta(days=10),
                       description="تأخر", employee_statement="أفاد")
         assert p.id
+
+
+# ══════════ نسخ اللائحة (ق-130) ══════════
+
+def test_revision_copies_and_keeps_the_old(env):
+    """
+    ⚠️ التنقيح **ينسخ البنود ولا يدوسها**.
+
+    فالنسخة القديمة تبقى كما هي، وما وقع قبل السريان يُقاس بها.
+    """
+    from apps.employees.models_penalties import PolicyVersion
+
+    with account_scope(env["account_id"]):
+        comp = env["company"]
+        v1 = svc.active_version(comp)
+        assert v1 is not None
+        count_before = v1.violations.count()
+
+        v2, copied = svc.revise(
+            company=comp, effective_from=TODAY + timedelta(days=1),
+            note="تشديد")
+        assert copied == count_before
+        assert v2.number == v1.number + 1
+
+        v1.refresh_from_db()
+        assert v1.violations.count() == count_before, "دُهست القديمة"
+
+
+def test_active_version_follows_the_date(env):
+    """
+    ⚠️⚠️ الأهمّ: **التاريخ يحكم لا التعديل**.
+
+    فمخالفةُ الأمس تُقاس بلائحة الأمس — وهو ما يصمد أمام هيئة
+    تسوية الخلافات.
+    """
+    with account_scope(env["account_id"]):
+        comp = env["company"]
+        before = svc.active_version(comp).number
+        svc.revise(company=comp, effective_from=TODAY + timedelta(days=5))
+
+        assert svc.active_version(comp).number == before
+        assert svc.active_version(
+            comp, TODAY + timedelta(days=5)).number == before + 1
+
+
+def test_two_versions_same_day_refused(env):
+    """ولا نسختان في يومٍ واحد — فأيّهما تسري؟"""
+    with account_scope(env["account_id"]):
+        comp = env["company"]
+        day = TODAY + timedelta(days=3)
+        svc.revise(company=comp, effective_from=day)
+        with pytest.raises(svc.PenaltyError):
+            svc.revise(company=comp, effective_from=day)
+
+
+def test_penalty_records_its_version(env):
+    """والجزاء يحفظ نسخته — فيُراجَع بما كان."""
+    with account_scope(env["account_id"]):
+        v = _v(env, "LATE-30")
+        pen = svc.issue(employment=env["employment"], violation=v,
+                        occurred_on=TODAY, description="تأخر",
+                        employee_statement="أفاد")
+        assert pen.policy_version_no == svc.active_version(
+            env["company"]).number
+
+
+def test_repeats_survive_a_revision(env):
+    """
+    ⚠️ وسوابق الموظف **تعبر التنقيح**.
+
+    فالتنقيح ينسخ البنود بمعرّفاتٍ جديدة — والعدّ بالمعرّف يُصفّر
+    سوابقه ويجعله «أول مرّة» أبدًا.
+    """
+    with account_scope(env["account_id"]):
+        comp = env["company"]
+        # نُثبّت البند القديم بمعرّفه قبل أي تنقيح
+        v_old = svc.violations_on(
+            comp, TODAY).filter(code="LATE-30").first()
+        assert v_old is not None
+        old_id = v_old.id
+
+        svc.issue(employment=env["employment"], violation=v_old,
+                  occurred_on=TODAY - timedelta(days=2),
+                  description="تأخر", employee_statement="")
+
+        # التنقيح يسري غدًا — فلا أثر رجعيّ
+        tomorrow = TODAY + timedelta(days=1)
+        svc.revise(company=comp, effective_from=tomorrow)
+        v_new = svc.violations_on(
+            comp, tomorrow).filter(code="LATE-30").first()
+        assert v_new is not None
+        assert v_new.id != old_id, "لم يُنسخ البند بالتنقيح"
+
+        occ = svc.occurrence_for(env["employment"], v_new, tomorrow)
+        assert occ == 2, f"صُفّرت سوابقه بالتنقيح: {occ}"
+
+
+def test_backdated_revision_is_refused(env):
+    """
+    ⚠️ ولا تنقيح بأثرٍ رجعيّ.
+
+    فنسخةٌ تسري قبل السارية تُعيد تقييم جزاءاتٍ وُقّعت — والموظف
+    عوقب بلائحةٍ يومها، فتغييرها بعده يُبطل الجزاء لا يُصحّحه.
+    """
+    with account_scope(env["account_id"]):
+        with pytest.raises(svc.PenaltyError) as e:
+            svc.revise(company=env["company"],
+                       effective_from=TODAY - timedelta(days=30))
+        assert "رجعيّ" in str(e.value)

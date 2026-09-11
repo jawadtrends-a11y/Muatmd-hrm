@@ -22,6 +22,7 @@ from apps.attendance import api_ingest as ingest_api
 from apps.employees import api_assets as assets_api
 from apps.core import api_reports as reports_api
 from apps.core import api_letters as letters_api
+from apps.core import api_policies as policies_api
 from apps.core import api_report_builder as builder_api
 from apps.core import api_audit as audit_api
 from apps.accounts import api_billing as acct_billing
@@ -297,6 +298,18 @@ urlpatterns = [
     path("api/me/attendance/", attendance_api.my_attendance, name="my-attendance"),
     path("api/me/leaves-detail/", leaves_api.my_leaves_detail, name="my-leaves-detail"),
     path("api/me/letters/", leaves_api.my_letters, name="my-letters"),
+    # ق-129: السياسات وإقراراتها
+    path("api/policies/", policies_api.policies, name="policies"),
+    path("api/policies/<int:policy_id>/", policies_api.policy_detail,
+         name="policy-detail"),
+    path("api/policies/<int:policy_id>/publish/",
+         policies_api.publish_policy, name="policy-publish"),
+    path("api/policies/<int:policy_id>/compliance/",
+         policies_api.policy_compliance, name="policy-compliance"),
+    path("api/policies/<int:policy_id>/acknowledge/",
+         policies_api.acknowledge, name="policy-acknowledge"),
+    path("api/me/policies/", policies_api.my_policies,
+         name="my-policies"),
     # ق-128: قوالب الخطابات والصادر منها
     path("api/letters/templates/", letters_api.templates,
          name="letter-templates"),

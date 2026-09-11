@@ -161,11 +161,23 @@ def provision_default_violations(company):
     ⚠️ وهي **استرشادية**: الشركة مسؤولة عن مطابقتها للائحتها
     المعتمدة من وزارة الموارد البشرية.
     """
+    from apps.employees.models_penalties import PolicyVersion
+
+    # ⚠️ ق-130: **البذر يُنشئ النسخة الأولى** — فبندٌ بلا نسخة
+    # يتيمٌ: لا يُعرف متى سرى ولا بماذا يُقاس جزاؤه.
+    version = (PolicyVersion.objects
+               .filter(company=company).order_by("-number").first())
+    if version is None:
+        version = PolicyVersion.objects.create(
+            account=company.account, company=company, number=1,
+            effective_from=timezone.localdate(),
+            note="النسخة الأولى", is_active=True)
+
     created = []
     for order, (code, name, cat, degrees) in enumerate(DEFAULT_VIOLATIONS,
                                                        start=1):
         v, is_new = ViolationType.objects.get_or_create(
-            company=company, code=code,
+            company=company, code=code, policy_version=version,
             defaults={"account": company.account, "name_ar": name,
                       "category": cat, "sort_order": order * 10})
         if not is_new:
@@ -190,8 +202,12 @@ def occurrence_for(employment, violation, on_date=None):
     since = on_date - timedelta(days=violation.reset_days)
     # ق-119: ما لم يُحتسب في التكرار لا يرفع الدرجة — فالتوثيق
     # حفظُ واقعة، والتصعيد قرارٌ إداريّ مستقلّ.
+    # ⚠️ ق-130: التكرار **بالرمز عبر النسخ** لا بمعرّف البند:
+    # فالتنقيح ينسخ البنود بمعرّفاتٍ جديدة، والعدّ بالمعرّف يُصفّر
+    # سوابق الموظف عند كل تنقيح — ويجعله «أول مرّة» أبدًا.
     prior = Penalty.objects.filter(
-        employment=employment, violation=violation,
+        employment=employment,
+        violation__code=violation.code,
         occurred_on__gte=since, occurred_on__lte=on_date,
         count_occurrence=True,
         status__in=[PenaltyStatus.ISSUED, PenaltyStatus.OBJECTED],
@@ -371,6 +387,9 @@ def issue(*, employment, violation, occurred_on, description,
         employment=employment, violation=violation,
         occurred_on=occurred_on, occurrence=p["occurrence"],
         kind=p["kind"], days=days, amount=amount,
+        # ⚠️ ق-130: **نسخة اللائحة يوم الواقعة** — فمراجعةُ جزاءٍ
+        # بعد سنتين تُقاس بلائحته لا بما صارت عليه.
+        policy_version_no=getattr(violation.policy_version, "number", None),
         apply_deduction=will_deduct,
         count_occurrence=bool(count_occurrence),
         description=description.strip(),
@@ -628,3 +647,91 @@ def _auto_violation(company, row):
         return None
     return ViolationType.objects.filter(
         company=company, code=code, is_active=True).first()
+
+
+# ══════════ نسخ اللائحة (ق-130) ══════════
+#
+# ⚠️ **اللائحة تُنقَّح، والماضي لا يتبدّل**: مخالفةُ يناير تُقاس
+# بلائحة يناير، ومخالفةُ مارس بالمعدَّلة. والجزاء يحفظ رقم نسخته
+# فيُراجَع بما كان — وهو ما يصمد أمام هيئة تسوية الخلافات.
+
+def active_version(company, on_date=None):
+    """النسخة السارية في تاريخٍ — أحدثُ ما سرى قبله أو فيه."""
+    from apps.employees.models_penalties import PolicyVersion
+
+    on_date = on_date or timezone.localdate()
+    return (PolicyVersion.objects
+            .filter(company=company, effective_from__lte=on_date)
+            .order_by("-effective_from", "-number").first())
+
+
+def violations_on(company, on_date=None):
+    """بنود اللائحة السارية في تاريخٍ."""
+    v = active_version(company, on_date)
+    if v is None:
+        # لا نسخة: البنود بلا نسخةٍ هي الحالية
+        return ViolationType.objects.filter(
+            company=company, policy_version__isnull=True, is_active=True)
+    return v.violations.filter(is_active=True)
+
+
+@transaction.atomic
+def revise(*, company, effective_from, note="", by_person_id=None):
+    """
+    تنقيحٌ جديد — **ينسخ البنود ولا يدوسها**.
+
+    فالنسخة القديمة تبقى كما هي، ويُعدَّل المنسوخ بحرّية. وما
+    وقع قبل تاريخ السريان يبقى مقيسًا بالقديمة.
+
+    ⚠️ **ولا نسختان في يومٍ واحد**: فأيّهما تسري؟
+    """
+    from apps.employees.models_penalties import PolicyVersion
+
+    # ⚠️ **ولا تنقيح بأثرٍ رجعيّ**: نسخةٌ تسري قبل السارية تُعيد
+    # تقييم جزاءاتٍ وُقّعت — والموظف عوقب بلائحةٍ يومها، فتغييرها
+    # بعده يُبطل الجزاء لا يُصحّحه.
+    current = (PolicyVersion.objects.filter(company=company)
+               .order_by("-effective_from", "-number").first())
+    if current and effective_from < current.effective_from:
+        raise PenaltyError(
+            f"لا تنقيح بأثرٍ رجعيّ — السارية من {current.effective_from}")
+
+    if PolicyVersion.objects.filter(
+            company=company, effective_from=effective_from).exists():
+        raise PenaltyError("ثمّة نسخةٌ تسري في هذا التاريخ")
+
+    last = (PolicyVersion.objects.filter(company=company)
+            .order_by("-number").first())
+    number = (last.number + 1) if last else 1
+
+    new = PolicyVersion.objects.create(
+        account_id=company.account_id, company=company,
+        number=number, effective_from=effective_from,
+        note=note[:255], is_active=True,
+        created_by_person_id=by_person_id)
+
+    # نسخ البنود ودرجاتها
+    source = (last.violations.all() if last
+              else ViolationType.objects.filter(
+                  company=company, policy_version__isnull=True))
+    copied = 0
+    for v in source:
+        degrees = list(v.degrees.all())
+        v.pk = None
+        v.id = None
+        v.policy_version = new
+        v.save()
+        PenaltyDegree.objects.bulk_create([
+            PenaltyDegree(violation=v, occurrence=d.occurrence,
+                          kind=d.kind, days=d.days, note=d.note)
+            for d in degrees
+        ])
+        copied += 1
+
+    # والقديمة تبقى للماضي لا للتوقيع الجديد
+    if last:
+        PolicyVersion.objects.filter(id=last.id).update(is_active=False)
+
+    logger.info("نسخة لائحة %s للشركة %s — %s بندًا",
+                number, company.id, copied)
+    return new, copied
