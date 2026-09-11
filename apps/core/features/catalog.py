@@ -142,6 +142,10 @@ FEATURES = [
     _f("auto_attendance_penalties", "penalties",
        "احتساب مخالفات الحضور والانصراف آليًّا",
        implemented=True, guarded_at="/api/penalties/board/"),
+    # ق-130: التنقيح المؤرَّخ — ميزةٌ مستقلّة (قرار جواد)
+    _f("penalty_policy_versions", "penalties",
+       "نسخ لائحة الجزاءات بتواريخ سريانها",
+       implemented=True, guarded_at="penalties.revise"),
 
     # ══ التقارير ══
     _f("reports_basic", "reports", "التقارير الأساسية",

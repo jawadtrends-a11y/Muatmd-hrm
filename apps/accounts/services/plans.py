@@ -43,6 +43,8 @@ PREMIUM_FEATURES = BASIC_FEATURES + [
     "approval_chains", "advances", "expenses",
     "recurring_adjustments", "payslip_defer", "payroll_approval_chain",
     "penalties", "auto_attendance_penalties",
+    # ق-130: التنقيح المؤرَّخ — تحتاجه الشركات المتوسطة فصاعدًا
+    "penalty_policy_versions",
     "dashboard_widgets", "advanced_reports",
     "letter_templates", "custom_roles", "support_group_courses",
 ]

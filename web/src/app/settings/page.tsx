@@ -76,6 +76,11 @@ const T: Dict = {
     ar: "صيغ الشهادات والتعريفات بمتغيّراتها",
     en: "Certificate and letter templates",
   },
+  policiesLink: { ar: "السياسات", en: "Policies" },
+  policiesHint: {
+    ar: "سياسات المنشأة وإقرار الموظفين بها",
+    en: "Company policies and acknowledgements",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -497,6 +502,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("letterTemplates")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("letterTemplatesHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-129: السياسات — تُنشر ويُقرّ بها */}
+        {perms.has("employees.view") && (
+        <Link href="/settings/policies" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("policiesLink")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("policiesHint")}
           </span>
         </Link>
         )}

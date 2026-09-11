@@ -685,7 +685,12 @@ def revise(*, company, effective_from, note="", by_person_id=None):
 
     ⚠️ **ولا نسختان في يومٍ واحد**: فأيّهما تسري؟
     """
+    from apps.core.features.gate import Features
     from apps.employees.models_penalties import PolicyVersion
+
+    # ق-130: التنقيح المؤرَّخ ميزةٌ تُشترى — ومن لم يشترها يعمل
+    # بلائحةٍ واحدة يعدّلها في مكانها.
+    Features.require(company.id, "penalty_policy_versions")
 
     # ⚠️ **ولا تنقيح بأثرٍ رجعيّ**: نسخةٌ تسري قبل السارية تُعيد
     # تقييم جزاءاتٍ وُقّعت — والموظف عوقب بلائحةٍ يومها، فتغييرها

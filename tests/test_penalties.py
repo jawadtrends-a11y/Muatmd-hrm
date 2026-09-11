@@ -366,3 +366,30 @@ def test_backdated_revision_is_refused(env):
             svc.revise(company=env["company"],
                        effective_from=TODAY - timedelta(days=30))
         assert "رجعيّ" in str(e.value)
+
+
+def test_revision_needs_the_feature(env):
+    """
+    ⚠️ والتنقيح المؤرَّخ **ميزةٌ تُشترى** (ق-130).
+
+    فمن لم يشترها يعمل بلائحةٍ واحدة يعدّلها في مكانها — ولا
+    يُباع ما لا يُمنع.
+    """
+    from apps.accounts.models_billing import Plan, PlanFeature
+    from apps.accounts.models_billing_v2 import AccountSubscription
+    from apps.core.features.gate import Features, FeatureNotInPlan
+
+    with account_scope(env["account_id"]):
+        # باقةٌ بلا هذه الميزة
+        bare = Plan.objects.create(code="no-rev", name_ar="بلا تنقيح",
+                                   base_fee_monthly=Decimal("0"),
+                                   min_billable_employees=1)
+        PlanFeature.objects.create(plan=bare, feature_key="penalties",
+                                   value="true")
+        AccountSubscription.objects.filter(
+            account_id=env["account_id"]).update(plan=bare)
+        Features.invalidate(env["company"].id)
+
+        with pytest.raises(FeatureNotInPlan):
+            svc.revise(company=env["company"],
+                       effective_from=TODAY + timedelta(days=2))
