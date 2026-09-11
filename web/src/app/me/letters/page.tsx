@@ -22,6 +22,14 @@ const T: Dict = {
   validUntil: { ar: "صالح حتى", en: "Valid until" },
   status: { ar: "الحالة", en: "Status" },
   download: { ar: "تحميل", en: "Download" },
+  view: { ar: "عرض", en: "View" },
+  print: { ar: "طباعة", en: "Print" },
+  close: { ar: "إغلاق", en: "Close" },
+  letterNo: { ar: "رقم الخطاب", en: "Letter no" },
+  pendingManual: {
+    ar: "تُصدر ورقيًّا من الموارد البشرية",
+    en: "Issued manually by HR",
+  },
   expired: { ar: "منتهي", en: "Expired" },
   withSalary: { ar: "بالراتب", en: "With salary" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
@@ -36,6 +44,7 @@ type Letter = {
   status: string; status_label: string;
   issued_at: string; valid_until: string;
   expired: boolean; downloadable: boolean;
+  letter_id?: number | null; letter_no?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -56,6 +65,7 @@ export default function MyLettersPage() {
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
 
+  const [shown, setShown] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
     apiGet<Letter[]>("/me/letters/")
       .then((d) => { setRows(d); setBusy(false); })
@@ -72,6 +82,14 @@ export default function MyLettersPage() {
       </div>
     );
   }
+
+  const open = async (id: number) => {
+    try {
+      setShown(await apiGet<Record<string, unknown>>(`/letters/${id}/`));
+    } catch {
+      /* الخطأ يظهر في الشاشة نفسها */
+    }
+  };
 
   return (
     <div className="stack">
@@ -158,10 +176,20 @@ export default function MyLettersPage() {
                   </td>
                   <td style={{ textAlign: "end" }}>
                     {r.downloadable && (
-                      <button className="btn btn-sm btn-ghost">
-                        <IcDownload size={15} />
-                        {L("download")}
-                      </button>
+                      r.letter_id ? (
+                        <button className="btn btn-sm btn-ghost"
+                                onClick={() => open(r.letter_id!)}>
+                          <IcDownload size={15} />
+                          {L("view")}
+                        </button>
+                      ) : (
+                        // ⚠️ لا خطابَ صادرًا: لا قالب مطابق —
+                        // فتُصدر ورقيًّا، ولا نعِد بما لا يقع.
+                        <span className="muted"
+                              style={{ fontSize: ".78rem" }}>
+                          {L("pendingManual")}
+                        </span>
+                      )
                     )}
                   </td>
                 </tr>
@@ -169,6 +197,96 @@ export default function MyLettersPage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {shown && (
+        <LetterView data={shown} L={L} onClose={() => setShown(null)} />
+      )}
+    </div>
+  );
+}
+
+
+/* ══ عرض الخطاب وطباعته (ق-128) ══ */
+
+function LetterView({ data, L, onClose }: {
+  data: Record<string, unknown>;
+  L: (k: string, f?: string) => string;
+  onClose: () => void;
+}) {
+  const print = () => {
+    // ⚠️ نافذةٌ مستقلّة: طباعة الصفحة كلّها تطبع القائمة والقوائم
+    // الجانبية — والخطاب وثيقةٌ تخرج وحدها.
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+      <meta charset="utf-8"><title>${String(data.letter_no || "")}</title>
+      <style>
+        body { font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
+               padding: 48px 56px; line-height: 2; color: #14202b; }
+        .no { text-align: end; font-size: 13px; color: #667; }
+        h1 { font-size: 20px; text-align: center; margin: 28px 0 8px; }
+        .to { margin: 18px 0; font-weight: 600; }
+        .body { white-space: pre-wrap; font-size: 15px; }
+        .foot { margin-top: 56px; font-size: 13px; color: #667;
+                border-top: 1px solid #dde; padding-top: 10px; }
+      </style></head><body>
+      <div class="no">${String(data.letter_no || "")} — ${String(data.issued_on || "")}</div>
+      <h1>${String(data.heading_ar || "")}</h1>
+      <div class="to">${String(data.addressee_ar || "")}</div>
+      <div class="body">${String(data.body_ar || "")}</div>
+      <div class="foot">${String(data.valid_until
+        ? "صالح حتى " + data.valid_until : "")}</div>
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.5)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+      overflowY: "auto",
+    }}>
+      <div className="card" style={{ padding: 28, maxWidth: 640,
+                                     width: "100%", maxHeight: "88vh",
+                                     overflowY: "auto" }}
+           onClick={(e) => e.stopPropagation()}>
+        <div className="spread">
+          <span className="muted num" style={{ fontSize: ".82rem" }}>
+            {String(data.letter_no || "")}
+          </span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {String(data.issued_on || "")}
+          </span>
+        </div>
+
+        <h2 style={{ textAlign: "center", margin: "18px 0 6px",
+                     fontSize: "1.15rem" }}>
+          {String(data.heading_ar || "")}
+        </h2>
+        <div style={{ fontWeight: 600, margin: "14px 0" }}>
+          {String(data.addressee_ar || "")}
+        </div>
+        <div style={{ whiteSpace: "pre-wrap", lineHeight: 2,
+                      fontSize: ".95rem" }}>
+          {String(data.body_ar || "")}
+        </div>
+
+        {data.valid_until ? (
+          <div className="muted" style={{ marginTop: 24,
+                                          fontSize: ".82rem" }}>
+            {L("validUntil")}: {String(data.valid_until)}
+          </div>
+        ) : null}
+
+        <div className="row" style={{ gap: 8, marginTop: 22 }}>
+          <button className="btn btn-primary" onClick={print}>
+            {L("print")}
+          </button>
+          <button className="btn" onClick={onClose}>{L("close")}</button>
+        </div>
       </div>
     </div>
   );

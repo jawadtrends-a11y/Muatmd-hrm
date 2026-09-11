@@ -776,6 +776,9 @@ def my_letters(request):
         p = r.payload or {}
         valid_until = p.get("valid_until", "")
         expired = bool(valid_until and valid_until < str(date.today()))
+        # ق-128: معرّف الخطاب الصادر — به يُفتح نصّه ويُطبع
+        letter_id = p.get("letter_id")
+        letter_no = p.get("letter_no", "")
         rows.append({
             "id": r.id,
             "request_no": r.request_no,
@@ -789,6 +792,8 @@ def my_letters(request):
             "expired": expired,
             "downloadable": (r.status == RequestStatus.APPROVED
                              and not expired),
+            "letter_id": letter_id,
+            "letter_no": letter_no,
         })
 
     return Response(rows)

@@ -71,6 +71,11 @@ const T: Dict = {
     ar: "سياسات الاستحقاق والأجر والترحيل",
     en: "Entitlement and pay policies",
   },
+  letterTemplates: { ar: "قوالب الخطابات", en: "Letter templates" },
+  letterTemplatesHint: {
+    ar: "صيغ الشهادات والتعريفات بمتغيّراتها",
+    en: "Certificate and letter templates",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -481,6 +486,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("leaveTypes")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("leaveTypesHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-128: قوالب الخطابات — تكتبها الشركة بمتغيّراتها */}
+        {perms.has("employees.view") && (
+        <Link href="/settings/letter-templates" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("letterTemplates")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("letterTemplatesHint")}
           </span>
         </Link>
         )}

@@ -906,16 +906,52 @@ def _retro_overtime(req, work_date, before_minutes, after_minutes):
 
 def _effect_certificate(req):
     """
-    الشهادة صالحة 30 يومًا (ق-54).
+    اعتماد الشهادة **يُصدر الخطاب** من قالبه (ق-128).
 
-    التوليد الفعلي للملف يتم عند التحميل — هنا نسجّل الصلاحية.
+    ⚠️ وكان يسجّل الصلاحية وحدها ويقول «التوليد عند التحميل» —
+    فالموظف يطلب ويُعتمد ولا يجد شيئًا.
+
+    ومن لا قالب لديه تبقى شهادته موثَّقة بلا نصّ، فيُصدرها
+    الموارد يدويًّا — ولا يُمنع الاعتماد لأجل قالب.
     """
-    valid_until = date.today() + timedelta(days=30)
-    req.payload = {**req.payload,
-                   "issued_at": str(date.today()),
-                   "valid_until": str(valid_until)}
+    from apps.core.models import LetterTemplate
+    from apps.core.services import letters as letters_svc
+
+    p = req.payload or {}
+    code = str(p.get("certificate_type") or "").upper()
+
+    tpl = (LetterTemplate.objects
+           .filter(company_id=req.company_id, code=code, is_active=True)
+           .first())
+    if tpl is None:
+        # قالبٌ عامّ إن وُجد — وإلا فبلا نصّ
+        tpl = (LetterTemplate.objects
+               .filter(company_id=req.company_id, is_active=True)
+               .order_by("sort_order", "id").first())
+
+    if tpl is None:
+        valid_until = date.today() + timedelta(days=30)
+        req.payload = {**p, "issued_at": str(date.today()),
+                       "valid_until": str(valid_until)}
+        req.save(update_fields=["payload", "updated_at"])
+        return {"valid_until": str(valid_until),
+                "pending_manual": True,
+                "note": "لا قالب مطابق — تُصدر الشهادة يدويًّا"}
+
+    letter = letters_svc.issue(
+        template=tpl, employment=req.employment,
+        addressee=str(p.get("addressed_to") or ""),
+        include_salary=bool(p.get("include_salary")),
+        request_id=req.id)
+
+    req.payload = {**p,
+                   "issued_at": str(letter.issued_on),
+                   "valid_until": str(letter.valid_until or ""),
+                   "letter_id": letter.id,
+                   "letter_no": letter.letter_no}
     req.save(update_fields=["payload", "updated_at"])
-    return {"valid_until": str(valid_until)}
+    return {"letter_no": letter.letter_no,
+            "valid_until": str(letter.valid_until or "")}
 
 
 def _effect_resignation(req):

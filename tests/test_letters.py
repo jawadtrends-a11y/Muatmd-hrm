@@ -143,7 +143,9 @@ def test_validity_follows_the_template(env):
         env["tpl"].valid_days = 7
         env["tpl"].save(update_fields=["valid_days"])
         letter = svc.issue(template=env["tpl"], employment=env["emp"])
-        assert letter.valid_until == TODAY + timedelta(days=7)
+        # ⚠️ **من تاريخ الإصدار نفسه** لا من TODAY المجمَّد عند
+        # الاستيراد: تشغيلٌ يعبر منتصف الليل يجعلهما يومين.
+        assert letter.valid_until == letter.issued_on + timedelta(days=7)
 
 
 def test_salary_in_words_is_reasonable(env):
