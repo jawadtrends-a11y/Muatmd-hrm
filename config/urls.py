@@ -265,6 +265,11 @@ urlpatterns = [
     # ق-125: إدارة المزايا من اللوحة
     path("platform/features/", plans_api.admin_features,
          name="platform-features"),
+    # ق-133: تذاكر الدعم في لوحة المنصّة
+    path("platform/tickets/", platform_admin_api.support_tickets,
+         name="platform-tickets"),
+    path("platform/tickets/<int:ticket_id>/",
+         platform_admin_api.support_ticket_detail, name="platform-ticket-detail"),
     path("platform/features/sync/", plans_api.admin_features_sync,
          name="platform-features-sync"),
     path("platform/features/<int:feature_id>/",

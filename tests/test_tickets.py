@@ -192,3 +192,48 @@ def test_ticket_numbers_do_not_repeat(env):
             body="ش", screenshot_url="/f/x.png").ticket_no
             for _ in range(3)}
         assert len(nums) == 3, nums
+
+
+def test_platform_reads_all_tickets(env, rls_enforced_late):
+    """
+    ⚠️ **المنصّة ترى التذاكر كلّها** — بدالّة فوق العزل.
+
+    فالتذاكر معزولة بالحساب، ولوحة المنصّة لا سياق حساب لها: بلا
+    هذه الدالّة تفتح الشاشة فارغةً ولا يُردّ على أحد.
+    """
+    from django.db import connection
+
+    with account_scope(env["account_id"]):
+        svc.open_ticket(company=env["comp"], person=env["person"],
+                        subject="عطل", body="شرح",
+                        screenshot_url="/f/x.png")
+    rls_enforced_late()
+
+    # بلا سياق حساب — كحال لوحة المنصّة
+    with connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM core_supportticket")
+        blocked = cur.fetchone()[0]
+        cur.execute("SELECT count(*) FROM app_platform_tickets('', false)")
+        visible = cur.fetchone()[0]
+
+    assert blocked == 0, "العزل لا يحجب — والتذاكر مكشوفة"
+    assert visible >= 1, "الدالّة لا تقرأ — فالشاشة تفتح فارغة"
+
+
+def test_customer_cannot_read_others_tickets(env, rls_enforced_late):
+    """وحسابٌ آخر لا يرى تذاكر غيره — ولو نادى الجدول."""
+    from apps.accounts.services.provisioning import provision_account
+    from apps.core.models import SupportTicket
+
+    with account_scope(env["account_id"]):
+        svc.open_ticket(company=env["comp"], person=env["person"],
+                        subject="عطل", body="شرح",
+                        screenshot_url="/f/x.png")
+
+    other = provision_account(slug="tkt-o", display_name_ar="آخر",
+                              company_name_ar="شركة أخرى",
+                              is_sandbox=True)
+    rls_enforced_late()
+
+    with account_scope(other.account_id):
+        assert SupportTicket.objects.count() == 0, "رأى تذاكر غيره"

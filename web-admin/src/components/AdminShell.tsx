@@ -24,6 +24,7 @@ const T: Dict = {
   accounts: { ar: "الحسابات", en: "Accounts" },
   plans: { ar: "الباقات", en: "Plans" },
   features: { ar: "المزايا", en: "Features" },
+  tickets: { ar: "تذاكر الدعم", en: "Tickets" },
   discounts: { ar: "الخصومات", en: "Discounts" },
   settings: { ar: "إعدادات المنصة", en: "Platform settings" },
   logout: { ar: "خروج", en: "Sign out" },
@@ -45,6 +46,9 @@ const NAV: NavItem[] = [
   { href: "/plans", key: "plans", icon: IcWallet, cap: "accounts.view" },
   // ق-125: المزايا — ما يُباع في الباقات
   { href: "/features", key: "features", icon: IcDoc,
+    cap: "accounts.view" },
+  // ق-133: تذاكر الدعم
+  { href: "/tickets", key: "tickets", icon: IcDoc,
     cap: "accounts.view" },
   { href: "/discounts", key: "discounts", icon: IcWallet,
     cap: "discounts.manage" },

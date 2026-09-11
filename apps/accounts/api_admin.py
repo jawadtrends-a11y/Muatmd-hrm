@@ -7,6 +7,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.utils import timezone
+from rest_framework import status
 from rest_framework.decorators import (
     api_view, authentication_classes, permission_classes,
 )
@@ -499,3 +501,108 @@ def platform_settings(request):
         "support_email": ps.support_email,
         "support_mobile": ps.support_mobile,
     })
+
+
+# ══════════ تذاكر الدعم (ق-133) ══════════
+#
+# ⚠️ **التذاكر تُقرأ بلا سياق حساب**: كل الحسابات في شاشةٍ واحدة،
+# والعزل يمنع ذلك — فتُقرأ بـSECURITY DEFINER أو بمالك القاعدة.
+# والمنصّة تراها كلّها بحكم دورها، والعميل يرى تذاكره وحده.
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("accounts.view")
+def support_tickets(request):
+    """تذاكر العملاء كلّها — مرتّبةً بالأقرب استحقاقًا."""
+    from django.db import connection
+
+    status_filter = request.GET.get("status") or ""
+    only_open = request.GET.get("open") == "1"
+
+    # ⚠️ **فوق العزل**: التذاكر معزولة بالحساب، والمنصّة تراها
+    # كلّها بحكم دورها — ودالّة SECURITY DEFINER تقرؤها.
+    with connection.cursor() as cur:
+        cur.execute("SELECT * FROM app_platform_tickets(%s, %s)",
+                    [status_filter, only_open])
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    now = timezone.now()
+    for r in rows:
+        r["breached"] = bool(
+            r["first_response_at"] is None and r["due_at"]
+            and now > r["due_at"])
+        r["answered"] = r["first_response_at"] is not None
+
+    return Response({
+        "tickets": rows,
+        "open": sum(1 for r in rows if r["status"] != "resolved"),
+        "breached": sum(1 for r in rows if r["breached"]),
+    })
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("accounts.view")
+def support_ticket_detail(request, ticket_id):
+    """تذكرةٌ برسائلها — وردُّ الدعم عليها."""
+    from apps.core.models import SupportTicket
+    from apps.core.services import tickets as tsvc
+    from apps.core.tenancy.context import account_scope
+
+    # المعرّف من المسار، والحساب يُقرأ منه — فالمنصّة فوق العزل
+    from django.db import connection
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT app_ticket_account(%s)", [ticket_id])
+        row = cur.fetchone()
+    if row and row[0] is None:
+        row = None
+    if row is None:
+        return Response({"detail": "غير موجودة"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    with account_scope(row[0]):
+        t = SupportTicket.objects.filter(id=ticket_id).first()
+        if t is None:
+            return Response({"detail": "غير موجودة"}, status=404)
+
+        if request.method == "POST":
+            if request.user is None and not request.data.get("body"):
+                return Response({"detail": "لا رسالة"}, status=400)
+            action = request.data.get("action")
+            try:
+                if action == "resolve":
+                    tsvc.resolve(ticket=t)
+                else:
+                    tsvc.reply(ticket=t,
+                               body=request.data.get("body", ""),
+                               from_support=True)
+            except tsvc.TicketError as e:
+                return Response({"detail": str(e)}, status=400)
+            _log(request, "ticket.reply",
+                 detail={"ticket": t.ticket_no, "action": action or "reply"})
+            t.refresh_from_db()
+
+        return Response({
+            "id": t.id, "ticket_no": t.ticket_no, "subject": t.subject,
+            "body": t.body, "screenshot_url": t.screenshot_url,
+            "kind": t.kind, "kind_label": t.get_kind_display(),
+            "priority": t.priority,
+            "status": t.status, "status_label": t.get_status_display(),
+            "opened_by": t.opened_by_name,
+            "created_at": t.created_at, "due_at": t.due_at,
+            "sla_hours": t.sla_hours,
+            "sla_business": t.sla_business_hours,
+            "plan": t.plan_code_at_open,
+            "answered": t.first_response_at is not None,
+            "breached": t.breached,
+            "messages": [{
+                "id": m.id, "body": m.body,
+                "attachment_url": m.attachment_url,
+                "from_support": m.from_support,
+                "author": m.author_name, "at": m.created_at,
+            } for m in t.messages.all()],
+        })
