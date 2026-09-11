@@ -370,3 +370,58 @@ def cancel_penalty(request, penalty_id):
     except svc.PenaltyError as e:
         return Response({"detail": str(e)}, status=400)
     return Response({"cancelled": True})
+
+
+# ══════════ نسخ اللائحة (ق-130) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def policy_versions(request):
+    """
+    نسخ لائحة الجزاءات — عرضًا وتنقيحًا.
+
+    ⚠️ **والتنقيح ينسخ البنود ولا يدوسها** — فالماضي يُقاس
+    بلائحته.
+    """
+    from apps.accounts.models import Company
+    from apps.employees.models_penalties import PolicyVersion
+
+    if request.method == "GET":
+        Gate.require(request.user, "employees.view")
+        qs = PolicyVersion.objects.filter(company_id=_company(request))
+        active = svc.active_version(
+            Company.objects.filter(id=_company(request)).first())
+        return Response({
+            "versions": [{
+                "id": v.id, "number": v.number,
+                "effective_from": v.effective_from,
+                "note": v.note, "is_active": v.is_active,
+                "is_current": bool(active and v.id == active.id),
+                "violations": v.violations.count(),
+            } for v in qs],
+        })
+
+    Gate.require(request.user, "employees.edit")
+    # مقيَّد بشركة المنفّذ النشطة
+    comp = Company.objects.filter(id=_company(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    try:
+        eff = date.fromisoformat(str(request.data.get("effective_from")))
+    except (TypeError, ValueError):
+        return Response({"detail": "تاريخ السريان مطلوب"}, status=400)
+
+    actor = getattr(request.user, "person", None)
+    try:
+        new, copied = svc.revise(
+            company=comp, effective_from=eff,
+            note=str(request.data.get("note") or ""),
+            by_person_id=actor.id if actor else None)
+    except svc.PenaltyError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    return Response({"id": new.id, "number": new.number,
+                     "effective_from": new.effective_from,
+                     "copied": copied},
+                    status=status.HTTP_201_CREATED)

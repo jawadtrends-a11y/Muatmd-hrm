@@ -37,6 +37,8 @@ const T: Dict = {
   personal: { ar: "البيانات الأساسية", en: "Personal" },
   job: { ar: "بيانات الوظيفة", en: "Job" },
   systemRole: { ar: "الدور في النظام", en: "System role" },
+  addTag: { ar: "وسم", en: "Tag" },
+  removeTag: { ar: "نزع الوسم", en: "Remove tag" },
   noRole: { ar: "بلا دور", en: "No role" },
   shift: { ar: "فترة العمل", en: "Work shift" },
   costCenter: { ar: "مركز التكلفة", en: "Cost center" },
@@ -1167,6 +1169,9 @@ function ProfileInner({
   const [canEditJob, setCanEditJob] = useState(false);
   const [jobTitles, setJobTitles] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  // ق-131: وسومه ووسوم الشركة
+  const [tags, setTags] = useState<any[]>([]);
+  const [allTags, setAllTags] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
@@ -1189,6 +1194,11 @@ function ProfileInner({
     apiGet<any>("/access/roles/")
       .then((r) => setRoles(Array.isArray(r) ? r : (r?.roles || [])))
       .catch(() => setRoles([]));
+
+    // ق-131: وسوم الشركة — وإخفاق الجلب قائمةٌ فارغة لا شاشة مكسورة
+    apiGet<any[]>("/tags/")
+      .then((r) => setAllTags(Array.isArray(r) ? r : []))
+      .catch(() => setAllTags([]));
     apiGet<any[]>("/org/departments/")
       .then((r) => setDepts2(Array.isArray(r) ? r : []))
       .catch(() => setDepts2([]));
@@ -1275,8 +1285,31 @@ function ProfileInner({
     }
   }
 
+// ق-131: وسومه تُقرأ من الملفّ، وتُدار محليًّا فلا يُعاد تحميله
+  useEffect(() => {
+    setTags((data as { tags?: unknown[] } | null)?.tags || []);
+  }, [data]);
+
+  const toggleTag = async (tagId: number, remove: boolean) => {
+    if (!data) return;
+    const path = `/employees/${data.employment_id}/tags/`;
+    try {
+      if (remove) {
+        await apiDelete(path, { tag_id: tagId });
+        setTags(tags.filter((t: { id: number }) => t.id !== tagId));
+      } else {
+        await apiPost(path, { tag_id: tagId });
+        const t = allTags.find((x: { id: number }) => x.id === tagId);
+        if (t) setTags([...tags, t]);
+      }
+    } catch {
+      /* الرسالة تظهر عند إعادة التحميل */
+    }
+  };
+
+
   if (busy) {
-    return (
+  return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--ink-3)" }}>
         {L("loading")}
       </div>
@@ -1333,6 +1366,42 @@ function ProfileInner({
               {data.job.job_title ? ` · ${data.job.job_title}` : ""}
               {data.job.department ? ` · ${data.job.department}` : ""}
             </div>
+
+            {/* ق-131: وسومه — تُعرض هنا وتُدار بزرّ الإضافة */}
+            {(tags.length > 0 || data.can_edit) && (
+              <div className="row" style={{ gap: 4, marginTop: 6,
+                                            flexWrap: "wrap" }}>
+                {tags.map((t: any) => (
+                  <span key={t.id}
+                        className={`badge ${t.color ? `badge-${t.color}` : ""}`}
+                        style={{ fontSize: ".72rem" }}>
+                    {t.name_ar}
+                    {data.can_edit && (
+                      <button className="btn-x" title={L("removeTag")}
+                              style={{ marginInlineStart: 4, border: 0,
+                                       background: "none", cursor: "pointer",
+                                       color: "inherit", padding: 0 }}
+                              onClick={() => toggleTag(t.id, true)}>×</button>
+                    )}
+                  </span>
+                ))}
+                {data.can_edit && allTags.length > 0 && (
+                  <select className="select"
+                          style={{ height: 24, fontSize: ".72rem",
+                                   padding: "0 6px", width: "auto" }}
+                          value=""
+                          onChange={(e) => e.target.value
+                            && toggleTag(Number(e.target.value), false)}>
+                    <option value="">+ {L("addTag")}</option>
+                    {allTags
+                      .filter((t: any) => !tags.some((x: any) => x.id === t.id))
+                      .map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name_ar}</option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grow" />

@@ -960,6 +960,11 @@ def employee_profile(request, employment_id):
 
         "personal": _person_block(p),
 
+        # ق-131: وسومه — تُعرض في ملفّه وتُسنَد منه
+        "tags": [{"id": a.tag_id, "name_ar": a.tag.name_ar,
+                  "color": a.tag.color}
+                 for a in emp.tag_assignments.select_related("tag")],
+
         "job": {
             "job_title": localized(emp.job_title, locale=lang),
             "job_title_id": emp.job_title_id,

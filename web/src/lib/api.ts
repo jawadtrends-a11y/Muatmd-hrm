@@ -179,8 +179,9 @@ export const apiPut = <T = unknown>(path: string, body?: unknown,
   headers?: Record<string, string>) => request<T>("PUT", path, body, headers);
 export const apiPatch = <T = unknown>(path: string, body?: unknown) =>
   request<T>("PATCH", path, body);
-export const apiDelete = <T = unknown>(path: string) =>
-  request<T>("DELETE", path);
+// ق-131: الحذف قد يحتاج جسمًا — كنزع وسمٍ بعينه من موظف
+export const apiDelete = <T = unknown>(path: string, body?: unknown) =>
+  request<T>("DELETE", path, body);
 
 /** بناء استعلام يتجاهل الفارغ */
 export function qs(params: Record<string, unknown>): string {

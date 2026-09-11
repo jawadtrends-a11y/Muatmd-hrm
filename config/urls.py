@@ -133,6 +133,8 @@ urlpatterns = [
          penalties_api.violation_detail, name="violation-detail"),
     path("api/penalties/violations/seed/", penalties_api.seed_violations,
          name="violations-seed"),
+    path("api/penalties/versions/", penalties_api.policy_versions,
+         name="penalty-policy-versions"),
     path("api/penalties/board/", penalties_api.board, name="penalty-board"),
     path("api/penalties/preview/", penalties_api.preview_penalty,
          name="penalty-preview"),

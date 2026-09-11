@@ -81,6 +81,16 @@ const T: Dict = {
     ar: "سياسات المنشأة وإقرار الموظفين بها",
     en: "Company policies and acknowledgements",
   },
+  penaltyPolicy: { ar: "لائحة الجزاءات", en: "Penalty policy" },
+  penaltyPolicyHint: {
+    ar: "المخالفات ودرجاتها ونسخ اللائحة",
+    en: "Violations, degrees, and policy versions",
+  },
+  tagsLink: { ar: "وسوم الموظفين", en: "Employee tags" },
+  tagsHint: {
+    ar: "تصنيفاتٌ تُرشّح بها قوائمك",
+    en: "Labels to filter your lists",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -513,6 +523,28 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("policiesLink")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("policiesHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-119 وق-130: لائحة الجزاءات ونسخها */}
+        {perms.has("employees.view") && (
+        <Link href="/settings/penalty-policy" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-131: وسوم الموظفين */}
+        {perms.has("employees.view") && (
+        <Link href="/settings/tags" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("tagsLink")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("tagsHint")}
           </span>
         </Link>
         )}
