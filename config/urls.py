@@ -7,6 +7,7 @@ from apps.core.api import access as access_api
 from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
+from apps.payroll import api_allowances as allowances_api
 from apps.accounts import api_company as accounts_company_api
 from apps.accounts import api_subscribe as subscribe_api
 from apps.accounts import api_signup as signup_api
@@ -195,6 +196,18 @@ urlpatterns = [
     path("api/payroll/runs/<int:run_id>/wps/download/", outputs_api.wps_download, name="wps-download"),
     path("api/payslips/<int:payslip_id>/", outputs_api.payslip_detail, name="payslip-detail"),
     path("api/me/payslips/", outputs_api.my_payslips, name="my-payslips"),
+    # ق-134: كتالوج المخصّصات المصروفة
+    path("api/allowances/", allowances_api.allowances, name="allowances"),
+    path("api/allowances/<int:allowance_id>/",
+         allowances_api.allowance_detail, name="allowance-detail"),
+    path("api/allowances/<int:allowance_id>/eligibility/",
+         allowances_api.allowance_eligibility, name="allowance-eligibility"),
+    path("api/me/allowances/", allowances_api.my_allowances,
+         name="my-allowances"),
+    path("api/allowance-claims/", allowances_api.claims,
+         name="allowance-claims"),
+    path("api/allowance-claims/<int:claim_id>/settle/",
+         allowances_api.settle_claim, name="settle-claim"),
     path("api/advances/", assets_api.advances, name="advances"),
     path("api/advances/<int:advance_id>/approve/", assets_api.advance_approve, name="advance-approve"),
     path("api/advances/<int:advance_id>/schedule/", assets_api.advance_schedule, name="advance-schedule"),

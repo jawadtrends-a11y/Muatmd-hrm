@@ -167,10 +167,10 @@ SPECS = {
     RequestType.CUSTOM_PAYMENT: RequestSpec(
         code="custom_payment", name_ar="طلب صرف مخصّص",
         name_en="Custom payment", icon="wallet",
-        required_fields=("amount", "reason"),
-        optional_fields=("component_code", "note", "attachment_url"),
-        hint_ar="مبلغ خارج بنود راتبك — يُصرف باعتماد إدارتك",
-        hint_en="An amount outside your salary components",
+        required_fields=("allowance_id", "work_date", "amount"),
+        optional_fields=("reason", "note", "attachment_url"),
+        hint_ar="اختر مخصّصك وتاريخه — ولا يُطلب المخصّص مرّتين في يوم",
+        hint_en="Pick your allowance and date — once per day each",
     ),
     RequestType.GRIEVANCE: RequestSpec(
         code="grievance", name_ar="طلب تظلّم",
@@ -357,6 +357,105 @@ REQUEST_FEATURE_KEYS = {
 }
 
 
+# ق-134: **لا طلبان من نوعٍ واحد في يومٍ واحد** — إلا أن يكون
+# الأول مرفوضًا أو مسحوبًا: فالرفض قد يُصحَّح بعد تفاهم، ويُعاد
+# التقديم (قرار جواد).
+#
+# ⚠️ **والمفتاح يشمل البند حيث يوجد**: من له «غداء عمل» و«مواصلات»
+# يطلبهما في يومٍ واحد — والمنع على المخصّص نفسه لا على نوع الطلب.
+DAILY_UNIQUE = {
+    RequestType.ATTENDANCE_FIX: ("work_date", None),
+    RequestType.PERMISSION: ("work_date", None),
+    RequestType.OVERTIME: ("work_date", None),
+    RequestType.SWAP_RESTDAY: ("work_date", None),
+    RequestType.OFFSITE: ("work_date", None),
+    RequestType.REMOTE_WORK: ("start_date", None),
+    # المخصّص: التاريخ **والبند** معًا
+    RequestType.CUSTOM_PAYMENT: ("work_date", "allowance_id"),
+}
+
+
+def validate_custom_payment(employment, payload):
+    """
+    يتحقّق أن المخصّص **مُسنَدٌ له** وأن المبلغ في حدوده.
+
+    ⚠️ **ولا يُطلب ما لم يُسند**: فطلبُ من لا يستحقّ يُردّ، ويضيع
+    وقت الطرفين. وبلا فحصِ المبلغ يطلب ألفًا في بدل غداءٍ سقفُه
+    خمسون.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from apps.payroll.models import AllowanceEligibility, AmountMode
+
+    elig = (AllowanceEligibility.objects
+            .filter(employment=employment,
+                    allowance_id=payload.get("allowance_id"),
+                    allowance__is_active=True)
+            .select_related("allowance").first())
+    if elig is None:
+        raise RequestError("هذا المخصّص غير مُسنَدٍ لك")
+
+    try:
+        amount = Decimal(str(payload.get("amount", "0")))
+    except (InvalidOperation, TypeError):
+        raise RequestError("مبلغ غير صالح")
+    if amount <= 0:
+        raise RequestError("المبلغ مطلوب")
+
+    allowed = elig.effective_amount
+    if elig.allowance.mode == AmountMode.FIXED and amount != allowed:
+        raise RequestError(
+            f"{elig.allowance.name_ar} مبلغه ثابت: {allowed}")
+    if elig.allowance.mode == AmountMode.CAP and amount > allowed:
+        raise RequestError(
+            f"يتجاوز سقف {elig.allowance.name_ar}: {allowed}")
+
+    if elig.allowance.requires_attachment and not payload.get(
+            "attachment_url"):
+        raise RequestError(
+            f"{elig.allowance.name_ar} يلزمه مرفق يُثبت الصرف")
+
+    return elig
+
+
+def check_daily_duplicate(employment, request_type, payload):
+    """
+    يرفع خطأً إن كان ثمّة طلبٌ حيّ من النوع نفسه في اليوم نفسه.
+
+    ⚠️ **والحيّ هو المعلَّق أو المعتمد**: المرفوض والمسحوب لا
+    يمنعان إعادة التقديم — فالموظف قد يُطلَب منه ذلك بعد تفاهم.
+    """
+    spec = DAILY_UNIQUE.get(request_type)
+    if spec is None:
+        return None
+
+    date_field, item_field = spec
+    value = payload.get(date_field)
+    if not value:
+        return None
+
+    q = Request.objects.filter(
+        employment=employment, request_type=request_type,
+        status__in=[RequestStatus.PENDING, RequestStatus.APPROVED],
+        **{f"payload__{date_field}": str(value)})
+
+    if item_field:
+        item = payload.get(item_field)
+        if item in (None, ""):
+            return None
+        q = q.filter(**{f"payload__{item_field}": item})
+
+    dup = q.first()
+    if dup is None:
+        return None
+
+    label = SPECS[request_type].name_ar
+    raise RequestError(
+        f"لديك {label} بنفس التاريخ: {dup.request_no} "
+        f"({dup.get_status_display()}) — "
+        "ولا يُقدَّم ثانٍ إلا إن رُفض الأول أو سُحب")
+
+
 def require_request_feature(request_type, company_id):
     """
     يرفع 402 إن لم تفتح باقتُه هذا النوع.
@@ -384,6 +483,13 @@ def create_request(*, employment, request_type, payload, note="",
     عرضٍ لا حماية.
     """
     require_request_feature(request_type, employment.company_id)
+
+    # ق-134: المخصّص مُسنَدٌ ومبلغه في حدوده
+    if request_type == RequestType.CUSTOM_PAYMENT:
+        validate_custom_payment(employment, payload)
+
+    # ولا طلبان من نوعٍ واحد في يومٍ واحد
+    check_daily_duplicate(employment, request_type, payload)
 
     if request_type == RequestType.LEAVE:
         from apps.leaves.models import LeaveType
@@ -1251,21 +1357,34 @@ def _effect_custom_payment(req):
     فالمبلغ المعتمد يُصرف مع الراتب لا بحوالةٍ خارج النظام —
     وإلا ضاع من السجلّ الماليّ.
     """
-    p = req.payload
+    from decimal import Decimal
 
-    # ⚠️ **بلا أثر آليّ بعد** — وأُصرّح به بدل أن أوهم:
-    #
-    # الإضافات والخصومات تُبنى في القسيمة **وقت تشغيل المسير**،
-    # ولا جدولَ ينتظرها بين الطلب والمسير. فبند «الإضافات المعلّقة»
-    # ميزةٌ مستقلّة (`pay_additions`) تُبنى لاحقًا، وحتى ذلك
-    # يُصرف المعتمد يدويًّا في المسير.
-    return {
-        "pending_manual": True,
-        "amount": str(p.get("amount", "")),
-        "component_code": p.get("component_code") or "",
-        "note": ("اعتُمد الصرف — يُضاف في مسير الشهر يدويًّا حتى "
-                 "تُبنى الإضافات المعلّقة"),
-    }
+    from apps.payroll.models import AllowanceClaim, ClaimableAllowance
+
+    p = req.payload or {}
+    allowance = ClaimableAllowance.objects.filter(
+        id=p.get("allowance_id"), company_id=req.company_id).first()
+    if allowance is None:
+        return {"pending_manual": True,
+                "note": "المخصّص غير معروف — يُصرف يدويًّا"}
+
+    # ⚠️ **مستحقٌّ بلا طريقة صرفٍ بعد**: القرار عند الموارد لا هنا
+    # — أيُدرج في المسير أم يُصرف خارجه. فالمعتمِد أدرى بحال
+    # الصرف يومَه.
+    claim, _ = AllowanceClaim.objects.get_or_create(
+        request_id=req.id,
+        defaults={
+            "account_id": req.account_id,
+            "company_id": req.company_id,
+            "employment": req.employment,
+            "allowance": allowance,
+            "claim_date": date.fromisoformat(str(p["work_date"])),
+            "amount": Decimal(str(p.get("amount", "0"))),
+        })
+    return {"claim_id": claim.id,
+            "amount": str(claim.amount),
+            "allowance": allowance.name_ar,
+            "awaiting_disbursement": True}
 
 
 def _effect_salary_fix(req):

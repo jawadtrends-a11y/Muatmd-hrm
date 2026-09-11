@@ -11,13 +11,18 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
 
+import logging
+
 from django.db import transaction
+
 from django.utils import timezone
 
 from apps.leaves.models import (
     ApprovalChain, ApprovalDecision, ApprovalStep, ApproverType, Request,
     RequestApproval, RequestStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalError(Exception):
@@ -234,11 +239,25 @@ def submit_request(request_obj):
     now = timezone.now()
 
     if not approvers:
+        # ⚠️ **والأثر يقع هنا كذلك** (ق-134): شركةٌ بلا سلسلة
+        # اعتماد تُعتمد طلباتها فورًا — وكان الأثر لا يُستدعى إلا
+        # في مسار الاعتماد اليدويّ، فيُعتمد الطلب ولا يقع أثره.
+        #
+        # فالإجازة لا تُخصم، والعمل عن بُعد لا يُسجَّل حضورًا،
+        # والمخصّص لا يصير مستحقًّا — وكلّها تمرّ بالسكوت.
         request_obj.status = RequestStatus.APPROVED
         request_obj.submitted_at = now
         request_obj.closed_at = now
         request_obj.current_step = 0
         request_obj.save()
+
+        from apps.leaves.services.requests import apply_effect
+
+        try:
+            apply_effect(request_obj)
+        except Exception:            # noqa: BLE001
+            # الأثر يُعاد تشغيله يدويًّا — ولا يُسقط الاعتماد
+            logger.exception("تعذّر أثر الطلب %s", request_obj.request_no)
         return request_obj, []
 
     records = []

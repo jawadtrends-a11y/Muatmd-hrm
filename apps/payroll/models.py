@@ -662,3 +662,12 @@ from apps.payroll.models_banks import (  # noqa: E402,F401
 from apps.payroll.models_retro import (  # noqa: E402,F401
     RetroAdjustment, RetroSource, RetroStatus,
 )
+
+
+# كتالوج المخصّصات المصروفة (ق-134)
+from apps.payroll.models_allowances import (  # noqa: E402,F401
+    AllowanceEligibility, AmountMode, ClaimableAllowance,
+)
+from apps.payroll.models_disbursement import (  # noqa: E402,F401
+    AllowanceClaim, DisbursementMethod,
+)
