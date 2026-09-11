@@ -23,6 +23,9 @@ NAV_ITEMS = [
     {"key": "penalties",   "path": "/penalties",       "icon": "doc",      "permission": "attendance.view"},
     # ق-129: السياسات — يراها كل موظف، وإقراره حجّة
     {"key": "policies",    "path": "/me/policies",     "icon": "doc",      "permission": None},
+    # ق-131: المهامّ والدليل — لكل موظف
+    {"key": "tasks",       "path": "/me/tasks",        "icon": "inbox",    "permission": None},
+    {"key": "directory",   "path": "/directory",       "icon": "users",    "permission": None},
     {"key": "payslips",    "path": "/payslips",        "icon": "receipt",  "permission": "payslips.view_own"},
     {"key": "saudization", "path": "/saudization",     "icon": "chart",    "permission": "saudization.view"},
     {"key": "compliance",  "path": "/compliance",      "icon": "shield",   "permission": "compliance.view"},

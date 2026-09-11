@@ -39,9 +39,12 @@ FEATURES = [
        implemented=True, guarded_at="/api/org/"),
     _f("allowances", "employees", "المخصصات",
        implemented=True, guarded_at="/api/payroll/components/"),
-    _f("employee_directory", "employees", "دليل الموظفين"),
-    _f("employee_tags", "employees", "وسوم الموظفين"),
-    _f("tasks", "employees", "المهام"),
+    _f("employee_directory", "employees", "دليل الموظفين",
+       implemented=True, guarded_at="/api/directory/"),
+    _f("employee_tags", "employees", "وسوم الموظفين",
+       implemented=True, guarded_at="/api/tags/"),
+    _f("tasks", "employees", "المهام",
+       implemented=True, guarded_at="/api/tasks/"),
 
     # ══ الحضور والانصراف ══
     _f("biometric_devices", "attendance", "الربط مع أجهزة البصمة"),

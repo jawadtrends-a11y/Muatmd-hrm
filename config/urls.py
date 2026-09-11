@@ -15,6 +15,7 @@ from apps.accounts import api_invites as accounts_invites_api
 from apps.notifications import api_announcements as announcements_api
 from apps.employees import api as employees_api
 from apps.employees import api_penalties as penalties_api
+from apps.employees import api_tags_tasks as tags_api
 from apps.attendance import api as attendance_api
 from apps.attendance import api_exemptions as exemptions_api
 from apps.payroll import api_outputs as outputs_api
@@ -142,6 +143,15 @@ urlpatterns = [
     path("api/penalties/", penalties_api.penalty_list, name="penalty-list"),
     path("api/penalties/<int:penalty_id>/cancel/",
          penalties_api.cancel_penalty, name="penalty-cancel"),
+    # ق-131: الدليل والوسوم والمهام
+    path("api/directory/", tags_api.directory, name="directory"),
+    path("api/tags/", tags_api.tags, name="employee-tags"),
+    path("api/tags/<int:tag_id>/", tags_api.tag_detail, name="tag-detail"),
+    path("api/employees/<int:employment_id>/tags/",
+         tags_api.employee_tags, name="employee-tag-assign"),
+    path("api/tasks/", tags_api.tasks, name="tasks"),
+    path("api/tasks/<int:task_id>/", tags_api.task_detail,
+         name="task-detail"),
     path("api/employees/<int:employment_id>/", employees_api.employee_detail, name="employee-detail"),
     path("api/employees/<int:employment_id>/salary/", employees_api.salary_structures, name="salary-structures"),
     path("api/employees/<int:employment_id>/registration/", employees_api.registration_flags, name="registration-flags"),

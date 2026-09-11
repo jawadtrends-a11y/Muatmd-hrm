@@ -465,3 +465,9 @@ from apps.employees.models_penalties import (  # noqa: E402,F401
     Penalty, PenaltyDegree, PenaltyKind, PenaltyStatus, PolicyVersion,
     ViolationCategory, ViolationType,
 )
+
+
+# الوسوم والمهام (ق-131)
+from apps.employees.models_tags_tasks import (  # noqa: E402,F401
+    EmployeeTag, EmployeeTagAssignment, Task, TaskPriority, TaskStatus,
+)
