@@ -26,6 +26,7 @@ const T: Dict = {
   submit: { ar: "تقديم الطلب", en: "Submit" },
   submitting: { ar: "جارٍ التقديم…", en: "Submitting…" },
   cancel: { ar: "إلغاء", en: "Cancel" },
+  send: { ar: "إرسال الطلب", en: "Send request" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   required: { ar: "أكمل الحقول المطلوبة", en: "Complete required fields" },
   submitted: { ar: "قُدّم الطلب", en: "Request submitted" },
@@ -168,6 +169,18 @@ export default function MyRequestsPage() {
   // ق-124: فترات الشركة — لطلب تغيير فترة العمل
   const [shifts, setShifts] = useState<
     { id: number; name_ar: string; name_en?: string }[]>([]);
+  // ق-142: الأنواع المخصّصة التي أنشأتها الشركة
+  const [customPick, setCustomPick] = useState<
+    { id: number; name_ar: string; hint_ar: string;
+      requires_attachment: boolean;
+      fields: { key: string; label_ar: string; kind: string;
+                is_required: boolean; options: string[] }[] } | null>(null);
+  const [customTypes, setCustomTypes] = useState<
+    { id: number; code: string; name_ar: string; hint_ar: string;
+      requires_attachment: boolean;
+      fields: { key: string; label_ar: string; kind: string;
+                is_required: boolean; options: string[] }[] }[]>([]);
+
   // ق-134: مخصّصاته — وما طُلب اليوم معلَّم
   const [allowances, setAllowances] = useState<
     { allowance_id: number; name_ar: string; mode: string;
@@ -198,6 +211,13 @@ export default function MyRequestsPage() {
       apiGet<{ allowance_id: number; name_ar: string; mode: string;
                amount: string; claimed_today?: boolean }[]>(
         "/me/allowances/").catch(() => []),
+      // ق-142: الأنواع المخصّصة
+      apiGet<{ id: number; code: string; name_ar: string;
+               hint_ar: string; requires_attachment: boolean;
+               fields: { key: string; label_ar: string; kind: string;
+                         is_required: boolean;
+                         options: string[] }[] }[]>(
+        "/me/custom-request-types/").catch(() => []),
       // ق-60: الموظف يرى ما يبادر به هو فقط
       apiGet<{ reasons: { code: string; name_ar: string }[] }>(
         "/payroll/termination-reasons/?initiator=employee")
@@ -207,12 +227,13 @@ export default function MyRequestsPage() {
       apiGet<{ employment_id: number; employee_no: string;
                name_ar: string }[]>("/me/deputies/")
         .catch(() => []),
-    ]).then(([t, lt, sh, al, rs, dp]) => {
+    ]).then(([t, lt, sh, al, ct, rs, dp]) => {
       setTypes(t.types || []);
       setNeedsSuccessor(!!t.needs_successor);
       setLeaveTypes(lt);
       setShifts(sh);
       setAllowances(al);
+      setCustomTypes(ct);
       setReasons(rs);
       setDeputies(dp);
       setBusy(false);
@@ -403,6 +424,15 @@ export default function MyRequestsPage() {
         </div>
       )}
 
+      {customPick && (
+        <CustomRequestDialog t={customPick} L={L}
+                             onClose={() => setCustomPick(null)}
+                             onSent={(no) => {
+                               setCustomPick(null);
+                               setDone({ no, warnings: [] });
+                             }} />
+      )}
+
       {!selected ? (
         <div style={{
           display: "grid",
@@ -431,6 +461,27 @@ export default function MyRequestsPage() {
               </button>
             );
           })}
+
+          {/* ق-142: ما أنشأته الشركة — بنفس البطاقات */}
+          {customTypes.map((t) => (
+            <button key={`custom-${t.id}`} className="card"
+              onClick={() => setCustomPick(t)}
+              style={{
+                padding: 18, textAlign: "start", cursor: "pointer",
+                border: "1px solid var(--line)", background: "var(--paper)",
+                font: "inherit", color: "inherit",
+              }}>
+              <div style={{ color: "var(--copper)", marginBottom: 8 }}>
+                <IcDoc size={24} />
+              </div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                {t.name_ar}
+              </div>
+              <div className="muted" style={{ fontSize: ".82rem" }}>
+                {t.hint_ar}
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
         <div className="card" style={{ padding: 20 }}>
@@ -745,6 +796,115 @@ export default function MyRequestsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* ══ نافذة الطلب المخصّص (ق-142) ══ */
+
+function CustomRequestDialog({ t, L, onClose, onSent }: {
+  t: { id: number; name_ar: string; hint_ar: string;
+       requires_attachment: boolean;
+       fields: { key: string; label_ar: string; kind: string;
+                 is_required: boolean; options: string[] }[] };
+  L: (k: string, f?: string) => string;
+  onClose: () => void;
+  onSent: (no: string) => void;
+}) {
+  const [vals, setVals] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const set = (k: string, v: string) =>
+    setVals((d) => ({ ...d, [k]: v }));
+
+  const submit = async () => {
+    setBusy(true); setErr("");
+    try {
+      const out = await apiPost<{ request_no: string }>(
+        `/custom-request-types/${t.id}/submit/`, { payload: vals });
+      onSent(out.request_no);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+      overflowY: "auto",
+    }}>
+      <div className="card" style={{ padding: 24, maxWidth: 460,
+                                     width: "100%", maxHeight: "88vh",
+                                     overflowY: "auto" }}
+           onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>{t.name_ar}</h3>
+        {t.hint_ar && (
+          <div className="muted" style={{ fontSize: ".85rem",
+                                          marginTop: 4 }}>
+            {t.hint_ar}
+          </div>
+        )}
+
+        {err && (
+          <div style={{ background: "var(--danger-soft)",
+                        color: "var(--danger)", padding: "9px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: ".86rem", marginTop: 14 }}>
+            {err}
+          </div>
+        )}
+
+        <div className="stack" style={{ gap: 12, marginTop: 16 }}>
+          {t.fields.map((f) => (
+            <label key={f.key} className="field">
+              <span className="label">
+                {f.label_ar}
+                {f.is_required && (
+                  <span style={{ color: "var(--danger)" }}> *</span>
+                )}
+              </span>
+
+              {f.kind === "textarea" ? (
+                <textarea className="input" rows={3}
+                          value={vals[f.key] || ""}
+                          onChange={(e) => set(f.key, e.target.value)} />
+              ) : f.kind === "select" ? (
+                <select className="select" value={vals[f.key] || ""}
+                        onChange={(e) => set(f.key, e.target.value)}>
+                  <option value="">—</option>
+                  {f.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : f.kind === "bool" ? (
+                <select className="select" value={vals[f.key] || "0"}
+                        onChange={(e) => set(f.key, e.target.value)}>
+                  <option value="1">نعم</option>
+                  <option value="0">لا</option>
+                </select>
+              ) : f.kind === "date" ? (
+                <DateField value={vals[f.key] || ""}
+                           onChange={(v) => set(f.key, v)} />
+              ) : (
+                <input className={`input ${f.kind === "number" ? "num" : ""}`}
+                       type={f.kind === "number" ? "number"
+                             : f.kind === "time" ? "time" : "text"}
+                       value={vals[f.key] || ""}
+                       onChange={(e) => set(f.key, e.target.value)} />
+              )}
+            </label>
+          ))}
+        </div>
+
+        <div className="row" style={{ gap: 8, marginTop: 18 }}>
+          <button className="btn btn-primary" disabled={busy}
+                  onClick={submit}>{busy ? "…" : L("send")}</button>
+          <button className="btn" onClick={onClose}>{L("cancel")}</button>
+        </div>
+      </div>
     </div>
   );
 }

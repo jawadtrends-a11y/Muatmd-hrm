@@ -106,6 +106,11 @@ const T: Dict = {
     ar: "من يعتمد المسير وبأيّ ترتيب",
     en: "Who approves payroll and in what order",
   },
+  customReqs: { ar: "الطلبات المخصّصة", en: "Custom requests" },
+  customReqsHint: {
+    ar: "أنواع طلبات تُنشئها بحقولها",
+    en: "Request types you define",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -569,6 +574,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-142: أنواع الطلبات المخصّصة */}
+        {perms.has("requests.view") && (
+        <Link href="/settings/custom-requests" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("customReqs")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("customReqsHint")}
           </span>
         </Link>
         )}
