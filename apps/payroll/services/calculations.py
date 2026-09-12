@@ -149,6 +149,14 @@ def calculate_overtime(*, overtime_minutes: int, basic_salary: Decimal,
     elif basis == "full_x1_5":
         rate = full_hr * Decimal("1.5")
         expl = "أجر ساعة الأجر الكامل × 1.5"
+    elif basis == "full_x2":
+        # ق-137: ساعتان من الأجر الكامل — تعتمدها شركاتٌ في العيد
+        rate = full_hr * Decimal("2")
+        expl = "أجر ساعة الأجر الكامل × 2"
+    elif basis == "full_plus_basic":
+        # ساعة كاملة + ساعة أساسيّ — صيغةٌ أخرى للعطلة
+        rate = full_hr + basic_hr
+        expl = "أجر ساعة الأجر الكامل + ساعة الأساسي"
     else:
         raise ValueError(f"أساس عمل إضافي غير معروف: {basis}")
 

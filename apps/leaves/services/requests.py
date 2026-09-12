@@ -140,7 +140,7 @@ SPECS = {
     RequestType.OVERTIME: RequestSpec(
         code="overtime", name_ar="طلب اعتماد عمل إضافي", name_en="Overtime approval", icon="clock",
         required_fields=("work_date", "from_time", "to_time"),
-        optional_fields=("reason", "note"),
+        optional_fields=("rate_choice", "reason", "note"),
         hint_ar="من أي وقت إلى أي وقت — تُحتسب بالدقيقة لا بالساعة",
         hint_en="From when to when — counted by the minute",
     ),
@@ -375,6 +375,33 @@ DAILY_UNIQUE = {
 }
 
 
+def validate_overtime_rate(employment, payload):
+    """
+    يتحقّق من معامِل الإضافي المطلوب (ق-137).
+
+    **الموظف يختار ×1.5 أو ×2**، والمعتمِد يقبل أو يرفض ولا
+    يعدّل — فالتعديل بعد التقديم يجعل الموظف يوقّع على غير ما طلب.
+
+    ⚠️ **ولا يظهر الخيار إلا إن سمحت الموارد**: شركةٌ بأساسٍ واحد
+    لا تُسأل سؤالًا لا معنى له.
+    """
+    from apps.payroll.models import PayrollSettings
+
+    choice = str(payload.get("rate_choice") or "").strip()
+    if not choice:
+        return "x1_5"
+
+    if choice not in ("x1_5", "x2"):
+        raise RequestError("معامِل غير معروف")
+
+    st = PayrollSettings.objects.filter(
+        company_id=employment.company_id).first()
+    if choice == "x2" and not (st and st.allow_overtime_rate_choice):
+        raise RequestError(
+            "معامِل ×2 غير مفعَّل في شركتكم — راجع الموارد البشرية")
+    return choice
+
+
 def validate_custom_payment(employment, payload):
     """
     يتحقّق أن المخصّص **مُسنَدٌ له** وأن المبلغ في حدوده.
@@ -487,6 +514,10 @@ def create_request(*, employment, request_type, payload, note="",
     # ق-134: المخصّص مُسنَدٌ ومبلغه في حدوده
     if request_type == RequestType.CUSTOM_PAYMENT:
         validate_custom_payment(employment, payload)
+
+    # ق-137: معامِل الإضافي — ولا يُختار إلا إن سمحت الموارد
+    if request_type == RequestType.OVERTIME:
+        validate_overtime_rate(employment, payload)
 
     # ولا طلبان من نوعٍ واحد في يومٍ واحد
     check_daily_duplicate(employment, request_type, payload)
@@ -958,6 +989,8 @@ def _effect_overtime(req):
     before = day.approved_overtime_minutes or 0
     minutes = int(p.get("minutes") or float(p.get("hours", 0)) * 60)
     day.approved_overtime_minutes = minutes
+    # ق-137: المعامِل يُحفظ مع دقائقه — فيصل المسير بما اعتُمد به
+    day.overtime_rate_choice = str(p.get("rate_choice") or "")
     day.is_manually_adjusted = True
     day.adjustment_note = f"إضافي معتمد بطلب {req.request_no}"
     day.save()

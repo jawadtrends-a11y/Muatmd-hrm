@@ -97,6 +97,10 @@ class OvertimeBasis(models.TextChoices):
         "أجر ساعة الأجر الكامل + 50% من ساعة الأساسي")
     BASIC_TIMES_1_5 = "basic_x1_5", _("أجر ساعة الأساسي × 1.5")
     FULL_TIMES_1_5 = "full_x1_5", _("أجر ساعة الأجر الكامل × 1.5")
+    # ق-137: صيغتان تعتمدهما شركاتٌ في العطلة والعيد
+    FULL_PLUS_BASIC = "full_plus_basic", _(
+        "أجر ساعة الأجر الكامل + ساعة الأساسي")
+    FULL_TIMES_2 = "full_x2", _("أجر ساعة الأجر الكامل × 2")
 
 
 class PayrollRunType(models.TextChoices):
@@ -186,6 +190,21 @@ class PayrollSettings(CompanyScopedModel):
         _("أساس العمل الإضافي"), max_length=30,
         choices=OvertimeBasis.choices,
         default=OvertimeBasis.FULL_PLUS_HALF_BASIC)
+
+    # ق-137: **معامِل الإضافي يُختار في الطلب** لا يُستنتج من
+    # التقويم (قرار جواد).
+    #
+    # فالموظف يطلب بـ×1.5 أو ×2، والمعتمِد **يقبل أو يرفض** ولا
+    # يعدّل — والاختيار لا يظهر إلا إن سمحت به الموارد.
+    allow_overtime_rate_choice = models.BooleanField(
+        _("السماح باختيار معامِل الإضافي"), default=False,
+        help_text=_("يُظهر للموظف خيار ×2 في طلب الإضافي — للعطل "
+                    "والظروف التي تعتمدها الشركة"))
+    overtime_basis_x2 = models.CharField(
+        _("أساس معامِل ×2"), max_length=30,
+        choices=OvertimeBasis.choices,
+        default=OvertimeBasis.FULL_TIMES_2,
+        help_text=_("يُستعمل حين يختار الموظف ×2 ويُعتمد طلبه"))
 
     # نهاية الخدمة: الشركة تحدد ما يدخل عبر أعلام المكوّنات
     eosb_note = models.TextField(

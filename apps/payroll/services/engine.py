@@ -12,7 +12,7 @@
   • الغياب والإجازة بلا أجر منفصلان (ق-32)
 """
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -196,17 +196,69 @@ def calculate_slip(*, run, employment, settings_obj):
         "absence_base": str(absence_base)}
 
     # ── 4. العمل الإضافي ──
+    #
+    # ق-137: **الدقائق تُفصَّل بمعامِلها** لا تُجمع بأساسٍ واحد.
+    #
+    # ⚠️ فمن اعتُمد له ×2 يُحتسب به، ومن اعتُمد له الأساس يُحتسب
+    # بأساسه — وجمعُهما يظلم أحدهما.
+    from apps.attendance.models import AttendanceDay as _AD
+
+    by_rate = {}
+    # نهاية الشهر بلا monthrange — فهي مظلَّلة في هذا النطاق
+    _ot_start = date(run.period_year, run.period_month, 1)
+    _ot_end = (date(run.period_year + 1, 1, 1)
+               if run.period_month == 12
+               else date(run.period_year, run.period_month + 1, 1)
+               ) - timedelta(days=1)
+    for row in (_AD.objects
+                .filter(employment=employment,
+                        work_date__gte=_ot_start, work_date__lte=_ot_end,
+                        approved_overtime_minutes__gt=0)
+                .values("overtime_rate_choice",
+                        "approved_overtime_minutes")):
+        key = row["overtime_rate_choice"] or ""
+        by_rate[key] = by_rate.get(key, 0) + row["approved_overtime_minutes"]
+
+    # وإن لم تُفصَّل (بيانات قديمة) فالمجموع بأساسٍ واحد
+    if not by_rate and overtime_minutes > 0:
+        by_rate = {"": overtime_minutes}
+
+    # ⚠️ والتفصيل **يغلب الملخّص الشهريّ**: فالملخّص قد يتأخّر عن
+    # اعتمادٍ جرى بعده، والأيام هي المصدر.
+    detailed_minutes = sum(by_rate.values())
+    if detailed_minutes:
+        overtime_minutes = detailed_minutes
+
     if overtime_minutes > 0:
+        ot_total = ZERO
+        ot_parts = []
+        for rate_key, mins in sorted(by_rate.items()):
+            basis = (settings_obj.overtime_basis_x2 if rate_key == "x2"
+                     else settings_obj.overtime_basis)
+            part = calculate_overtime(
+                overtime_minutes=mins, basic_salary=basic,
+                full_wage=gross, basis=basis,
+                days_per_month=days_per_month,
+                hours_per_day=hours_per_day)
+            ot_total += part.total
+            ot_parts.append({"rate": rate_key or "default",
+                             "minutes": mins,
+                             "amount": str(r2(part.total)),
+                             "basis": part.basis})
+
         ot = calculate_overtime(
             overtime_minutes=overtime_minutes, basic_salary=basic,
             full_wage=gross, basis=settings_obj.overtime_basis,
             days_per_month=days_per_month, hours_per_day=hours_per_day)
+        expl = (ot.explanation if len(ot_parts) == 1
+                else "بمعامِلات مختلفة حسب اعتماد كل يوم")
         earnings.append({
             "code": "OVERTIME", "name_ar": "العمل الإضافي",
-            "amount": ot.total, "explanation": ot.explanation, "order": 40})
-        gross += ot.total
+            "amount": ot_total, "explanation": expl, "order": 40})
+        gross += ot_total
         trace["overtime"] = {"minutes": overtime_minutes,
-                             "amount": str(ot.total),
+                             "amount": str(ot_total),
+                             "parts": ot_parts,
                              "basis": ot.basis,
                              "explanation": ot.explanation}
 

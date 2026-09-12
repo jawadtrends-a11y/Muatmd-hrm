@@ -184,6 +184,14 @@ class AttendanceDay(CompanyScopedModel):
         _("الإضافي المعتمد"), default=0,
         help_text=_("لا يدخل المسير إلا بعد الاعتماد"))
 
+    # ق-137: **معامِل الإضافي المعتمد** — يُحفظ مع دقائقه.
+    #
+    # ⚠️ فالدقائق تصل المسير مجمّعةً، وبلا حفظ المعامِل يُحتسب
+    # الجميع بأساسٍ واحد — ويضيع ما اعتُمد بـ×2.
+    overtime_rate_choice = models.CharField(
+        _("معامِل الإضافي"), max_length=10, blank=True,
+        help_text=_("x1_5 أو x2 — فارغ = الأساس الافتراضي"))
+
     status = models.CharField(_("الحالة"), max_length=20,
                               choices=DayStatus.choices, db_index=True)
     punch_count = models.PositiveSmallIntegerField(_("عدد البصمات"), default=0)
