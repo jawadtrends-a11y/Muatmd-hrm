@@ -9,6 +9,7 @@ from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.payroll import api_allowances as allowances_api
 from apps.payroll import api_recurring as recurring_api
+from apps.payroll import api_expenses as expenses_api
 from apps.accounts import api_company as accounts_company_api
 from apps.accounts import api_subscribe as subscribe_api
 from apps.accounts import api_signup as signup_api
@@ -205,6 +206,17 @@ urlpatterns = [
          allowances_api.allowance_eligibility, name="allowance-eligibility"),
     path("api/me/allowances/", allowances_api.my_allowances,
          name="my-allowances"),
+    # ق-139: المصروفات
+    path("api/expense-categories/", expenses_api.categories,
+         name="expense-categories"),
+    path("api/expense-categories/<int:category_id>/",
+         expenses_api.category_detail, name="expense-category-detail"),
+    path("api/expenses/", expenses_api.claims, name="expense-claims"),
+    path("api/expenses/<int:claim_id>/decide/", expenses_api.decide_claim,
+         name="expense-decide"),
+    path("api/expenses/<int:claim_id>/settle/", expenses_api.settle_claim,
+         name="expense-settle"),
+
     # ق-138: مخالصة الإجازة
     path("api/employees/<int:employment_id>/leave-cashout/",
          allowances_api.leave_cashout, name="leave-cashout"),

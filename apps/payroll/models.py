@@ -203,6 +203,17 @@ class PayrollSettings(CompanyScopedModel):
     #
     # فلا نمنعه (شركاتٌ تعمله)، **وننبّه عليه**، ونجعله خيارًا
     # مطفأً افتراضًا (قرار جواد).
+    # ق-139: **إعدادات المصروفات** — السقف في الفئة، والصلاحية
+    # وآلية الصرف هنا (قرار جواد).
+    expenses_enabled = models.BooleanField(
+        _("تمكين المصروفات"), default=False)
+    expense_max_age_days = models.PositiveSmallIntegerField(
+        _("أقصى قِدَم للمطالبة (يومًا)"), default=90,
+        help_text=_("⚠️ فمطالبةٌ بعد سنة يتعذّر التحقّق منها"))
+    expense_default_method = models.CharField(
+        _("آلية الصرف الافتراضية"), max_length=15, default="payroll",
+        help_text=_("payroll = في المسير · outside = خارجه"))
+
     allow_leave_cashout = models.BooleanField(
         _("السماح بمخالصة الإجازة أثناء الخدمة"), default=False,
         help_text=_("⚠️ الصرف بلا استخدامٍ فعليّ أو انتهاء علاقة "
@@ -713,4 +724,10 @@ from apps.payroll.models_recurring import (  # noqa: E402,F401
 # تأجيل بنود القسيمة (ق-136)
 from apps.payroll.models_deferral import (  # noqa: E402,F401
     DeferralStatus, PayslipDeferral,
+)
+
+
+# المصروفات (ق-139)
+from apps.payroll.models_expenses import (  # noqa: E402,F401
+    ExpenseCategory, ExpenseClaim, ExpenseStatus,
 )
