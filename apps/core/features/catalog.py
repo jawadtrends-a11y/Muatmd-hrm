@@ -63,7 +63,8 @@ FEATURES = [
     _f("manager_edit_hours", "attendance", "تعديل ساعات الحضور من المدير",
        implemented=True, guarded_at="/api/attendance/days/"),
     _f("employee_tracking", "attendance", "تتبع الموظفين"),
-    _f("work_activities", "attendance", "أنشطة العمل"),
+    _f("work_activities", "attendance", "أنشطة العمل",
+       implemented=True, guarded_at="/api/activities/"),
 
     # ══ الإجازات ══
     _f("leaves", "leaves", "الإجازات",

@@ -37,6 +37,7 @@ from apps.accounts import api_plans as plans_api
 from apps.accounts import api_auth as client_auth
 from apps.leaves import api as leaves_api
 from apps.leaves import api_custom_types as custom_types_api
+from apps.employees import api_activities as activities_api
 from apps.notifications import api as notifications_api
 
 
@@ -363,6 +364,15 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-143: أنشطة العمل
+    path("api/activities/", activities_api.activities, name="activities"),
+    path("api/me/activities/", activities_api.my_activities,
+         name="my-activities"),
+    path("api/activities/<int:activity_id>/report/",
+         activities_api.report_activity, name="report-activity"),
+    path("api/activities/<int:activity_id>/review/",
+         activities_api.review_activity, name="review-activity"),
+
     # ق-142: أنواع الطلبات المخصّصة
     path("api/custom-request-types/", custom_types_api.custom_types,
          name="custom-request-types"),
