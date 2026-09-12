@@ -471,3 +471,9 @@ from apps.employees.models_penalties import (  # noqa: E402,F401
 from apps.employees.models_tags_tasks import (  # noqa: E402,F401
     EmployeeTag, EmployeeTagAssignment, Task, TaskPriority, TaskStatus,
 )
+
+
+# أنشطة العمل (ق-143)
+from apps.employees.models_activities import (  # noqa: E402,F401
+    ActivityStatus, PayBasis, PayEffect, WorkActivity,
+)

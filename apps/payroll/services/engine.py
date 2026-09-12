@@ -407,6 +407,37 @@ def calculate_slip(*, run, employment, settings_obj):
             for r, a in recurring_applied
         ]
 
+    # ── أنشطة العمل (ق-143) ──
+    #
+    # ⚠️ **المراجَع وحده يدخل**: فمالٌ يُصرف أو يُحسم بقول صاحبه
+    # بلا مراجعة — والمراجعة هي الضابط.
+    from apps.employees.models import WorkActivity
+
+    acts = list(WorkActivity.objects.filter(
+        employment=employment, is_reviewed=True, is_paid=False,
+        settled_amount__isnull=False,
+        work_date__year=run.period_year,
+        work_date__month=run.period_month))
+
+    act_total = sum((a.settled_amount for a in acts), ZERO)
+    if act_total:
+        entry = {
+            "code": "ACTIVITY",
+            "name_ar": "أنشطة العمل",
+            "name_en": "Work activities",
+            "amount": abs(act_total),
+            "explanation": (f"{len(acts)} نشاطًا مراجَعًا — "
+                            f"{'مكافأة' if act_total > 0 else 'حسم'}"),
+            "order": 145,
+        }
+        if act_total > 0:
+            earnings.append(entry)
+            gross += act_total
+        else:
+            deductions.append(entry)
+        trace["activities"] = {"count": len(acts),
+                               "amount": str(r2(act_total))}
+
     # ── البنود المؤجَّلة (ق-136) ──
     #
     # ⚠️ **الراتب لا يُؤجَّل** — وإنما بندٌ منه: قسط سلفة لظرفٍ
@@ -786,6 +817,16 @@ def approve_run(run, approved_by_person):
             if rec.applied_count >= rec.max_occurrences:
                 RecurringAdjustment.objects.filter(id=rec.id).update(
                     is_active=False)
+
+    # ق-143: أنشطة العمل تُعلَّم مدفوعةً — عند الاعتماد لا الحساب
+    from apps.employees.models import WorkActivity
+
+    WorkActivity.objects.filter(
+        company=run.company, is_reviewed=True, is_paid=False,
+        work_date__year=run.period_year,
+        work_date__month=run.period_month).update(
+            is_paid=True, payroll_year=run.period_year,
+            payroll_month=run.period_month)
 
     # ق-136: المؤجَّلات تُعلَّم مطبَّقةً — **عند الاعتماد لا الحساب**
     #
