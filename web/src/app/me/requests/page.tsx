@@ -167,6 +167,10 @@ export default function MyRequestsPage() {
   // ق-124: فترات الشركة — لطلب تغيير فترة العمل
   const [shifts, setShifts] = useState<
     { id: number; name_ar: string; name_en?: string }[]>([]);
+  // ق-134: مخصّصاته — وما طُلب اليوم معلَّم
+  const [allowances, setAllowances] = useState<
+    { allowance_id: number; name_ar: string; mode: string;
+      amount: string; claimed_today?: boolean }[]>([]);
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(true);
@@ -189,6 +193,10 @@ export default function MyRequestsPage() {
         "/attendance/shifts/")
         .then((d) => d.shifts || [])
         .catch(() => []),
+      // ق-134: مخصّصاته
+      apiGet<{ allowance_id: number; name_ar: string; mode: string;
+               amount: string; claimed_today?: boolean }[]>(
+        "/me/allowances/").catch(() => []),
       // ق-60: الموظف يرى ما يبادر به هو فقط
       apiGet<{ reasons: { code: string; name_ar: string }[] }>(
         "/payroll/termination-reasons/?initiator=employee")
@@ -198,11 +206,12 @@ export default function MyRequestsPage() {
       apiGet<{ employment_id: number; employee_no: string;
                name_ar: string }[]>("/me/deputies/")
         .catch(() => []),
-    ]).then(([t, lt, sh, rs, dp]) => {
+    ]).then(([t, lt, sh, al, rs, dp]) => {
       setTypes(t.types || []);
       setNeedsSuccessor(!!t.needs_successor);
       setLeaveTypes(lt);
       setShifts(sh);
+      setAllowances(al);
       setReasons(rs);
       setDeputies(dp);
       setBusy(false);
@@ -429,7 +438,7 @@ export default function MyRequestsPage() {
               <DynField key={f} name={f} required value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
                 leaveTypes={leaveTypes} terminationReasons={reasons}
-                shifts={shifts} L={L} />
+                shifts={shifts} allowances={allowances} L={L} />
             ))}
             {/* ق-70: المرفق في الإجازات — إلزامي حين يطلبه نوعها
                 (المرضية والوضع والخاصة)، اختياري في غيرها.
@@ -489,7 +498,7 @@ export default function MyRequestsPage() {
                 value={values.attachment_url ?? ""}
                 onChange={(v) => setValues({ ...values, attachment_url: v })}
                 leaveTypes={leaveTypes} terminationReasons={reasons}
-                shifts={shifts} L={L} />
+                shifts={shifts} allowances={allowances} L={L} />
             )}
             {selected.optional_fields.filter((f) => {
               // الخليفة له حقله المخصّص أعلاه — والرسم التلقائي
@@ -509,7 +518,7 @@ export default function MyRequestsPage() {
                 value={values[f] ?? ""}
                 onChange={(v) => setValues({ ...values, [f]: v })}
                 leaveTypes={leaveTypes} terminationReasons={reasons}
-                shifts={shifts} L={L} />
+                shifts={shifts} allowances={allowances} L={L} />
             ))}
           </div>
 

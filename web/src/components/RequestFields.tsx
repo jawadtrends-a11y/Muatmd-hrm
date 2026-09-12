@@ -83,6 +83,8 @@ export function fieldKind(name: string): string {
   if (name === "certificate_type") return "certificate_type";
   // ق-124: فترة العمل قائمةٌ من فترات الشركة
   if (name === "shift_id") return "shift";
+  // ق-134: المخصّص قائمةٌ ممّا أُسند له — ولا يُكتب يدويًّا
+  if (name === "allowance_id") return "allowance";
   if (["reason", "purpose", "note",
        "subject"].includes(name)) return "textarea";
   return "text";
@@ -189,6 +191,7 @@ function AttachmentField({
 export default function DynField({
   name, required, value, onChange, leaveTypes, terminationReasons, L,
   shifts = [],
+  allowances = [],
 }: {
   name: string;
   required: boolean;
@@ -198,6 +201,9 @@ export default function DynField({
                 name_en?: string }[];
   /** ق-124: فترات الشركة — لطلب تغيير فترة العمل */
   shifts?: { id: number; name_ar: string; name_en?: string }[];
+  /** ق-134: مخصّصاته — لطلب الصرف المخصّص */
+  allowances?: { allowance_id: number; name_ar: string; mode: string;
+                 amount: string; claimed_today?: boolean }[];
   terminationReasons: { code: string; name_ar: string; name_en?: string }[];
   L: (k: string, f?: string) => string;
 }) {
@@ -242,6 +248,21 @@ export default function DynField({
           {leaveTypes.map((t) => (
             <option key={t.code} value={t.code}>
               {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
+            </option>
+          ))}
+        </select>
+      ) : kind === "allowance" ? (
+        <select className="select" value={value}
+          onChange={(e) => onChange(e.target.value)}>
+          <option value="">—</option>
+          {allowances.map((a) => (
+            // ⚠️ المطلوب اليوم يُعطَّل — فالشاشة تمنع التكرار قبل
+            // الإرسال، ولا يصطدم الموظف برفضٍ كان يمكن تفاديه
+            <option key={a.allowance_id} value={String(a.allowance_id)}
+                    disabled={a.claimed_today}>
+              {a.name_ar} — {a.amount}
+              {a.mode === "cap" ? " (سقف)" : ""}
+              {a.claimed_today ? " — طُلب اليوم" : ""}
             </option>
           ))}
         </select>

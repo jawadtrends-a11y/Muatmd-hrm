@@ -91,6 +91,11 @@ const T: Dict = {
     ar: "تصنيفاتٌ تُرشّح بها قوائمك",
     en: "Labels to filter your lists",
   },
+  allowancesLink: { ar: "المخصّصات المصروفة", en: "Claimable allowances" },
+  allowancesHint: {
+    ar: "غداء عمل ومواصلات وغيرها — ومن يستحقّها",
+    en: "Meal, transport and more — and who may claim",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -534,6 +539,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-134: المخصّصات المصروفة */}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/allowances" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("allowancesLink")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("allowancesHint")}
           </span>
         </Link>
         )}
