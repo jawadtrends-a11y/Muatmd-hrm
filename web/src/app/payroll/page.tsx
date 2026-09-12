@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 /**
  * شاشة المسيرات — دورة كاملة:
@@ -34,6 +35,7 @@ const T: Dict = {
     en: "An approved run is a final financial record",
   },
   newRun: { ar: "مسير جديد", en: "New run" },
+  recurring: { ar: "البنود المكرّرة", en: "Recurring" },
   runNo: { ar: "رقم المسير", en: "Run No." },
   period: { ar: "الفترة", en: "Period" },
   type: { ar: "النوع", en: "Type" },
@@ -416,10 +418,17 @@ export default function PayrollPage() {
             {L("subtitle")}
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setDialog(true)}>
-          <IcPlus size={17} />
-          {L("newRun")}
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          {/* ق-135: البنود المكرّرة — تُدار من هنا */}
+          <Link href="/payroll/recurring" className="btn">
+            {L("recurring")}
+          </Link>
+          <button className="btn btn-primary"
+                  onClick={() => setDialog(true)}>
+            <IcPlus size={17} />
+            {L("newRun")}
+          </button>
+        </div>
       </div>
 
       {toast && (

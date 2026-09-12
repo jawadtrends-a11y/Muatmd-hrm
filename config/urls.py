@@ -8,6 +8,7 @@ from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
 from apps.payroll import api_allowances as allowances_api
+from apps.payroll import api_recurring as recurring_api
 from apps.accounts import api_company as accounts_company_api
 from apps.accounts import api_subscribe as subscribe_api
 from apps.accounts import api_signup as signup_api
@@ -204,6 +205,10 @@ urlpatterns = [
          allowances_api.allowance_eligibility, name="allowance-eligibility"),
     path("api/me/allowances/", allowances_api.my_allowances,
          name="my-allowances"),
+    # ق-135: البنود المكرّرة
+    path("api/recurring/", recurring_api.recurring, name="recurring"),
+    path("api/recurring/<int:recurring_id>/",
+         recurring_api.recurring_detail, name="recurring-detail"),
     path("api/allowance-claims/", allowances_api.claims,
          name="allowance-claims"),
     path("api/allowance-claims/<int:claim_id>/settle/",

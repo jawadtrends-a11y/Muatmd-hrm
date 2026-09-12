@@ -136,7 +136,8 @@ FEATURES = [
     _f("payroll_types", "payroll", "أنواع مسيرات الرواتب",
        implemented=True, guarded_at="PayrollRunType"),
     _f("payroll_approval_chain", "payroll", "سلسلة موافقات مسير الرواتب"),
-    _f("recurring_adjustments", "payroll", "حسومات وإضافات مكررة"),
+    _f("recurring_adjustments", "payroll", "حسومات وإضافات مكررة",
+       implemented=True, guarded_at="/api/recurring/"),
     _f("wps_export", "payroll", "ملف حماية الأجور",
        implemented=True, guarded_at="/api/payroll/<id>/bank-file/"),
 

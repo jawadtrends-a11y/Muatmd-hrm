@@ -671,3 +671,9 @@ from apps.payroll.models_allowances import (  # noqa: E402,F401
 from apps.payroll.models_disbursement import (  # noqa: E402,F401
     AllowanceClaim, DisbursementMethod,
 )
+
+
+# البنود المكرّرة (ق-135)
+from apps.payroll.models_recurring import (  # noqa: E402,F401
+    RecurringAdjustment, RecurringKind,
+)

@@ -311,6 +311,48 @@ def calculate_slip(*, run, employment, settings_obj):
                 for a, d in advance_deductions
             ]
 
+    # ── البنود المكرّرة (ق-135) ──
+    #
+    # **بندٌ يتكرّر شهريًّا بلا إدخال** — بدل سكنٍ إضافيّ أو حسم
+    # قرض. والموارد تُدخله مرّةً ويتكرّر في مداه.
+    #
+    # ⚠️ **والعدّاد يُرفع عند الاعتماد لا هنا**: مسيرٌ يُحسب ثم
+    # يُلغى لا يستهلك قسطًا — وإلا نقص قسطٌ بلا صرف.
+    from apps.payroll.models import RecurringAdjustment, RecurringKind
+
+    recurring_applied = []
+    for rec in (RecurringAdjustment.objects
+                .filter(employment=employment, is_active=True)
+                .select_related("component")):
+        if not rec.applies_to(run.period_year, run.period_month):
+            continue
+
+        left = rec.remaining
+        entry = {
+            "code": rec.component.code,
+            "name_ar": rec.component.name_ar,
+            "name_en": getattr(rec.component, "name_en", "") or "",
+            "amount": rec.amount,
+            "explanation": (
+                (rec.reason or "بند مكرّر")
+                + (f" — يتبقّى {left - 1} قسطًا" if left else "")),
+            "order": 140,
+        }
+        if rec.kind == RecurringKind.DEDUCTION:
+            deductions.append(entry)
+        else:
+            earnings.append(entry)
+            gross += rec.amount
+        recurring_applied.append((rec, rec.amount))
+
+    if recurring_applied:
+        trace["recurring"] = [
+            {"id": r.id, "component": r.component.code,
+             "kind": r.kind, "amount": str(r2(a)),
+             "applied_count": r.applied_count}
+            for r, a in recurring_applied
+        ]
+
     # ── 8. استقطاعات الهيكل ──
     for comp, amount in lines_src:
         if comp.component_type == ComponentType.DEDUCTION and amount > 0:
@@ -583,6 +625,32 @@ def approve_run(run, approved_by_person):
     AttendanceMonthlySummary.objects.filter(
         company=run.company, period_year=run.period_year,
         period_month=run.period_month).update(is_final=True)
+
+    # ق-135: **العدّاد يُرفع عند الاعتماد لا عند الحساب**.
+    #
+    # ⚠️ فمسيرٌ يُحسب ثم يُلغى لا يستهلك قسطًا — وإلا نقص قسطٌ بلا
+    # صرف، وانتهى القرض قبل سداده.
+    #
+    # والرفع **بما طُبّق فعلًا** في القسائم لا بكل بندٍ سارٍ: من
+    # لم يُحسب له مسير (التحق بعده مثلًا) لا يُستهلك قسطه.
+    from apps.payroll.models import RecurringAdjustment
+
+    applied_ids = []
+    for slip in run.payslips.all():
+        for row in (slip.calculation_trace or {}).get("recurring", []):
+            applied_ids.append(row["id"])
+
+    if applied_ids:
+        from django.db.models import F
+
+        RecurringAdjustment.objects.filter(id__in=applied_ids).update(
+            applied_count=F("applied_count") + 1)
+        # وما استُهلك بالكامل يُطفأ — فلا يظهر في قوائم السارية
+        for rec in RecurringAdjustment.objects.filter(
+                id__in=applied_ids, max_occurrences__isnull=False):
+            if rec.applied_count >= rec.max_occurrences:
+                RecurringAdjustment.objects.filter(id=rec.id).update(
+                    is_active=False)
 
     from apps.core.services.audit import log_action
     log_action(instance=run, action="approve",
