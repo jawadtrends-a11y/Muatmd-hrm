@@ -156,3 +156,118 @@ def recurring_detail(request, recurring_id):
         r.max_occurrences = int(d["max_occurrences"])
     r.save()
     return Response(_json(r))
+
+
+# ══════════ تأجيل بنود القسيمة (ق-136) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def deferrals(request):
+    """
+    البنود المؤجَّلة — عرضًا وتأجيلًا.
+
+    ⚠️ **والراتب لا يُؤجَّل**: أجرٌ مستحقٌّ في موعده.
+    """
+    from apps.payroll.models import DeferralStatus, Payslip, PayslipDeferral
+    from apps.payroll.services import deferral as dsvc
+
+    Gate.require(request.user, "payroll.view")
+    Features.require(_company_id(request), "payslip_defer")
+
+    if request.method == "GET":
+        qs = (PayslipDeferral.objects
+              .filter(company_id=_company_id(request))
+              .select_related("employment__person"))
+        if request.GET.get("status"):
+            qs = qs.filter(status=request.GET["status"])
+        else:
+            qs = qs.filter(status=DeferralStatus.PENDING)
+
+        return Response({
+            "rows": [{
+                "id": d.id,
+                "employee": d.employment.person.display_name,
+                "employee_no": d.employment.employee_no,
+                "component_code": d.component_code,
+                "name_ar": d.name_ar,
+                "amount": str(d.amount),
+                "from": f"{d.from_year}-{d.from_month:02d}",
+                "to": f"{d.to_year}-{d.to_month:02d}",
+                "reason": d.reason,
+                "status": d.status,
+                "status_label": d.get_status_display(),
+            } for d in qs[:300]],
+        })
+
+    Gate.require(request.user, "payroll.create")
+    slip = Payslip.objects.filter(
+        id=request.data.get("payslip_id"),
+        company_id=_company_id(request)).first()
+    if slip is None:
+        return Response({"detail": "القسيمة غير موجودة"}, status=404)
+
+    actor = getattr(request.user, "person", None)
+    try:
+        d = dsvc.defer(
+            payslip=slip,
+            component_code=request.data.get("component_code", ""),
+            to_year=request.data.get("to_year"),
+            to_month=request.data.get("to_month"),
+            reason=request.data.get("reason", ""),
+            by_person_id=actor.id if actor else None)
+    except (dsvc.DeferralError, TypeError, ValueError) as e:
+        return Response({"detail": str(e)}, status=400)
+
+    return Response({"id": d.id, "component_code": d.component_code,
+                     "to": f"{d.to_year}-{d.to_month:02d}"},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def payslip_deferrable(request, payslip_id):
+    """بنود القسيمة التي يجوز تأجيلها — والراتب خارجها."""
+    from apps.payroll.models import Payslip
+    from apps.payroll.services import deferral as dsvc
+
+    Gate.require(request.user, "payroll.view")
+    Features.require(_company_id(request), "payslip_defer")
+
+    slip = Payslip.objects.filter(
+        id=payslip_id, company_id=_company_id(request)).first()
+    if slip is None:
+        return Response({"detail": "غير موجودة"}, status=404)
+
+    return Response({
+        "payslip_id": slip.id,
+        "employee": slip.employment.person.display_name,
+        "period": f"{slip.run.period_year}-{slip.run.period_month:02d}",
+        "locked": slip.run.is_locked,
+        "lines": [{
+            "component_code": l.component_code,
+            "name_ar": l.name_ar,
+            "line_type": l.line_type,
+            "amount": str(l.amount),
+        } for l in dsvc.deferrable_lines(slip)],
+    })
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def deferral_detail(request, deferral_id):
+    """إلغاء تأجيلٍ لم يُطبَّق — فيعود البند لشهره."""
+    from apps.payroll.models import PayslipDeferral
+    from apps.payroll.services import deferral as dsvc
+
+    Gate.require(request.user, "payroll.create")
+    Features.require(_company_id(request), "payslip_defer")
+
+    d = PayslipDeferral.objects.filter(
+        id=deferral_id, company_id=_company_id(request)).first()
+    if d is None:
+        return Response({"detail": "غير موجود"}, status=404)
+    try:
+        dsvc.cancel(deferral=d)
+    except dsvc.DeferralError as e:
+        return Response({"detail": str(e)}, status=409)
+    return Response({"cancelled": True})

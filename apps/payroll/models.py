@@ -677,3 +677,9 @@ from apps.payroll.models_disbursement import (  # noqa: E402,F401
 from apps.payroll.models_recurring import (  # noqa: E402,F401
     RecurringAdjustment, RecurringKind,
 )
+
+
+# تأجيل بنود القسيمة (ق-136)
+from apps.payroll.models_deferral import (  # noqa: E402,F401
+    DeferralStatus, PayslipDeferral,
+)

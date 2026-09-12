@@ -353,6 +353,67 @@ def calculate_slip(*, run, employment, settings_obj):
             for r, a in recurring_applied
         ]
 
+    # ── البنود المؤجَّلة (ق-136) ──
+    #
+    # ⚠️ **الراتب لا يُؤجَّل** — وإنما بندٌ منه: قسط سلفة لظرفٍ
+    # طارئ أو حسمٌ بقرار. والمؤجَّل يُنزع من شهره ويُدرج في شهر
+    # وجهته.
+    from apps.payroll.models import DeferralStatus, PayslipDeferral
+
+    # ما أُجِّل **من هذا الشهر** يُنزع
+    deferred_codes = set(
+        PayslipDeferral.objects.filter(
+            employment=employment,
+            from_year=run.period_year, from_month=run.period_month,
+            status=DeferralStatus.PENDING
+        ).values_list("component_code", flat=True))
+
+    if deferred_codes:
+        def _keep(group):
+            out = []
+            for e in group:
+                if e["code"] in deferred_codes:
+                    continue
+                out.append(e)
+            return out
+
+        removed_gross = sum(
+            (e["amount"] for e in earnings if e["code"] in deferred_codes),
+            ZERO)
+        earnings = _keep(earnings)
+        deductions = _keep(deductions)
+        gross -= removed_gross
+        trace["deferred_out"] = sorted(deferred_codes)
+
+    # وما أُجِّل **إلى هذا الشهر** يُدرج
+    incoming = list(PayslipDeferral.objects.filter(
+        employment=employment,
+        to_year=run.period_year, to_month=run.period_month,
+        status=DeferralStatus.PENDING))
+
+    for d in incoming:
+        entry = {
+            "code": d.component_code,
+            "name_ar": f"{d.name_ar} (مؤجَّل من "
+                       f"{d.from_year}-{d.from_month:02d})",
+            "name_en": "", "amount": d.amount,
+            "explanation": d.reason or "بند مؤجَّل",
+            "order": 150,
+        }
+        if d.line_type == PayslipLineType.DEDUCTION:
+            deductions.append(entry)
+        else:
+            earnings.append(entry)
+            gross += d.amount
+
+    if incoming:
+        trace["deferred_in"] = [
+            {"id": d.id, "code": d.component_code,
+             "amount": str(r2(d.amount)),
+             "from": f"{d.from_year}-{d.from_month:02d}"}
+            for d in incoming
+        ]
+
     # ── 8. استقطاعات الهيكل ──
     for comp, amount in lines_src:
         if comp.component_type == ComponentType.DEDUCTION and amount > 0:
@@ -651,6 +712,34 @@ def approve_run(run, approved_by_person):
             if rec.applied_count >= rec.max_occurrences:
                 RecurringAdjustment.objects.filter(id=rec.id).update(
                     is_active=False)
+
+    # ق-136: المؤجَّلات تُعلَّم مطبَّقةً — **عند الاعتماد لا الحساب**
+    #
+    # ⚠️ وقسط السلفة المؤجَّل **يمتدّ جدولها شهرًا** لا يُضاعَف
+    # القادم: فالتأجيل تخفيفٌ لظرفٍ طارئ، ومضاعفتُه تنقضه.
+    from apps.payroll.models import DeferralStatus, PayslipDeferral
+
+    applied_defers = []
+    for slip in run.payslips.all():
+        for row in (slip.calculation_trace or {}).get("deferred_in", []):
+            applied_defers.append(row["id"])
+
+    # وما أُجِّل **من** هذا المسير يبقى معلَّقًا حتى شهر وجهته
+    if applied_defers:
+        PayslipDeferral.objects.filter(id__in=applied_defers).update(
+            status=DeferralStatus.APPLIED, applied_run_id=run.id)
+
+    # وامتداد جدول السلف المؤجَّلة أقساطها
+    from apps.employees.models import Advance
+
+    for d in PayslipDeferral.objects.filter(
+            from_year=run.period_year, from_month=run.period_month,
+            company=run.company, advance_id__isnull=False,
+            status=DeferralStatus.PENDING):
+        adv = Advance.objects.filter(id=d.advance_id).first()
+        if adv and adv.installments_count:
+            Advance.objects.filter(id=adv.id).update(
+                installments_count=adv.installments_count + 1)
 
     from apps.core.services.audit import log_action
     log_action(instance=run, action="approve",

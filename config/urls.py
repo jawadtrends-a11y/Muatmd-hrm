@@ -209,6 +209,12 @@ urlpatterns = [
     path("api/recurring/", recurring_api.recurring, name="recurring"),
     path("api/recurring/<int:recurring_id>/",
          recurring_api.recurring_detail, name="recurring-detail"),
+    # ق-136: تأجيل بنود القسيمة
+    path("api/deferrals/", recurring_api.deferrals, name="deferrals"),
+    path("api/deferrals/<int:deferral_id>/",
+         recurring_api.deferral_detail, name="deferral-detail"),
+    path("api/payslips/<int:payslip_id>/deferrable/",
+         recurring_api.payslip_deferrable, name="payslip-deferrable"),
     path("api/allowance-claims/", allowances_api.claims,
          name="allowance-claims"),
     path("api/allowance-claims/<int:claim_id>/settle/",
