@@ -20,6 +20,21 @@ const T: Dict = {
   // التبويبات
   summary: { ar: "ملخص", en: "Summary" },
   payslips: { ar: "كشف الرواتب", en: "Payslips" },
+  defer: { ar: "تأجيل", en: "Defer" },
+  deferTitle: { ar: "تأجيل بند", en: "Defer a line" },
+  deferHint: {
+    ar: "⚠️ الراتب وبدلاته لا تُؤجَّل — أجرٌ مستحقٌّ في موعده",
+    en: "Salary cannot be deferred",
+  },
+  line: { ar: "البند", en: "Line" },
+  toMonth: { ar: "إلى شهر", en: "To month" },
+  toYear: { ar: "إلى سنة", en: "To year" },
+  deferReason: { ar: "السبب", en: "Reason" },
+  noDeferrable: {
+    ar: "لا بنود قابلة للتأجيل في هذه القسيمة",
+    en: "No deferrable lines",
+  },
+  deferred: { ar: "أُجِّل البند", en: "Line deferred" },
   excluded: { ar: "المستبعدون", en: "Excluded" },
   adjustments: { ar: "الحسومات والإضافات", en: "Adjustments" },
   gosi: { ar: "التأمينات", en: "GOSI" },
@@ -251,6 +266,7 @@ export default function RunDetailPage() {
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tab, setTab] = useState<Tab>("summary");
+  const [deferring, setDeferring] = useState<number | null>(null);
   const [tabData, setTabData] = useState<Record<string, unknown>[]>([]);
   const [busy, setBusy] = useState(true);
   const [tabBusy, setTabBusy] = useState(false);
@@ -301,6 +317,14 @@ export default function RunDetailPage() {
       { key: "has_variance", label: L("variance"), width: 90,
         render: (r) => r.has_variance
           ? <span className="badge badge-warn">!</span> : "—" },
+      // ق-136: تأجيل بندٍ من القسيمة — والراتب لا يُؤجَّل
+      { key: "defer", label: "", width: 90,
+        render: (r) => (
+          <button className="btn btn-sm btn-ghost"
+                  onClick={() => setDeferring(Number(r.id))}>
+            {L("defer")}
+          </button>
+        ) },
     ],
     excluded: [
       { key: "employee_no", label: "#", numeric: true, width: 90 },
@@ -435,6 +459,13 @@ export default function RunDetailPage() {
           )}
         </div>
       )}
+
+      {deferring !== null && (
+        <DeferDialog payslipId={deferring} L={L}
+                     onClose={() => setDeferring(null)}
+                     onSaved={() => { setDeferring(null);
+                                      loadTab(tab); }} />
+      )}
     </div>
   );
 }
@@ -500,6 +531,128 @@ function GosiPanel({
           {data.note}
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* ══ نافذة تأجيل بند (ق-136) ══ */
+
+function DeferDialog({ payslipId, L, onClose, onSaved }: {
+  payslipId: number;
+  L: (k: string, f?: string) => string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const now = new Date();
+  const [lines, setLines] = useState<{ component_code: string;
+                                       name_ar: string;
+                                       amount: string }[]>([]);
+  const [code, setCode] = useState("");
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [month, setMonth] = useState(String(now.getMonth() + 2));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    apiGet<{ lines: typeof lines }>(`/payslips/${payslipId}/deferrable/`)
+      .then((d) => setLines(d.lines || []))
+      .catch((e) => setErr(e instanceof ApiError ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  }, [payslipId]);
+
+  const submit = async () => {
+    setSaving(true); setErr("");
+    try {
+      await apiPost("/deferrals/", {
+        payslip_id: payslipId, component_code: code,
+        to_year: Number(year), to_month: Number(month), reason,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+    }}>
+      <div className="card" style={{ padding: 24, maxWidth: 440,
+                                     width: "100%" }}
+           onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>{L("deferTitle")}</h3>
+        <div className="muted" style={{ fontSize: ".8rem", marginTop: 4 }}>
+          {L("deferHint")}
+        </div>
+
+        {err && (
+          <div style={{ background: "var(--danger-soft)",
+                        color: "var(--danger)", padding: "9px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: ".86rem", marginTop: 14 }}>
+            {err}
+          </div>
+        )}
+
+        {busy ? (
+          <div className="muted" style={{ marginTop: 18 }}>…</div>
+        ) : lines.length === 0 ? (
+          <div className="muted" style={{ marginTop: 18,
+                                          textAlign: "center" }}>
+            {L("noDeferrable")}
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 12, marginTop: 16 }}>
+            <label className="field">
+              <span className="label">{L("line")}</span>
+              <select className="select" value={code}
+                      onChange={(e) => setCode(e.target.value)}>
+                <option value="">—</option>
+                {lines.map((l) => (
+                  <option key={l.component_code} value={l.component_code}>
+                    {l.name_ar} — {l.amount}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="row" style={{ gap: 12 }}>
+              <label className="field" style={{ width: 120 }}>
+                <span className="label">{L("toYear")}</span>
+                <input className="input num" type="number" value={year}
+                       onChange={(e) => setYear(e.target.value)} />
+              </label>
+              <label className="field" style={{ width: 110 }}>
+                <span className="label">{L("toMonth")}</span>
+                <input className="input num" type="number" min={1} max={12}
+                       value={month}
+                       onChange={(e) => setMonth(e.target.value)} />
+              </label>
+            </div>
+
+            <label className="field">
+              <span className="label">{L("deferReason")}</span>
+              <input className="input" value={reason}
+                     onChange={(e) => setReason(e.target.value)} />
+            </label>
+          </div>
+        )}
+
+        <div className="row" style={{ gap: 8, marginTop: 18 }}>
+          {lines.length > 0 && (
+            <button className="btn btn-primary"
+                    disabled={saving || !code || !reason.trim()}
+                    onClick={submit}>
+              {saving ? "…" : L("defer")}
+            </button>
+          )}
+          <button className="btn" onClick={onClose}>{L("cancel")}</button>
+        </div>
+      </div>
     </div>
   );
 }
