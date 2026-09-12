@@ -37,6 +37,18 @@ const T: Dict = {
   personal: { ar: "البيانات الأساسية", en: "Personal" },
   job: { ar: "بيانات الوظيفة", en: "Job" },
   systemRole: { ar: "الدور في النظام", en: "System role" },
+  leaveCashout: { ar: "مخالصة إجازة", en: "Leave cash-out" },
+  cashoutTitle: { ar: "مخالصة الإجازة", en: "Leave cash-out" },
+  cashoutDays: { ar: "عدد الأيام", en: "Days" },
+  cashoutAvailable: { ar: "الرصيد المتاح", en: "Available" },
+  cashoutAmount: { ar: "المبلغ", en: "Amount" },
+  cashoutDaily: { ar: "أجر اليوم", en: "Daily rate" },
+  cashoutPay: { ar: "صرف", en: "Pay out" },
+  cashoutDisabled: {
+    ar: "غير مفعَّلة — تُفعَّل من إعدادات الرواتب",
+    en: "Disabled — enable in payroll settings",
+  },
+  cashoutDone: { ar: "صُرف البدل", en: "Paid out" },
   addTag: { ar: "وسم", en: "Tag" },
   removeTag: { ar: "نزع الوسم", en: "Remove tag" },
   noRole: { ar: "بلا دور", en: "No role" },
@@ -1172,6 +1184,8 @@ function ProfileInner({
   // ق-131: وسومه ووسوم الشركة
   const [tags, setTags] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
+  // ق-138: مخالصة الإجازة
+  const [cashout, setCashout] = useState(false);
   const [sites, setSites] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
@@ -1618,9 +1632,18 @@ function ProfileInner({
         <div className="stack">
           {/* ق-66: الراتب يُعرض كما يُبنى */}
           <div className="card" style={{ padding: 20 }}>
-            <div className="row" style={{ marginBottom: 16 }}>
-              <IcPayroll size={19} />
-              <h3 style={{ fontSize: "1rem" }}>{L("currentSalary")}</h3>
+            <div className="spread" style={{ marginBottom: 16 }}>
+              <div className="row">
+                <IcPayroll size={19} />
+                <h3 style={{ fontSize: "1rem" }}>{L("currentSalary")}</h3>
+              </div>
+              {/* ق-138: مخالصة الإجازة — والتنبيه في نافذتها */}
+              {data.can_edit && (
+                <button className="btn btn-sm"
+                        onClick={() => setCashout(true)}>
+                  {L("leaveCashout")}
+                </button>
+              )}
             </div>
 
             {/* الاستحقاقات */}
@@ -1830,6 +1853,11 @@ function ProfileInner({
       {tab === "audit" && <AuditTab empId={empId} L={L} />}
         </div>
       </div>
+
+      {cashout && data && (
+        <CashoutDialog employmentId={data.employment_id} L={L}
+                       onClose={() => setCashout(false)} />
+      )}
     </div>
   );
 }
@@ -1991,6 +2019,141 @@ function SalaryHistoryRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* ══ نافذة مخالصة الإجازة (ق-138) ══ */
+
+function CashoutDialog({ employmentId, L, onClose }: {
+  employmentId: number;
+  L: (k: string, f?: string) => string;
+  onClose: () => void;
+}) {
+  const [days, setDays] = useState("1");
+  const [info, setInfo] = useState<Record<string, unknown> | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async (d: string) => {
+    setBusy(true); setErr("");
+    try {
+      setInfo(await apiGet<Record<string, unknown>>(
+        `/employees/${employmentId}/leave-cashout/?days=${d || 1}`));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusy(false); }
+  }, [employmentId]);
+
+  useEffect(() => { load(days); }, [days, load]);
+
+  const pay = async () => {
+    setSaving(true); setErr("");
+    try {
+      await apiPost(`/employees/${employmentId}/leave-cashout/`,
+                    { days: Number(days) });
+      setDone(L("cashoutDone"));
+      await load(days);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setSaving(false); }
+  };
+
+  const allowed = Boolean(info?.allowed);
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
+      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
+    }}>
+      <div className="card" style={{ padding: 24, maxWidth: 440,
+                                     width: "100%" }}
+           onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>{L("cashoutTitle")}</h3>
+
+        {/* ⚠️ التنبيه النظاميّ أوّلًا — فمن يصرف يصرف على بصيرة */}
+        {info?.warning ? (
+          <div style={{ background: "var(--copper-soft)",
+                        color: "var(--copper)", padding: "10px 13px",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: ".83rem", marginTop: 14,
+                        lineHeight: 1.8 }}>
+            {String(info.warning)}
+          </div>
+        ) : null}
+
+        {err && (
+          <div style={{ background: "var(--danger-soft)",
+                        color: "var(--danger)", padding: "9px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: ".86rem", marginTop: 12 }}>
+            {err}
+          </div>
+        )}
+        {done && (
+          <div style={{ background: "var(--ok-soft)", color: "var(--ok)",
+                        padding: "9px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: ".86rem", marginTop: 12 }}>
+            {done}
+          </div>
+        )}
+
+        <div className="row" style={{ gap: 12, marginTop: 16,
+                                      alignItems: "flex-end" }}>
+          <label className="field" style={{ width: 130 }}>
+            <span className="label">{L("cashoutDays")}</span>
+            <input className="input num" type="number" min={1}
+                   value={days}
+                   onChange={(e) => setDays(e.target.value)} />
+          </label>
+          <div style={{ paddingBottom: 8 }}>
+            <div className="muted" style={{ fontSize: ".78rem" }}>
+              {L("cashoutAvailable")}
+            </div>
+            <div className="num">
+              {busy ? "…" : String(info?.available_days ?? "—")}
+            </div>
+          </div>
+        </div>
+
+        {info && !busy && (
+          <div style={{ marginTop: 14, padding: "12px 14px",
+                        background: "var(--paper-2)",
+                        borderRadius: "var(--radius-sm)" }}>
+            <div className="spread" style={{ fontSize: ".86rem" }}>
+              <span className="muted">{L("cashoutDaily")}</span>
+              <span className="num">{String(info.daily_rate)}</span>
+            </div>
+            <div className="spread" style={{ marginTop: 6,
+                                             fontWeight: 600 }}>
+              <span>{L("cashoutAmount")}</span>
+              <span className="num">{String(info.amount)}</span>
+            </div>
+          </div>
+        )}
+
+        {!allowed && !busy && (
+          <div className="muted" style={{ fontSize: ".82rem",
+                                          marginTop: 12 }}>
+            {L("cashoutDisabled")}
+          </div>
+        )}
+
+        <div className="row" style={{ gap: 8, marginTop: 18 }}>
+          {allowed && (
+            <button className="btn btn-primary"
+                    disabled={saving || busy || !days}
+                    onClick={pay}>
+              {saving ? "…" : L("cashoutPay")}
+            </button>
+          )}
+          <button className="btn" onClick={onClose}>{L("cancel")}</button>
+        </div>
+      </div>
     </div>
   );
 }
