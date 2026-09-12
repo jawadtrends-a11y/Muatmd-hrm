@@ -122,6 +122,21 @@ const T: Dict = {
   },
   // إعدادات الرواتب
   eosbBasis: { ar: "أجر مكافأة نهاية الخدمة", en: "EOSB wage basis" },
+  otBasis: { ar: "أساس العمل الإضافي", en: "Overtime basis" },
+  otBasisHint: {
+    ar: "الأساس المعتمد لكل ساعة إضافية",
+    en: "Rate used for each overtime hour",
+  },
+  otChoice: { ar: "السماح باختيار معامِل الإضافي", en: "Rate choice" },
+  otChoiceHint: {
+    ar: "يُظهر للموظف خيار ×2 في طلبه — والمعتمِد يقبل أو يرفض",
+    en: "Lets employees request ×2 — approver accepts or rejects",
+  },
+  otBasisX2: { ar: "أساس معامِل ×2", en: "×2 basis" },
+  otBasisX2Hint: {
+    ar: "يُستعمل حين يُعتمد طلبٌ بـ×2",
+    en: "Used when a ×2 request is approved",
+  },
   eosbHint: {
     ar: "يجب تحديده قبل أول مسير مستحقات — الصمت هنا قرار مالي لم يتخذه أحد",
     en: "Must be set before the first settlement run",
@@ -212,6 +227,11 @@ type PayrollSettings = {
   payslip_show_employer_gosi: boolean;
   payslip_show_leave_balance: boolean;
   payslip_show_previous_month: boolean;
+  // ق-137: معامِل الإضافي
+  overtime_basis: string;
+  overtime_basis_x2: string;
+  allow_overtime_rate_choice: boolean;
+  overtime_basis_options: { value: string; label: string }[];
   [k: string]: unknown;
 };
 
@@ -586,6 +606,37 @@ function PayrollPanel({
             )}
           </select>
         </Row>
+
+        {/* ق-137: أساس الإضافي — والخيار في الطلب */}
+        <Row label={L("otBasis")} hint={L("otBasisHint")}>
+          <select className="select" value={data.overtime_basis || ""}
+            onChange={(e) => set("overtime_basis", e.target.value)}>
+            {(data.overtime_basis_options || []).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Row>
+
+        <Row label={L("otChoice")} hint={L("otChoiceHint")}>
+          <select className="select"
+            value={data.allow_overtime_rate_choice ? "1" : "0"}
+            onChange={(e) =>
+              set("allow_overtime_rate_choice", e.target.value === "1")}>
+            <option value="1">{L("enabled")}</option>
+            <option value="0">{L("disabled")}</option>
+          </select>
+        </Row>
+
+        {data.allow_overtime_rate_choice && (
+        <Row label={L("otBasisX2")} hint={L("otBasisX2Hint")}>
+          <select className="select" value={data.overtime_basis_x2 || ""}
+            onChange={(e) => set("overtime_basis_x2", e.target.value)}>
+            {(data.overtime_basis_options || []).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Row>
+        )}
 
         <Row label={L("mobilePunch")} hint={L("mobilePunchHint")}>
           <select className="select"

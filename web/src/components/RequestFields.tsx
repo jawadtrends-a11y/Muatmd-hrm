@@ -85,6 +85,8 @@ export function fieldKind(name: string): string {
   if (name === "shift_id") return "shift";
   // ق-134: المخصّص قائمةٌ ممّا أُسند له — ولا يُكتب يدويًّا
   if (name === "allowance_id") return "allowance";
+  // ق-137: معامِل الإضافي — خياران لا نصّ
+  if (name === "rate_choice") return "rate_choice";
   if (["reason", "purpose", "note",
        "subject"].includes(name)) return "textarea";
   return "text";
@@ -251,6 +253,16 @@ export default function DynField({
             </option>
           ))}
         </select>
+      ) : kind === "rate_choice" ? (
+        <div className="row" style={{ gap: 6 }}>
+          {[["x1_5", "×1.5"], ["x2", "×2"]].map(([v, lbl]) => (
+            <button key={v} type="button"
+                    className={`btn btn-sm ${value === v ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => onChange(v)}>
+              {lbl}
+            </button>
+          ))}
+        </div>
       ) : kind === "allowance" ? (
         <select className="select" value={value}
           onChange={(e) => onChange(e.target.value)}>

@@ -58,6 +58,7 @@ const T: Dict = {
   estimated_cost: { ar: "التكلفة التقديرية", en: "Estimated cost" },
   // ق-124: حقول الأنواع السبعة
   rest_date: { ar: "يوم الراحة البديل", en: "Replacement rest day" },
+  rate_choice: { ar: "معامِل الإضافي", en: "Overtime rate" },
   subject: { ar: "الموضوع", en: "Subject" },
   location: { ar: "الموقع", en: "Location" },
   item: { ar: "الصنف المطلوب", en: "Item" },
