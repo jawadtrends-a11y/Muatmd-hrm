@@ -271,3 +271,118 @@ def deferral_detail(request, deferral_id):
     except dsvc.DeferralError as e:
         return Response({"detail": str(e)}, status=409)
     return Response({"cancelled": True})
+
+
+# ══════════ سلسلة موافقات المسير (ق-140) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def approval_steps(request):
+    """خطوات سلسلة اعتماد المسير — عرضًا وإضافة."""
+    from apps.accounts.models_access import Role
+    from apps.payroll.models import PayrollApprovalStep
+
+    Gate.require(request.user, "payroll.view")
+    Features.require(_company_id(request), "payroll_approval_chain")
+
+    if request.method == "GET":
+        qs = (PayrollApprovalStep.objects
+              .filter(company_id=_company_id(request))
+              .select_related("role").order_by("step_order"))
+        from apps.accounts.models import Company
+
+        # مقيَّد بشركة المنفّذ النشطة
+        comp = Company.objects.filter(id=_company_id(request)).first()
+        roles = Role.objects.filter(account_id=comp.account_id) if comp \
+            else Role.objects.none()
+        return Response({
+            "steps": [{
+                "id": s.id, "step_order": s.step_order,
+                "role_id": s.role_id, "role": s.role.name_ar,
+                "title": s.title, "sla_hours": s.sla_hours,
+                "is_active": s.is_active,
+            } for s in qs],
+            "roles": [{"id": r.id, "name_ar": r.name_ar}
+                      for r in roles],
+        })
+
+    Gate.require(request.user, "payroll.create")
+    from apps.accounts.models import Company
+
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    d = request.data
+    role = Role.objects.filter(
+        id=d.get("role_id"), account_id=comp.account_id).first()
+    if role is None:
+        return Response({"detail": "الدور غير موجود"}, status=404)
+
+    order = int(d.get("step_order") or 0)
+    if not order:
+        last = (PayrollApprovalStep.objects
+                .filter(company=comp).order_by("-step_order").first())
+        order = (last.step_order + 1) if last else 1
+
+    if PayrollApprovalStep.objects.filter(
+            company=comp, step_order=order).exists():
+        return Response({"detail": "الترتيب مستعمل"}, status=409)
+
+    st = PayrollApprovalStep.objects.create(
+        account=comp.account, company=comp, step_order=order,
+        role=role, title=str(d.get("title") or "")[:120],
+        sla_hours=d.get("sla_hours") or None)
+    return Response({"id": st.id, "step_order": st.step_order},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def approval_step_detail(request, step_id):
+    """حذف خطوة — ولا يمسّ مسيرًا قائمًا."""
+    from apps.payroll.models import PayrollApprovalStep
+
+    Gate.require(request.user, "payroll.create")
+    Features.require(_company_id(request), "payroll_approval_chain")
+
+    st = PayrollApprovalStep.objects.filter(
+        id=step_id, company_id=_company_id(request)).first()
+    if st is None:
+        return Response({"detail": "غير موجودة"}, status=404)
+    st.delete()
+    return Response({"deleted": True})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def run_chain(request, run_id):
+    """
+    حالة سلسلة مسير — وقرارٌ على خطوته المنتظِرة.
+
+    ⚠️ **والقرار بالدور**: من لا يحمل دور الخطوة لا يقرّرها.
+    """
+    from apps.payroll.models import PayrollRun
+    from apps.payroll.services import run_approval as chain
+
+    Gate.require(request.user, "payroll.view")
+
+    run = PayrollRun.objects.filter(
+        id=run_id, company_id=_company_id(request)).first()
+    if run is None:
+        return Response({"detail": "المسير غير موجود"}, status=404)
+
+    if request.method == "GET":
+        state = chain.chain_state(run)
+        cur = chain.current_step(run)
+        state["can_decide"] = bool(
+            cur and chain.can_decide(request.user, cur))
+        return Response(state)
+
+    try:
+        out = chain.decide(run=run, user=request.user,
+                           approve=bool(request.data.get("approve")),
+                           note=request.data.get("note", ""))
+    except chain.ChainError as e:
+        return Response({"detail": str(e)}, status=403)
+    return Response(out)

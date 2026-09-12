@@ -731,3 +731,9 @@ from apps.payroll.models_deferral import (  # noqa: E402,F401
 from apps.payroll.models_expenses import (  # noqa: E402,F401
     ExpenseCategory, ExpenseClaim, ExpenseStatus,
 )
+
+
+# سلسلة موافقات المسير (ق-140)
+from apps.payroll.models_approval import (  # noqa: E402,F401
+    PayrollApproval, PayrollApprovalDecision, PayrollApprovalStep,
+)

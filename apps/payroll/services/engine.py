@@ -705,6 +705,14 @@ def submit_run(run, submitted_by_person=None):
     run.submitted_at = timezone.now()
     run.save(update_fields=["status", "submitted_at", "updated_at"])
 
+    # ق-140: سلسلة موافقات المسير — **تُبنى عند كل رفع**.
+    #
+    # ⚠️ فمسيرٌ رُفض ثم صُحّح يبدأ السلسلة من أوّلها: من اعتمد
+    # نسخةً لا يُعدّ معتمدًا لأخرى.
+    from apps.payroll.services.run_approval import build as _build_chain
+
+    _build_chain(run=run)
+
     from apps.notifications.bus import emit
     emit("payroll.submitted", account_id=run.account_id,
          company_id=run.company_id,
@@ -727,6 +735,18 @@ def approve_run(run, approved_by_person):
     if run.status != PayrollRunStatus.SUBMITTED:
         raise PayrollError(
             f"المسير {run.get_status_display()} — لا يُعتمد إلا بعد الرفع")
+
+    # ق-140: ⚠️ **ولا يُعتمد قبل اكتمال سلسلته**.
+    #
+    # فالسلسلة تُبنى ليُمرّ بها لا ليُتخطّى — وتخطّيها يجعلها
+    # زينةً لا ضابطًا.
+    from apps.payroll.services.run_approval import current_step
+
+    pending = current_step(run)
+    if pending is not None:
+        raise PayrollError(
+            f"بانتظار اعتماد «{pending.title or pending.role.name_ar}» "
+            f"(الخطوة {pending.step_order}) — لا يُعتمد قبلها")
 
     run.status = PayrollRunStatus.APPROVED
     run.approved_at = timezone.now()
