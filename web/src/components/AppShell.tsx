@@ -48,6 +48,7 @@ const T: Dict = {
   directory: { ar: "دليل الزملاء", en: "Directory" },
   support: { ar: "الدعم الفنّي", en: "Support" },
   allowance_claims: { ar: "صرف المخصّصات", en: "Allowance payouts" },
+  expenses: { ar: "المصروفات", en: "Expenses" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
   myAttendance: { ar: "حضوري", en: "My Attendance" },

@@ -96,6 +96,11 @@ const T: Dict = {
     ar: "غداء عمل ومواصلات وغيرها — ومن يستحقّها",
     en: "Meal, transport and more — and who may claim",
   },
+  expenseCats: { ar: "فئات المصروفات", en: "Expense categories" },
+  expenseCatsHint: {
+    ar: "وقود وسفر وضيافة — وسقوفها",
+    en: "Fuel, travel, hospitality — and caps",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -559,6 +564,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-139: فئات المصروفات */}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/expense-categories" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("expenseCats")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("expenseCatsHint")}
           </span>
         </Link>
         )}

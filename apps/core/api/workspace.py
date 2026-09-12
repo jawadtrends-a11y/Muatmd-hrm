@@ -21,6 +21,8 @@ NAV_ITEMS = [
     {"key": "payroll",     "path": "/payroll",         "icon": "wallet",   "permission": "payroll.view"},
     # ق-134: صرف المخصّصات المعتمدة
     {"key": "allowance_claims", "path": "/allowance-claims", "icon": "wallet", "permission": "payroll.view"},
+    # ق-139: المصروفات — يقدّمها كل موظف ويقرّها الموارد
+    {"key": "expenses",    "path": "/expenses",        "icon": "receipt",  "permission": None},
     # ق-119: الجزاءات — من يرى الحضور يراها، فهي منه تنشأ
     {"key": "penalties",   "path": "/penalties",       "icon": "doc",      "permission": "attendance.view"},
     # ق-129: السياسات — يراها كل موظف، وإقراره حجّة
