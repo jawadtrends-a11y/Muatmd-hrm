@@ -730,3 +730,41 @@ def grade_steps(request, grade_id):
         step_number=int(request.data.get("step_number") or 0),
         salary=request.data.get("salary") or None)
     return Response(_grade_json(g), status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def advance_deduction(request, advance_id):
+    """
+    إيقاف الخصم المباشر أو استئنافه (ق-141).
+
+    ⚠️ **والإيقاف تأخيرٌ لا إعفاء**: الرصيد يبقى دَينًا، ويُخصم
+    كاملًا في مخالصة نهاية الخدمة.
+    """
+    from apps.employees.models import Advance
+    from apps.employees.services import advances as svc
+
+    Gate.require(request.user, "payroll.create")
+
+    adv = Advance.objects.filter(
+        id=advance_id, company_id=_company_id(request)).first()
+    if adv is None:
+        return Response({"detail": "السلفة غير موجودة"}, status=404)
+
+    actor = getattr(request.user, "person", None)
+    pause = bool(request.data.get("pause"))
+    try:
+        if pause:
+            svc.pause_deduction(
+                advance=adv, reason=request.data.get("reason", ""),
+                by_person_id=actor.id if actor else None)
+        else:
+            svc.resume_deduction(advance=adv)
+    except svc.AdvanceError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    return Response({
+        "id": adv.id, "auto_deduct": adv.auto_deduct,
+        "reason": adv.deduct_paused_reason,
+        "outstanding": str(adv.outstanding),
+    })

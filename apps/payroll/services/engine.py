@@ -339,9 +339,11 @@ def calculate_slip(*, run, employment, settings_obj):
     advance_deductions = []
     if settings_obj.advances_enabled:
         from apps.employees.services.advances import (
-            due_installment, outstanding_advances,
+            deductible_advances, due_installment,
         )
-        for adv in outstanding_advances(employment):
+        # ق-141: **المخصومة لا القائمة** — فمن أُوقف خصمه يبقى
+        # عليه الدَين ولا يُقتطع من راتبه.
+        for adv in deductible_advances(employment):
             due = due_installment(adv, run.period_year, run.period_month)
             if due > 0:
                 deductions.append({

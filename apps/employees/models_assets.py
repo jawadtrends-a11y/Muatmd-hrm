@@ -69,6 +69,23 @@ class Advance(CompanyScopedModel):
                                       null=True, blank=True)
     note = models.TextField(_("ملاحظة"), blank=True)
 
+    # ق-141: **إيقاف الخصم المباشر** (فجوةٌ كشفها جواد).
+    #
+    # ⚠️ فالسلفة تُخصم آليًّا دائمًا — ولا سبيل لإيقافه: موظفٌ في
+    # ظرفٍ طارئ، أو سلفةٌ تُسدَّد بحوالةٍ خارج الراتب، أو نزاعٌ
+    # قائم.
+    #
+    # ⚠️⚠️ **والإيقاف تأخيرٌ لا إعفاء**: الرصيد يبقى دَينًا،
+    # والجدول يُستأنف بإعادة التفعيل.
+    auto_deduct = models.BooleanField(
+        _("الخصم المباشر من الراتب"), default=True)
+    deduct_paused_reason = models.CharField(
+        _("سبب إيقاف الخصم"), max_length=255, blank=True,
+        help_text=_("إلزاميّ عند الإيقاف — فإيقافٌ بلا سبب يُنسى"))
+    deduct_paused_at = models.DateTimeField(null=True, blank=True)
+    deduct_paused_by_person_id = models.BigIntegerField(
+        null=True, blank=True)
+
     class Meta:
         verbose_name = _("سلفة")
         verbose_name_plural = _("السلف")
@@ -94,8 +111,23 @@ class Advance(CompanyScopedModel):
 
     @property
     def is_outstanding(self):
+        """
+        أعليه رصيدٌ قائم؟ — **بغضّ النظر عن الخصم**.
+
+        فالإيقاف تأخيرٌ لا إعفاء: الدَين قائمٌ ولو لم يُخصم.
+        """
         return (self.status == AdvanceStatus.ACTIVE
                 and self.outstanding > 0)
+
+    @property
+    def is_deductible(self):
+        """
+        أيُخصم قسطُها من المسير الآن؟
+
+        ⚠️ **فالرصيد القائم لا يعني الخصم**: من أُوقف خصمه يبقى
+        عليه الدَين ولا يُقتطع من راتبه.
+        """
+        return self.is_outstanding and self.auto_deduct
 
 
 class AdvanceInstallment(CompanyScopedModel):

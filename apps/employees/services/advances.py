@@ -229,6 +229,21 @@ def outstanding_advances(employment):
         employment=employment, status=AdvanceStatus.ACTIVE)
 
 
+def deductible_advances(employment):
+    """
+    السلف التي **يُخصم قسطها من المسير** (ق-141).
+
+    ⚠️ **وهي غير القائمة**: من أُوقف خصمه يبقى عليه الدَين ولا
+    يُقتطع من راتبه — فالإيقاف تأخيرٌ لا إعفاء.
+    #
+    ولا تُستعمل في مخالصة نهاية الخدمة: هناك يُخصم الدَين كاملًا
+    ولو أُوقف خصمه الشهريّ.
+    """
+    return Advance.objects.filter(
+        employment=employment, status=AdvanceStatus.ACTIVE,
+        auto_deduct=True)
+
+
 def total_outstanding(employment):
     return sum((a.outstanding for a in outstanding_advances(employment)), ZERO)
 
@@ -252,3 +267,53 @@ def settle_on_termination(*, employment, note=""):
         "advances": rows,
         "note": note or "يُخصم المتبقي من مستحقات نهاية الخدمة",
     }
+
+
+@transaction.atomic
+def pause_deduction(*, advance, reason, by_person_id=None):
+    """
+    يوقف الخصم المباشر من الراتب (ق-141).
+
+    ⚠️ **والإيقاف تأخيرٌ لا إعفاء**: الرصيد يبقى دَينًا، ويُخصم
+    كاملًا في مخالصة نهاية الخدمة.
+
+    ⚠️ **وبسببٍ إلزاميّ**: فإيقافٌ بلا سبب يُنسى، ويبقى الموظف
+    غير مخصوم عليه سنين.
+    """
+    from django.utils import timezone
+
+    if not (reason or "").strip():
+        raise AdvanceError(
+            "بيّن سبب إيقاف الخصم — فإيقافٌ بلا سبب يُنسى")
+    if advance.status != AdvanceStatus.ACTIVE:
+        raise AdvanceError("السلفة غير نشطة")
+    if not advance.auto_deduct:
+        raise AdvanceError("الخصم موقوفٌ أصلًا")
+
+    advance.auto_deduct = False
+    advance.deduct_paused_reason = reason.strip()[:255]
+    advance.deduct_paused_at = timezone.now()
+    advance.deduct_paused_by_person_id = by_person_id
+    advance.save(update_fields=[
+        "auto_deduct", "deduct_paused_reason", "deduct_paused_at",
+        "deduct_paused_by_person_id", "updated_at"])
+    return advance
+
+
+@transaction.atomic
+def resume_deduction(*, advance):
+    """
+    يستأنف الخصم — **والجدول يُكمل من حيث توقّف**.
+
+    فما فات لا يُجمع في قسطٍ واحد: مضاعفتُه تنقض سبب الإيقاف.
+    """
+    if advance.auto_deduct:
+        raise AdvanceError("الخصم مفعَّلٌ أصلًا")
+
+    advance.auto_deduct = True
+    advance.deduct_paused_reason = ""
+    advance.deduct_paused_at = None
+    advance.save(update_fields=[
+        "auto_deduct", "deduct_paused_reason", "deduct_paused_at",
+        "updated_at"])
+    return advance

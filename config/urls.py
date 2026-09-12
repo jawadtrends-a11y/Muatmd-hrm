@@ -246,6 +246,9 @@ urlpatterns = [
     path("api/advances/", assets_api.advances, name="advances"),
     path("api/advances/<int:advance_id>/approve/", assets_api.advance_approve, name="advance-approve"),
     path("api/advances/<int:advance_id>/schedule/", assets_api.advance_schedule, name="advance-schedule"),
+    # ق-141: إيقاف الخصم المباشر واستئنافه
+    path("api/advances/<int:advance_id>/deduction/",
+         assets_api.advance_deduction, name="advance-deduction"),
     path("api/employees/<int:employment_id>/advance-eligibility/", assets_api.advance_eligibility, name="advance-eligibility"),
     # السلّم الوظيفي (ق-63)
     path("api/job-grades/", assets_api.job_grades, name="job-grades"),
