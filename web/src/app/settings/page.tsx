@@ -101,6 +101,11 @@ const T: Dict = {
     ar: "وقود وسفر وضيافة — وسقوفها",
     en: "Fuel, travel, hospitality — and caps",
   },
+  payrollChain: { ar: "سلسلة اعتماد المسير", en: "Payroll approval" },
+  payrollChainHint: {
+    ar: "من يعتمد المسير وبأيّ ترتيب",
+    en: "Who approves payroll and in what order",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -564,6 +569,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-140: سلسلة اعتماد المسير */}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/payroll-approval" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("payrollChain")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("payrollChainHint")}
           </span>
         </Link>
         )}

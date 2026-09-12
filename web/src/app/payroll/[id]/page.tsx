@@ -21,6 +21,11 @@ const T: Dict = {
   summary: { ar: "ملخص", en: "Summary" },
   payslips: { ar: "كشف الرواتب", en: "Payslips" },
   defer: { ar: "تأجيل", en: "Defer" },
+  chain: { ar: "سلسلة الاعتماد", en: "Approval chain" },
+  chainDone: { ar: "اكتملت", en: "Complete" },
+  chainApprove: { ar: "اعتماد الخطوة", en: "Approve step" },
+  chainReject: { ar: "رفض", en: "Reject" },
+  chainReason: { ar: "سبب الرفض", en: "Rejection reason" },
   deferTitle: { ar: "تأجيل بند", en: "Defer a line" },
   deferHint: {
     ar: "⚠️ الراتب وبدلاته لا تُؤجَّل — أجرٌ مستحقٌّ في موعده",
@@ -460,6 +465,9 @@ export default function RunDetailPage() {
         </div>
       )}
 
+      {/* ق-140: سلسلة الاعتماد — من ينتظر يعرف عند من وقف */}
+      <ChainStrip runId={runId} L={L} />
+
       {deferring !== null && (
         <DeferDialog payslipId={deferring} L={L}
                      onClose={() => setDeferring(null)}
@@ -653,6 +661,96 @@ function DeferDialog({ payslipId, L, onClose, onSaved }: {
           <button className="btn" onClick={onClose}>{L("cancel")}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/* ══ شريط سلسلة الاعتماد (ق-140) ══ */
+
+function ChainStrip({ runId, L }: {
+  runId: number;
+  L: (k: string, f?: string) => string;
+}) {
+  const [state, setState] = useState<{
+    has_chain: boolean; current_step: number | null; completed: boolean;
+    can_decide: boolean;
+    steps: { step_order: number; title: string; role: string;
+             decision: string; decided_by: string; note: string }[];
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setState(await apiGet(`/payroll/runs/${runId}/chain/`));
+    } catch {
+      setState(null);
+    }
+  }, [runId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (approve: boolean) => {
+    setBusy(true); setErr("");
+    try {
+      const note = approve ? "" : (prompt(L("chainReason")) || "");
+      await apiPost(`/payroll/runs/${runId}/chain/`, { approve, note });
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  if (!state?.has_chain) return null;
+
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div className="spread">
+        <strong style={{ fontSize: ".92rem" }}>{L("chain")}</strong>
+        {state.completed && (
+          <span className="badge badge-ok">{L("chainDone")}</span>
+        )}
+      </div>
+
+      {err && (
+        <div style={{ color: "var(--danger)", fontSize: ".84rem",
+                      marginTop: 8 }}>{err}</div>
+      )}
+
+      <div className="row" style={{ gap: 8, marginTop: 12,
+                                    flexWrap: "wrap" }}>
+        {state.steps.map((st) => (
+          <div key={st.step_order} style={{
+            padding: "8px 12px", borderRadius: "var(--radius-sm)",
+            background: st.decision === "approved" ? "var(--ok-soft)"
+              : st.decision === "rejected" ? "var(--danger-soft)"
+              : st.step_order === state.current_step
+                ? "var(--copper-soft)" : "var(--paper-2)",
+            fontSize: ".84rem", minWidth: 150,
+          }}>
+            <div style={{ fontWeight: 500 }}>
+              {st.step_order}. {st.title}
+            </div>
+            <div className="muted" style={{ fontSize: ".76rem" }}>
+              {st.decided_by || st.role}
+            </div>
+            {st.note && (
+              <div style={{ fontSize: ".75rem", marginTop: 3,
+                            color: "var(--danger)" }}>{st.note}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {state.can_decide && (
+        <div className="row" style={{ gap: 8, marginTop: 14 }}>
+          <button className="btn btn-sm btn-primary" disabled={busy}
+                  onClick={() => decide(true)}>{L("chainApprove")}</button>
+          <button className="btn btn-sm btn-danger" disabled={busy}
+                  onClick={() => decide(false)}>{L("chainReject")}</button>
+        </div>
+      )}
     </div>
   );
 }
