@@ -336,3 +336,45 @@ def settle_claim(request, claim_id):
     return Response({"id": c.id, "method": c.method,
                      "settled": c.is_settled,
                      "run_type": c.payroll_run_type})
+
+
+# ══════════ مخالصة الإجازة (ق-138) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def leave_cashout(request, employment_id):
+    """
+    بدل الإجازة — معاينةً وصرفًا.
+
+    ⚠️ **والتنبيه النظاميّ يُعرض دائمًا**: الصرف أثناء الخدمة
+    مخالفةٌ مسؤوليتها على صاحب العمل.
+    """
+    from apps.payroll.services import leave_cashout as svc
+
+    Gate.require(request.user, "payroll.view")
+
+    emp = Gate.filter_queryset(
+        request.user, "payroll.view", Employment.objects.all()
+    ).filter(id=employment_id).first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    if request.method == "GET":
+        days = request.GET.get("days") or "1"
+        try:
+            calc = svc.preview(employment=emp, days=days)
+        except svc.CashoutError as e:
+            return Response({"detail": str(e)}, status=400)
+        calc["available_days"] = str(svc.available_days(emp))
+        return Response(calc)
+
+    Gate.require(request.user, "payroll.create")
+    actor = getattr(request.user, "person", None)
+    try:
+        out = svc.cash_out(
+            employment=emp, days=request.data.get("days"),
+            reason=request.data.get("reason", ""),
+            by_person_id=actor.id if actor else None)
+    except svc.CashoutError as e:
+        return Response({"detail": str(e)}, status=400)
+    return Response(out, status=status.HTTP_201_CREATED)

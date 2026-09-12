@@ -70,7 +70,8 @@ FEATURES = [
        implemented=True, guarded_at="/api/leaves/"),
     _f("custom_leave_types", "leaves", "إضافة أنواع إجازات مخصصة",
        implemented=True, guarded_at="/api/settings/leave-types/"),
-    _f("leave_settlement", "leaves", "مخالصة الإجازة"),
+    _f("leave_settlement", "leaves", "مخالصة الإجازة",
+       implemented=True, guarded_at="/api/employees/<id>/leave-cashout/"),
 
     # ══ الخدمات الذاتية ══
     _f("req_permission", "requests", "طلب استئذان",

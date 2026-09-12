@@ -205,6 +205,9 @@ urlpatterns = [
          allowances_api.allowance_eligibility, name="allowance-eligibility"),
     path("api/me/allowances/", allowances_api.my_allowances,
          name="my-allowances"),
+    # ق-138: مخالصة الإجازة
+    path("api/employees/<int:employment_id>/leave-cashout/",
+         allowances_api.leave_cashout, name="leave-cashout"),
     # ق-135: البنود المكرّرة
     path("api/recurring/", recurring_api.recurring, name="recurring"),
     path("api/recurring/<int:recurring_id>/",
