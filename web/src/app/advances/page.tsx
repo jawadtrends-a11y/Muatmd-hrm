@@ -27,6 +27,14 @@ const T: Dict = {
   outstanding: { ar: "المتبقّي", en: "Outstanding" },
   method: { ar: "طريقة السداد", en: "Method" },
   installments: { ar: "الأقساط", en: "Instalments" },
+  pauseDeduct: { ar: "إيقاف الخصم", en: "Pause deduction" },
+  resumeDeduct: { ar: "استئناف الخصم", en: "Resume" },
+  deductPaused: { ar: "الخصم موقوف", en: "Paused" },
+  pauseReason: { ar: "سبب إيقاف الخصم", en: "Pause reason" },
+  pauseNote: {
+    ar: "⚠️ الرصيد يبقى دَينًا ويُخصم في نهاية الخدمة",
+    en: "The debt remains and is settled at termination",
+  },
   start: { ar: "يبدأ من", en: "Starts" },
   status: { ar: "الحالة", en: "Status" },
   approve: { ar: "اعتماد", en: "Approve" },
@@ -61,6 +69,9 @@ type Advance = {
   repayment_label: string;
   installments_count: number;
   installment_amount: string | null;
+  // ق-141: الخصم المباشر
+  auto_deduct: boolean;
+  deduct_paused_reason: string;
   start: string;
   status: string;
   status_label: string;
@@ -81,6 +92,7 @@ export default function AdvancesPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [askApprove, setAskApprove] = useState<number | null>(null);
+  const [busyRow, setBusyRow] = useState<number | null>(null);
 
   const load = useCallback(() => {
     apiGet<Advance[]>("/advances/")
@@ -149,8 +161,23 @@ export default function AdvancesPage() {
   const set = (k: string, v: unknown) =>
     setDraft((d) => ({ ...d, [k]: v }));
 
+  /** ق-141: إيقاف الخصم أو استئنافه — والسبب إلزاميّ للإيقاف. */
+  const toggleDeduction = async (a: Advance, pause: boolean) => {
+    const reason = pause
+      ? (prompt(`${L("pauseReason")}\n${L("pauseNote")}`) || "")
+      : "";
+    if (pause && !reason.trim()) return;
+    setBusyRow(a.id);
+    try {
+      await apiPost(`/advances/${a.id}/deduction/`, { pause, reason });
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusyRow(null); }
+  };
+
   if (off) {
-    return (
+  return (
       <div className="card" style={{
         padding: 36, textAlign: "center", color: "var(--ink-3)",
       }}>
@@ -339,6 +366,14 @@ export default function AdvancesPage() {
                           : "badge badge-warn"}>
                         {a.status_label}
                       </span>
+                      {!a.auto_deduct && a.status === "active" && (
+                        <span className="badge badge-warn"
+                              style={{ marginInlineStart: 5,
+                                       fontSize: ".68rem" }}
+                              title={a.deduct_paused_reason || ""}>
+                          {L("deductPaused")}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {canEdit && a.status === "pending" && (
@@ -346,6 +381,23 @@ export default function AdvancesPage() {
                           onClick={() => setAskApprove(a.id)}>
                           {L("approve")}
                         </button>
+                      )}
+                      {/* ق-141: إيقاف الخصم المباشر — والدَين يبقى */}
+                      {canEdit && a.status === "active" && (
+                        a.auto_deduct ? (
+                          <button className="btn btn-sm"
+                            disabled={busyRow === a.id}
+                            onClick={() => toggleDeduction(a, true)}>
+                            {L("pauseDeduct")}
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm btn-ghost"
+                            disabled={busyRow === a.id}
+                            title={a.deduct_paused_reason || ""}
+                            onClick={() => toggleDeduction(a, false)}>
+                            {L("resumeDeduct")}
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>

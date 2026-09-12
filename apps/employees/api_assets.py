@@ -97,6 +97,9 @@ def advances(request):
                 "installments_count": a.installments_count,
                 "installment_amount": (str(a.installment_amount)
                                        if a.installment_amount else None),
+                # ق-141: حالة الخصم المباشر
+                "auto_deduct": a.auto_deduct,
+                "deduct_paused_reason": a.deduct_paused_reason,
                 "start": f"{a.start_year}-{a.start_month:02d}",
                 "status": a.status,
                 "status_label": a.get_status_display(),
