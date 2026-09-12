@@ -155,6 +155,17 @@ SPECS = {
         hint_en="Update your personal data — approved by HR",
     ),
 
+    # ق-142: النوع العامّ للطلبات المخصّصة — حقولُه من كتالوج
+    # الشركة لا من هنا، والتحقّق في خدمته.
+    RequestType.CUSTOM: RequestSpec(
+        code="custom", name_ar="طلب مخصّص",
+        name_en="Custom request", icon="doc",
+        required_fields=(),
+        optional_fields=("note", "attachment_url"),
+        hint_ar="طلبٌ عرّفته شركتك بحقوله",
+        hint_en="A request type defined by your company",
+    ),
+
     # ══ ق-124: سبعة أنواع تُكمل ما عند المنافس ══
     RequestType.SWAP_RESTDAY: RequestSpec(
         code="swap_restday", name_ar="طلب تبديل يوم راحة",
@@ -354,6 +365,7 @@ REQUEST_FEATURE_KEYS = {
     RequestType.PURCHASE: "req_purchase",
     RequestType.SHIFT_CHANGE: "req_shift_change",
     RequestType.SALARY_FIX: "req_salary_certificate",
+    RequestType.CUSTOM: "req_custom",
 }
 
 

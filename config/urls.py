@@ -36,6 +36,7 @@ from apps.accounts import api_admin as platform_admin_api
 from apps.accounts import api_plans as plans_api
 from apps.accounts import api_auth as client_auth
 from apps.leaves import api as leaves_api
+from apps.leaves import api_custom_types as custom_types_api
 from apps.notifications import api as notifications_api
 
 
@@ -362,6 +363,19 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-142: أنواع الطلبات المخصّصة
+    path("api/custom-request-types/", custom_types_api.custom_types,
+         name="custom-request-types"),
+    path("api/custom-request-types/<int:type_id>/",
+         custom_types_api.custom_type_detail,
+         name="custom-request-type-detail"),
+    path("api/custom-request-types/<int:type_id>/fields/",
+         custom_types_api.custom_type_fields,
+         name="custom-request-type-fields"),
+    path("api/custom-request-types/<int:type_id>/submit/",
+         custom_types_api.submit_custom, name="submit-custom-request"),
+    path("api/me/custom-request-types/",
+         custom_types_api.my_custom_types, name="my-custom-request-types"),
     path("api/requests/", leaves_api.submit_request, name="submit-request"),
     path("api/me/profile/", employees_api.my_profile, name="my-profile"),
     path("api/me/attendance/", attendance_api.my_attendance, name="my-attendance"),

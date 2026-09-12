@@ -285,6 +285,8 @@ class RequestType(models.TextChoices):
     PURCHASE = "purchase", _("مشتريات")
     SHIFT_CHANGE = "shift_change", _("تغيير فترة عمل")
     SALARY_FIX = "salary_fix", _("تثبيت الراتب")
+    # ق-142: نوعٌ واحد يحمل كل ما تُنشئه الشركة — ورمزُه في حمولته
+    CUSTOM = "custom", _("طلب مخصّص")
 
 
 class RequestStatus(models.TextChoices):
@@ -532,3 +534,9 @@ class RequestApproval(CompanyScopedModel):
 
     def __str__(self):
         return f"{self.request.request_no} #{self.step_order}"
+
+
+# أنواع الطلبات المخصّصة (ق-142)
+from apps.leaves.models_custom_types import (  # noqa: E402,F401
+    CustomRequestField, CustomRequestType, FieldKind,
+)
