@@ -179,7 +179,8 @@ FEATURES = [
        implemented=True, guarded_at="/api/reports/custom/"),
 
     # ══ الأداء والتطوير ══
-    _f("performance", "performance", "الأداء والتقييم"),
+    _f("performance", "performance", "الأداء والتقييم",
+       implemented=True, guarded_at="/api/performance/kpis/"),
     _f("training", "performance", "التدريب"),
 
     # ══ أخرى ══

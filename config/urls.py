@@ -39,6 +39,7 @@ from apps.leaves import api as leaves_api
 from apps.leaves import api_custom_types as custom_types_api
 from apps.employees import api_activities as activities_api
 from apps.attendance import api_presence as presence_api
+from apps.employees import api_performance as perf_api
 from apps.notifications import api as notifications_api
 
 
@@ -365,6 +366,24 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-146: تقييم الأداء
+    path("api/performance/cycles/", perf_api.cycles,
+         name="review-cycles"),
+    path("api/performance/cycles/<int:cycle_id>/", perf_api.cycle_detail,
+         name="review-cycle-detail"),
+    path("api/performance/kpis/", perf_api.kpis, name="kpis"),
+    path("api/performance/kpis/<int:kpi_id>/decide/",
+         perf_api.decide_kpi, name="kpi-decide"),
+    path("api/performance/assignments/", perf_api.assignments,
+         name="kpi-assignments"),
+    path("api/performance/assignments/<int:assignment_id>/actual/",
+         perf_api.enter_actual, name="kpi-actual"),
+    path("api/performance/assignments/<int:assignment_id>/approve/",
+         perf_api.approve_actual, name="kpi-approve"),
+    path("api/me/reviews/", perf_api.my_reviews, name="my-reviews"),
+    path("api/performance/scorecard/<int:employment_id>/",
+         perf_api.scorecard, name="scorecard"),
+
     # ق-144: تتبّع التواجد
     path("api/presence/ping/", presence_api.ping, name="presence-ping"),
     path("api/me/presence/", presence_api.my_presence,
