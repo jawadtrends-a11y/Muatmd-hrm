@@ -173,3 +173,104 @@ def test_upgrade_shows_more_types(env):
         Features.invalidate(env["company"].id)
         after = len(eligible_types(env["employment"]))
         assert after > before, f"{before} → {after}"
+
+
+# ══════════ مطابقة الباقات (ق-153) ══════════
+
+def test_plans_are_cumulative(db):
+    """
+    ⚠️ **وكل باقةٍ تحوي ما دونها**: فمن يترقّى لا يفقد ميزةً كانت
+    عنده — **والنقص هنا يُغضب عميلًا دفع أكثر**.
+    """
+    from apps.accounts.models_billing import Plan
+
+    prev, prev_code = set(), ""
+    for p in Plan.objects.filter(is_active=True).order_by("tier_order"):
+        keys = set(p.features.values_list("feature_key", flat=True))
+        missing = prev - keys
+        assert not missing, (
+            f"«{p.code}» أعلى من «{prev_code}» وتنقصها: "
+            f"{sorted(missing)}")
+        prev, prev_code = keys, p.code
+
+
+def test_every_guarded_feature_is_sold(db):
+    """
+    ⚠️⚠️ **ولا ميزةَ محروسةٌ بلا باقة**: فحارسٌ يمنع ما لا يُباع
+    **يمنع الجميع** — والميزة تصير مبنيّةً لا يصلها أحد.
+    """
+    from apps.accounts.models_billing import Plan
+    from apps.core.features.catalog import FEATURES
+
+    guarded = {f.key for f in FEATURES if f.implemented}
+    sold = set()
+    for p in Plan.objects.filter(is_active=True):
+        sold |= set(p.features.values_list("feature_key", flat=True))
+
+    orphan = guarded - sold
+    assert not orphan, f"محروسةٌ ولا تُباع: {sorted(orphan)}"
+
+
+def test_no_plan_sells_a_ghost_feature(db):
+    """
+    ⚠️⚠️ **ولا ميزةَ تُباع بلا كتالوج**: فذاك **بيعُ وهم** —
+    العميل يدفع ولا شيء خلفها.
+    """
+    from apps.accounts.models_billing import Plan
+    from apps.core.features.catalog import FEATURE_KEYS
+
+    from apps.accounts.models_billing import PlanFeature
+
+    # ⚠️ **والكسر يقع في قاعدة الاختبار لا التطوير** (درس ق-133):
+    # فقاعدة الاختبار تُبنى من الهجرات، وتعديلي على الأخرى لا
+    # يمسّها — والحارس يمرّ ويُظنّ ضعيفًا.
+    plan = Plan.objects.filter(is_active=True).first()
+    if plan is not None:
+        PlanFeature.objects.filter(feature_key="__ghost__").delete()
+
+    sold = set()
+    for p in Plan.objects.filter(is_active=True):
+        sold |= set(p.features.values_list("feature_key", flat=True))
+
+    ghost = sold - FEATURE_KEYS
+    assert not ghost, f"تُباع بلا وجود: {sorted(ghost)}"
+
+
+def test_pricing_is_per_employee(db):
+    """
+    ⚠️ **والتسعير بعدد الموظفين** (اتفاق جواد): فلكل باقةٍ شريحةٌ
+    بسعر الموظف — **وباقةٌ بلا شريحة لا تُفوتَر**.
+    """
+    from apps.accounts.models_billing import Plan
+
+    for p in Plan.objects.filter(is_active=True, is_public=True):
+        tiers = p.price_tiers.all()
+        assert tiers.exists(), f"«{p.code}» بلا شريحة سعر"
+        for t in tiers:
+            assert t.price_per_employee_monthly is not None, (
+                f"«{p.code}» شريحةٌ بلا سعر موظف")
+
+
+def test_ghost_guard_actually_catches(db):
+    """
+    ⚠️ **وتثبيتُ الحارس بالكسر داخل الاختبار**.
+
+    فقاعدة الاختبار تُبنى من الهجرات — **وكسر قاعدة التطوير لا
+    يُسقط حارسًا** (درس ق-133). فنكسر هنا ونتأكّد أنه يمسك.
+    """
+    import pytest
+
+    from apps.accounts.models_billing import Plan, PlanFeature
+    from apps.core.features.catalog import FEATURE_KEYS
+
+    plan = Plan.objects.filter(is_active=True).first()
+    assert plan is not None, "لا باقات"
+
+    PlanFeature.objects.create(plan=plan, feature_key="__ghost__",
+                               value="true")
+    sold = set()
+    for p in Plan.objects.filter(is_active=True):
+        sold |= set(p.features.values_list("feature_key", flat=True))
+
+    assert "__ghost__" in (sold - FEATURE_KEYS), (
+        "الحارس لا يرى ميزةً وهمية")
