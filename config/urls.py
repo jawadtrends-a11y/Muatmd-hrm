@@ -60,6 +60,11 @@ urlpatterns = [
     path("api/org/departments/<int:dept_id>/move/", org_api.department_move, name="dept-move"),
     path("api/org/holidays/", org_api.holidays, name="holidays"),
     path("api/org/job-titles/", org_api.job_titles, name="job-titles"),
+    # ق-156: مراكز التكلفة — كان النموذج بلا مسار
+    path("api/org/cost-centers/", org_api.cost_centers,
+         name="cost-centers"),
+    path("api/org/cost-centers/<int:center_id>/",
+         org_api.cost_center_detail, name="cost-center-detail"),
     # التعديل والحذف (ق-93)
     path("api/org/branches/<int:branch_id>/", org_api.branch_detail, name="branch-detail"),
     path("api/org/departments/<int:dept_id>/", org_api.department_detail, name="department-detail"),

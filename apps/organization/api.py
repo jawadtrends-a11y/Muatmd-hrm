@@ -130,6 +130,9 @@ def departments(request):
         return Response([
             {"id": d.id, "code": d.code, "name_ar": d.name_ar, "can_delete": _usage("department", d, request.user)[0] == 0 and _usage("department", d, request.user)[1] == 0, "name_en": getattr(d, "name_en", ""),
              "parent_id": d.parent_id, "branch_id": d.branch_id,
+             # ق-156: **مدير الإدارة** — الحقل كان مبنيًّا ومعطَّلًا
+             "manager_employment_id": d.manager_employment_id,
+             "manager_name": _manager_name(d),
              "path": d.path, "depth": d.depth, "is_active": d.is_active}
             for d in qs.filter(company_id=company_id)
         ])
@@ -151,8 +154,56 @@ def departments(request):
         )
     except StructureError as e:
         return _err(e)
+
+    # ق-156: **ويُسنَد المدير عند الإنشاء** — فإدارةٌ بلا مديرٍ
+    # معلَن تُبقي سلسلة الاعتماد بلا مرجع.
+    mgr_id = request.data.get("manager_employment_id")
+    if mgr_id:
+        ok, err = _set_manager(request, d, mgr_id, company_id)
+        if not ok:
+            return _err(err, "manager_not_found", 404)
+
     return Response({"id": d.id, "code": d.code, "path": d.path,
-                     "depth": d.depth}, status=201)
+                     "depth": d.depth,
+                     "manager_employment_id": d.manager_employment_id},
+                    status=201)
+
+
+def _manager_name(dept):
+    """اسم مدير الإدارة — أو فراغٌ إن لم يُسنَد."""
+    from apps.employees.models import Employment
+
+    if not dept.manager_employment_id:
+        return ""
+    e = (Employment.objects
+         .filter(id=dept.manager_employment_id)
+         .select_related("person").first())
+    return e.person.display_name if e else ""
+
+
+def _set_manager(request, dept, mgr_id, company_id):
+    """
+    يُسند مدير الإدارة.
+
+    ⚠️ **ولا يُسنَد من شركةٍ أخرى**: فمديرٌ خارج الشركة يكسر
+    سلسلة الاعتماد ويطّلع على ما ليس له.
+    """
+    from apps.employees.models import Employment, EmploymentStatus
+
+    if not mgr_id:
+        dept.manager_employment_id = None
+        dept.save(update_fields=["manager_employment_id"])
+        return True, ""
+
+    e = Employment.objects.filter(
+        id=mgr_id, company_id=company_id,
+        status=EmploymentStatus.ACTIVE).first()
+    if e is None:
+        return False, "المدير غير موجود في هذه الشركة أو غير نشط"
+
+    dept.manager_employment_id = e.id
+    dept.save(update_fields=["manager_employment_id"])
+    return True, ""
 
 
 @api_view(["GET"])
@@ -388,6 +439,22 @@ def department_detail(request, dept_id):
 
     Gate.require(request.user, "org.manage")
 
+    # ق-156: **ويُسنَد المدير أو يُنزع** قبل بقيّة التعديل.
+    #
+    # ⚠️ فالحقل كان مبنيًّا في النموذج ولا يصله شيء — **إدارةٌ بلا
+    # مديرٍ معلَن** رغم أن مكانه محجوز.
+    if request.method == "PUT" and "manager_employment_id" in request.data:
+        company_id = _company(request)
+        dept = Department.objects.filter(
+            id=dept_id, company_id=company_id).first()
+        if dept is None:
+            return _err("الإدارة غير موجودة", "not_found", 404)
+        ok, err = _set_manager(
+            request, dept, request.data["manager_employment_id"],
+            company_id)
+        if not ok:
+            return _err(err, "manager_not_found", 404)
+
     def guard(d):
         n = _usage("department", d, request.user)[1]
         if n:
@@ -424,3 +491,84 @@ def holiday_detail(request, holiday_id):
 
     Gate.require(request.user, "org.manage")
     return _org_detail(request, Holiday, holiday_id)
+
+
+# ══════════ مراكز التكلفة (ق-156) ══════════
+#
+# ⚠️ **النموذج كان مبنيًّا بلا مسار**: والواجهة تناديه فيردّ ٤٠٤
+# في كل فتح لملفّ موظف (بلاغ جواد).
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def cost_centers(request):
+    """مراكز التكلفة — عرضًا وإنشاءً."""
+    from apps.organization.models import CostCenter
+
+    company_id = _company(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "GET":
+        Gate.require(request.user, "org.view")
+        qs = CostCenter.objects.filter(company_id=company_id)
+        if request.GET.get("active") != "0":
+            qs = qs.filter(is_active=True)
+        return Response([
+            {"id": c.id, "code": c.code, "name_ar": c.name_ar,
+             "name_en": getattr(c, "name_en", ""),
+             "is_active": c.is_active}
+            for c in qs
+        ])
+
+    Gate.require(request.user, "org.manage")
+    comp = _get_company(request, company_id)
+
+    code = str(request.data.get("code") or "").strip().upper()
+    name = str(request.data.get("name_ar") or "").strip()
+    if not code or not name:
+        return _err("الرمز والاسم مطلوبان", "missing", 400)
+    if CostCenter.objects.filter(company=comp, code=code).exists():
+        return _err("الرمز مستعمل", "duplicate", 409)
+
+    c = CostCenter.objects.create(
+        account=comp.account, company=comp, code=code,
+        name_ar=name, name_en=request.data.get("name_en", ""))
+    return Response({"id": c.id, "code": c.code}, status=201)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def cost_center_detail(request, center_id):
+    """
+    تعديل مركز تكلفة أو حذفه.
+
+    ⚠️ **والمستعمل يُعطَّل ولا يُحذف**: فموظفون وقيودٌ تشير إليه.
+    """
+    from apps.employees.models import Employment
+    from apps.organization.models import CostCenter
+
+    Gate.require(request.user, "org.manage")
+
+    c = CostCenter.objects.filter(
+        id=center_id, company_id=_company(request)).first()
+    if c is None:
+        return _err("غير موجود", "not_found", 404)
+
+    if request.method == "DELETE":
+        used = Employment.objects.filter(cost_center=c).count()
+        if used:
+            c.is_active = False
+            c.save(update_fields=["is_active"])
+            return Response({
+                "deactivated": True,
+                "detail": f"مستعملٌ لـ{used} موظفًا — عُطّل ولم يُحذف"})
+        c.delete()
+        return Response({"deleted": True})
+
+    for f in ("name_ar", "name_en"):
+        if f in request.data:
+            setattr(c, f, str(request.data[f] or "").strip())
+    if "is_active" in request.data:
+        c.is_active = bool(request.data["is_active"])
+    c.save()
+    return Response({"id": c.id, "code": c.code})
