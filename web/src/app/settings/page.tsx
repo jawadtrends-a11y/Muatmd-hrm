@@ -111,6 +111,11 @@ const T: Dict = {
     ar: "أنواع طلبات تُنشئها بحقولها",
     en: "Request types you define",
   },
+  apiKeys: { ar: "مفاتيح API", en: "API keys" },
+  apiKeysHint: {
+    ar: "اربط أنظمتك ببياناتك برمجيًّا",
+    en: "Connect your systems programmatically",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -594,6 +599,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-151: مفاتيح API */}
+        {perms.has("account.manage") && (
+        <Link href="/settings/api-keys" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("apiKeys")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("apiKeysHint")}
           </span>
         </Link>
         )}
