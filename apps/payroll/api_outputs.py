@@ -167,6 +167,13 @@ def bank_file_download(request, run_id, template_id):
             "detail": "الملف يحوي أخطاء تمنع الإرسال",
             "code": "validation_errors", "errors": res.errors}, status=409)
 
+    # ⚠️⚠️ **وملفٌّ بلا صفوف لا يُنزَّل** (ق-145) — فيُرفع للبنك
+    # بعناوينه وحدها ويُظنّ أن الرواتب أُرسلت.
+    if not res.ready:
+        return Response({
+            "detail": "لا صفوف في الملف — لا موظف مؤهّل للصرف",
+            "code": "empty_file"}, status=409)
+
     response = HttpResponse(res.content.encode(tpl.encoding),
                             content_type="text/csv; charset=" + tpl.encoding)
     response["Content-Disposition"] = f'attachment; filename="{res.filename}"'
@@ -205,6 +212,18 @@ def wps_download(request, run_id):
     if wps.errors:
         return Response({"detail": "الملف يحوي أخطاء", "errors": wps.errors},
                         status=409)
+
+    # ⚠️⚠️ **وملفٌّ بلا صفوف لا يُنزَّل** (ق-145).
+    #
+    # فبلا هذا يُرفع للبنك ملفٌّ بعناوينه وحدها، **ويُظنّ أن
+    # الرواتب أُرسلت** — والسكوت هنا أخطر من الخطأ.
+    if not wps.rows:
+        return Response({
+            "detail": ("لا صفوف في الملف — كل الموظفين مستبعَدون من "
+                       "حماية الأجور"),
+            "code": "empty_file",
+            "excluded": wps.excluded[:50],
+        }, status=409)
 
     filename = f"WPS_{run.period_year}{run.period_month:02d}.csv"
     response = HttpResponse(to_csv(wps).encode("utf-8"),
