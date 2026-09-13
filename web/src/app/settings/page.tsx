@@ -152,6 +152,11 @@ const T: Dict = {
     ar: "يُستعمل حين يُعتمد طلبٌ بـ×2",
     en: "Used when a ×2 request is approved",
   },
+  activitiesOn: { ar: "أنشطة العمل", en: "Work activities" },
+  activitiesHint: {
+    ar: "مهامّ يومية يُسندها المديرون — وتفعيلها لا يُلزمهم",
+    en: "Daily tasks managers may assign — not mandatory",
+  },
   eosbHint: {
     ar: "يجب تحديده قبل أول مسير مستحقات — الصمت هنا قرار مالي لم يتخذه أحد",
     en: "Must be set before the first settlement run",
@@ -246,6 +251,8 @@ type PayrollSettings = {
   overtime_basis: string;
   overtime_basis_x2: string;
   allow_overtime_rate_choice: boolean;
+  // ق-143: أنشطة العمل
+  activities_enabled: boolean;
   overtime_basis_options: { value: string; label: string }[];
   [k: string]: unknown;
 };
@@ -656,6 +663,17 @@ function PayrollPanel({
         </Row>
 
         {/* ق-137: أساس الإضافي — والخيار في الطلب */}
+        {/* ق-143: أنشطة العمل — وتفعيلها لا يُلزم المديرين */}
+        <Row label={L("activitiesOn")} hint={L("activitiesHint")}>
+          <select className="select"
+            value={data.activities_enabled ? "1" : "0"}
+            onChange={(e) =>
+              set("activities_enabled", e.target.value === "1")}>
+            <option value="1">{L("enabled")}</option>
+            <option value="0">{L("disabled")}</option>
+          </select>
+        </Row>
+
         <Row label={L("otBasis")} hint={L("otBasisHint")}>
           <select className="select" value={data.overtime_basis || ""}
             onChange={(e) => set("overtime_basis", e.target.value)}>

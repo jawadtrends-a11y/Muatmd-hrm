@@ -139,6 +139,8 @@ def payroll_settings(request):
                       "ramadan_hours_per_day", "overtime_basis",
                       # ق-137: معامِل الإضافي — الخيار وأساسه
                       "allow_overtime_rate_choice", "overtime_basis_x2",
+                      # ق-143: أنشطة العمل
+                      "activities_enabled",
                       "eosb_wage_basis", "exclude_unpaid_leave_from_service",
                       "allow_mobile_punch",
                       "company_bears_employee_gosi",
@@ -164,6 +166,7 @@ def payroll_settings(request):
         "overtime_basis": s.overtime_basis,
         # ق-137: خيار المعامِل في الطلب وأساس ×2
         "allow_overtime_rate_choice": s.allow_overtime_rate_choice,
+        "activities_enabled": s.activities_enabled,
         "overtime_basis_x2": s.overtime_basis_x2,
         "overtime_basis_options": [
             {"value": v, "label": str(l)} for v, l in OvertimeBasis.choices],
