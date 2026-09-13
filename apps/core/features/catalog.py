@@ -195,7 +195,8 @@ FEATURES = [
     _f("custom_roles", "access", "إنشاء أدوار مخصصة",
        implemented=True, guarded_at="/api/access/roles/create/"),
     _f("erp_integration", "integration", "التكامل مع الأنظمة المحاسبية وERP"),
-    _f("api_access", "integration", "واجهة برمجة التطبيقات API"),
+    _f("api_access", "integration", "واجهة برمجة التطبيقات API",
+       implemented=True, guarded_at="/api/api-keys/"),
     _f("whatsapp_ess", "integration", "الخدمة الذاتية عبر واتساب"),
 
     # ══ الربط الحكومي ══

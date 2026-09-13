@@ -95,3 +95,9 @@ from apps.core.models_policies import (  # noqa: E402,F401
 from apps.core.models_tickets import (  # noqa: E402,F401
     SupportTicket, TicketKind, TicketMessage, TicketPriority, TicketStatus,
 )
+
+
+# مفاتيح API للعملاء (ق-151)
+from apps.core.models_api_keys import (  # noqa: E402,F401
+    ApiCallLog, ApiKey, ApiScope,
+)

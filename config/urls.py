@@ -41,6 +41,8 @@ from apps.employees import api_activities as activities_api
 from apps.attendance import api_presence as presence_api
 from apps.employees import api_performance as perf_api
 from apps.employees import api_training as training_api
+from apps.core import api_public as public_api
+from apps.core import api_keys_admin as keys_admin_api
 from apps.notifications import api as notifications_api
 
 
@@ -367,6 +369,26 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-151: واجهة العملاء البرمجية — **بمفتاحٍ لا بجلسة**
+    path("api/v1/whoami/", public_api.whoami, name="pub-whoami"),
+    path("api/v1/employees/", public_api.employees, name="pub-employees"),
+    path("api/v1/attendance/", public_api.attendance,
+         name="pub-attendance"),
+    path("api/v1/payroll/runs/", public_api.payroll_runs,
+         name="pub-payroll-runs"),
+    path("api/v1/payroll/runs/<str:run_no>/",
+         public_api.payroll_run_detail, name="pub-run-detail"),
+    path("api/v1/requests/", public_api.leave_requests,
+         name="pub-requests"),
+    path("api/v1/org/", public_api.org_structure, name="pub-org"),
+
+    # وإدارتها من لوحة العميل
+    path("api/api-keys/", keys_admin_api.api_keys, name="api-keys"),
+    path("api/api-keys/<int:key_id>/revoke/",
+         keys_admin_api.revoke_key, name="api-key-revoke"),
+    path("api/api-keys/<int:key_id>/calls/",
+         keys_admin_api.key_calls, name="api-key-calls"),
+
     # ق-149: التدريب والدورات
     path("api/training/courses/", training_api.courses,
          name="training-courses"),
