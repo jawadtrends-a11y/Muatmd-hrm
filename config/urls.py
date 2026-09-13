@@ -40,6 +40,7 @@ from apps.leaves import api_custom_types as custom_types_api
 from apps.employees import api_activities as activities_api
 from apps.attendance import api_presence as presence_api
 from apps.employees import api_performance as perf_api
+from apps.employees import api_training as training_api
 from apps.notifications import api as notifications_api
 
 
@@ -366,6 +367,24 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-149: التدريب والدورات
+    path("api/training/courses/", training_api.courses,
+         name="training-courses"),
+    path("api/training/courses/<int:course_id>/",
+         training_api.course_detail, name="training-course-detail"),
+    path("api/training/nominations/", training_api.nominations,
+         name="training-nominations"),
+    path("api/training/nominations/<int:nomination_id>/decide/",
+         training_api.decide_nomination, name="nomination-decide"),
+    path("api/training/nominations/<int:nomination_id>/result/",
+         training_api.nomination_result, name="nomination-result"),
+    path("api/training/requests/", training_api.training_requests,
+         name="training-requests"),
+    path("api/training/requests/<int:request_id>/decide/",
+         training_api.decide_request, name="training-request-decide"),
+    path("api/me/training/", training_api.my_training,
+         name="my-training"),
+
     # ق-146: تقييم الأداء
     path("api/performance/cycles/", perf_api.cycles,
          name="review-cycles"),

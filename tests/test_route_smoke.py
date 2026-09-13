@@ -40,6 +40,10 @@ EMPLOYEE_ROUTES = [
     "/api/me/companies/",
     "/api/me/job-changes/",
     "/api/directory/",
+    "/api/me/training/",
+    "/api/me/reviews/",
+    "/api/me/activities/",
+    "/api/me/presence/",
 ]
 
 #: مساراتٌ إدارية — تُمنع بأدب لمن لا يملكها
@@ -67,6 +71,9 @@ FEATURE_ROUTES = [
     "/api/deferrals/",
     "/api/custom-request-types/",
     "/api/allowances/",
+    "/api/training/courses/",
+    "/api/training/nominations/",
+    "/api/training/requests/",
 ]
 
 #: أخطاءُ الخادم — ما عداها سياسةٌ لا علّة

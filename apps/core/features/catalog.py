@@ -181,7 +181,8 @@ FEATURES = [
     # ══ الأداء والتطوير ══
     _f("performance", "performance", "الأداء والتقييم",
        implemented=True, guarded_at="/api/performance/kpis/"),
-    _f("training", "performance", "التدريب"),
+    _f("training", "performance", "التدريب",
+       implemented=True, guarded_at="/api/training/courses/"),
 
     # ══ أخرى ══
     _f("third_party_services", "integration", "خدمات الطرف الثالث"),
