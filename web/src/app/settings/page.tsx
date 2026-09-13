@@ -116,6 +116,11 @@ const T: Dict = {
     ar: "اربط أنظمتك ببياناتك برمجيًّا",
     en: "Connect your systems programmatically",
   },
+  glLink: { ar: "القيد المحاسبيّ", en: "GL export" },
+  glHint: {
+    ar: "اربط بنود الأجر بحساباتك وصدّر القيد",
+    en: "Map components to accounts and export",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -599,6 +604,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-152: القيد المحاسبيّ */}
+        {perms.has("payroll.view") && (
+        <Link href="/settings/gl" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("glLink")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("glHint")}
           </span>
         </Link>
         )}

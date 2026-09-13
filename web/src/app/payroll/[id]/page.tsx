@@ -272,6 +272,9 @@ export default function RunDetailPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tab, setTab] = useState<Tab>("summary");
   const [deferring, setDeferring] = useState<number | null>(null);
+  // ق-152: قوالب القيد — وإخفاق الجلب قائمةٌ فارغة لا شاشة مكسورة
+  const [glTemplates, setGlTemplates] = useState<
+    { id: number; name_ar: string }[]>([]);
   const [tabData, setTabData] = useState<Record<string, unknown>[]>([]);
   const [busy, setBusy] = useState(true);
   const [tabBusy, setTabBusy] = useState(false);
@@ -303,6 +306,13 @@ export default function RunDetailPage() {
   }, [runId]);
 
   useEffect(() => { loadTab(tab); }, [tab, loadTab]);
+
+  useEffect(() => {
+    apiGet<{ templates: { id: number; name_ar: string }[] }>(
+      "/payroll/gl/templates/")
+      .then((d) => setGlTemplates(d.templates || []))
+      .catch(() => setGlTemplates([]));
+  }, []);
 
   const cols: Record<Tab, Col[]> = {
     summary: [],
@@ -416,6 +426,15 @@ export default function RunDetailPage() {
                   `/payroll/runs/${runId}/bank/${t.id}/download/`)}>
                 <IcDownload size={16} />
                 {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
+              </button>
+            ))}
+            {/* ق-152: القيد المحاسبيّ — لكل قالبٍ زرّه */}
+            {glTemplates.map((t) => (
+              <button key={`gl-${t.id}`} className="btn btn-sm"
+                onClick={() => downloadFile(
+                  `/payroll/runs/${runId}/gl/${t.id}/download/`)}>
+                <IcDownload size={16} />
+                {t.name_ar}
               </button>
             ))}
           </div>
