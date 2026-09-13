@@ -47,7 +47,8 @@ FEATURES = [
        implemented=True, guarded_at="/api/tasks/"),
 
     # ══ الحضور والانصراف ══
-    _f("biometric_devices", "attendance", "الربط مع أجهزة البصمة"),
+    _f("biometric_devices", "attendance", "الربط مع أجهزة البصمة",
+       implemented=True, guarded_at="/api/attendance/devices/"),
     _f("mobile_punch", "attendance", "التحضير عن طريق تطبيق الجوال",
        implemented=True, guarded_at="/api/me/punch/"),
     _f("web_punch", "attendance", "التحضير عن طريق تطبيق الويب",

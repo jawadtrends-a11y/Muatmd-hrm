@@ -305,3 +305,57 @@ def test_appshell_has_the_own_profile_exception():
         guard_block), (
         "حارس القائمة بلا استثناءٍ لملفّ الموظف نفسه — "
         "فـ«ملفي» يُعيده للرئيسية")
+
+
+# ══════════ جرد المزايا (ق-150) ══════════
+
+def test_unguarded_features_have_no_matching_routes():
+    """
+    ⚠️⚠️ **حارسٌ يمنع إعادة بناء ما هو قائم**.
+
+    **فأربع مرّات** كدنا نبني ميزةً مبنيّةً سلفًا: قوالب التصدير،
+    والدرجات الوظيفية، وأجهزة البصمة، وتصدير المسير — **لأن علَم
+    `is_implemented` لم يُرفع عنها**.
+
+    فالحارس يقارن كل ميزةٍ غير معلَّمة بمسارات الخادم: **إن وُجد
+    مسارٌ يحمل اسمها، فالأرجح أنها مبنيّةٌ ولم تُعلَّم**.
+    """
+    from django.urls import get_resolver
+
+    from apps.core.features.catalog import FEATURES
+
+    all_paths = []
+
+    def walk(resolver, prefix=""):
+        for p in resolver.url_patterns:
+            pat = prefix + str(getattr(p, "pattern", ""))
+            if hasattr(p, "url_patterns"):
+                walk(p, pat)
+            else:
+                all_paths.append(pat)
+
+    walk(get_resolver())
+    joined = " ".join(all_paths).lower()
+
+    # ⚠️ **مزايا لا مسارَ لها بطبيعتها** — حدودٌ وروابط خارجية
+    # وأمورٌ تُقاس بمنطقٍ لا بمسار.
+    EXPECTED_UNROUTED = {
+        "max_companies", "max_employees",       # قيمٌ لا مزايا
+        "api_access", "erp_integration",        # روابط خارجية
+        "third_party_services", "whatsapp_ess",
+        "gov_qiwa", "gov_mudad", "gov_muqeem", "gov_gosi",
+        "nitaqat_simulator", "compliance_dashboard",
+        "support_group_courses",
+    }
+
+    suspects = []
+    for f in FEATURES:
+        if f.implemented or f.key in EXPECTED_UNROUTED:
+            continue
+        # اسمٌ مشتقّ من المفتاح: biometric_devices → devices
+        parts = [p for p in f.key.split("_") if len(p) > 3]
+        if any(p in joined for p in parts):
+            suspects.append(f.key)
+
+    assert not suspects, (
+        f"مزايا غير معلَّمة ولها مسارات — أمبنيّةٌ سلفًا؟ {suspects}")
