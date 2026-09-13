@@ -206,7 +206,12 @@ def test_effect_runs_without_an_approval_chain(env):
     from apps.attendance.models import AttendanceDay, DayStatus
 
     with account_scope(env["account_id"]):
+        # ⚠️ **يوم عملٍ مؤكّد لا يومًا متحرّكًا**: فـTODAY-2 يقع
+        # في راحةٍ أسبوعية مرّةً كل أسبوع، فيسقط الحارس بلا علّة.
         day = TODAY - timedelta(days=2)
+        while day.weekday() in (4, 5):          # الجمعة والسبت
+            day -= timedelta(days=1)
+
         create_request(employment=env["emp"],
                        request_type=RequestType.REMOTE_WORK,
                        payload={"start_date": str(day), "days": 1,
