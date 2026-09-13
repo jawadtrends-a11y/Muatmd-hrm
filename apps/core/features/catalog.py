@@ -139,7 +139,8 @@ FEATURES = [
     # ⚠️ أُعيد تعريفها (ق-141): **قوالب تصدير** تختار الشركة
     # أعمدتها — لا استيرادًا من ملفّ، فالبنود تأتي من النظام
     # نفسه (سلف ومكرّرة ومصروفات وجزاءات).
-    _f("payroll_excel_templates", "payroll", "قوالب تصدير المسير"),
+    _f("payroll_excel_templates", "payroll", "قوالب تصدير المسير",
+       implemented=True, guarded_at="/api/payroll/bank-templates/"),
     _f("payslip_defer", "payroll", "تأجيل بنود القسيمة",
        implemented=True, guarded_at="/api/deferrals/"),
     _f("payroll_types", "payroll", "أنواع مسيرات الرواتب",
