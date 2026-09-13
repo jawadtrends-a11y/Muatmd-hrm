@@ -136,6 +136,13 @@ urlpatterns = [
          name="announcements"),
     path("api/payroll/eosb/calculate/", payroll_api.eosb_calculator, name="eosb-calc"),
     path("api/payroll/termination-reasons/", payroll_api.termination_reasons, name="termination-reasons"),
+    # ق-154: الاستيراد الجماعيّ
+    path("api/employees/import/template/",
+         employees_api.import_template, name="import-template"),
+    path("api/employees/import/preview/",
+         employees_api.import_preview, name="import-preview"),
+    path("api/employees/import/execute/",
+         employees_api.import_execute, name="import-execute"),
     path("api/employees/", employees_api.employees, name="employees"),
     # ق-119 وق-121: الجزاءات التأديبية — اللائحة والسجلّ والتوقيع
     path("api/penalties/violations/", penalties_api.violations,

@@ -1583,3 +1583,117 @@ def upload_attachment_b64(request):
         "size": obj.size_label,
         "was_duplicate": dup,
     }, status=201)
+
+
+# ══════════ الاستيراد الجماعيّ (ق-154) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def import_template(request):
+    """
+    تنزيل قالب الاستيراد.
+
+    ⚠️ **وفيه سطر مثالٍ يُحذف** — فمن يملأ يرى الصيغة المطلوبة.
+    """
+    from django.http import HttpResponse
+
+    from apps.employees.services import bulk_import as imp
+
+    Gate.require(request.user, "employees.create")
+
+    res = HttpResponse(imp.template_csv().encode("utf-8-sig"),
+                       content_type="text/csv; charset=utf-8")
+    res["Content-Disposition"] = (
+        'attachment; filename="employees_template.csv"')
+    return res
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def import_preview(request):
+    """
+    معاينة الملفّ قبل التنفيذ.
+
+    ⚠️⚠️ **ويُرجع كل الأخطاء لا أوّلها**: فمن يُصلح خطأً ثم يرفع
+    ليكتشف ثانيًا يكرّر الرفع عشرًا.
+    """
+    from apps.accounts.models import Company
+    from apps.employees.services import bulk_import as imp
+
+    Gate.require(request.user, "employees.create")
+
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    f = request.FILES.get("file")
+    if f is None:
+        return Response({"detail": "أرفق الملفّ"}, status=400)
+    if f.size > 5 * 1024 * 1024:
+        return Response({"detail": "الملفّ أكبر من ٥ ميغابايت"},
+                        status=400)
+
+    try:
+        out = imp.parse_file(f.read(), comp)
+    except imp.ImportError_ as e:
+        return Response({"detail": str(e)}, status=400)
+
+    # ⚠️ ولا تُعاد الصفوف كاملةً — عيّنةٌ تكفي للعرض
+    return Response({
+        "total": out["total"], "valid": out["valid"],
+        "invalid": out["invalid"], "can_import": out["can_import"],
+        "errors": out["errors"][:100],
+        "sample": [{
+            "employee_no": r["employee_no"],
+            "name": f'{r["first_name_ar"]} {r["family_name_ar"]}',
+            "join_date": r["join_date"],
+            "department": r.get("department", ""),
+            "basic_salary": (str(r.get("basic_salary"))
+                             if r.get("basic_salary") else ""),
+        } for r in out["rows"][:20]],
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def import_execute(request):
+    """
+    تنفيذ الاستيراد.
+
+    ⚠️⚠️ **ولا استيراد بخطأ واحد** — والملفّ يُفحص ثانيةً هنا:
+    فما بين المعاينة والتنفيذ قد يتغيّر.
+    """
+    from apps.accounts.models import Company
+    from apps.employees.services import bulk_import as imp
+
+    Gate.require(request.user, "employees.create")
+
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    f = request.FILES.get("file")
+    if f is None:
+        return Response({"detail": "أرفق الملفّ"}, status=400)
+
+    try:
+        out = imp.parse_file(f.read(), comp)
+    except imp.ImportError_ as e:
+        return Response({"detail": str(e)}, status=400)
+
+    if not out["can_import"]:
+        return Response({
+            "detail": (f"الملفّ فيه {out['invalid']} خطأً — "
+                       "لا يُستورَد حتى تُصلَح كلّها"),
+            "code": "has_errors",
+            "errors": out["errors"][:100]}, status=400)
+
+    actor = getattr(request.user, "person", None)
+    try:
+        res = imp.execute(company=comp, parsed_rows=out["rows"],
+                          by_person_id=actor.id if actor else None)
+    except imp.ImportError_ as e:
+        return Response({"detail": str(e), "code": "rolled_back"},
+                        status=400)
+
+    return Response(res, status=status.HTTP_201_CREATED)

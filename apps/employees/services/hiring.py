@@ -91,6 +91,14 @@ def create_employment(*, person, company, employee_no, join_date,
     salary_lines: [(component, amount), ...]
     أعلام التسجيل تبدأ False — التوظيف مستقل عن التسجيل (ق-15).
     """
+    # ق-154: ⚠️ **ورقمٌ وظيفيٌّ فارغ لا يُقبل**.
+    #
+    # فـblank=False لا يُفحص إلا في النماذج، و`create_employment`
+    # تكتب مباشرةً — فتمرّ السلسلة الفارغة، **ويُنشأ موظفٌ بلا
+    # رقم لا يُنادى به في مسيرٍ ولا تقرير**.
+    if not (employee_no or "").strip():
+        raise HiringError("الرقم الوظيفي مطلوب")
+
     if person.account_id != company.account_id:
         raise HiringError("الشخص والشركة من حسابين مختلفين")
 
