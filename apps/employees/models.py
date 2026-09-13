@@ -477,3 +477,10 @@ from apps.employees.models_tags_tasks import (  # noqa: E402,F401
 from apps.employees.models_activities import (  # noqa: E402,F401
     ActivityStatus, PayBasis, PayEffect, WorkActivity,
 )
+
+
+# تقييم الأداء (ق-146)
+from apps.employees.models_performance import (  # noqa: E402,F401
+    ApprovalState, BehaviorRating, KPI, KPIAssignment, KPIDirection,
+    KPIKind, KPIScale, PeerReview, ReviewCycle, ReviewKind,
+)
