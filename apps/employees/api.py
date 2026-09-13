@@ -68,6 +68,8 @@ def _employment_brief(e, lang="ar"):
     return {
         "id": e.id, "employee_no": e.employee_no,
         "person_id": e.person_id,
+        # ق-155: الصورة في البطاقات — فالوجه أسرع من الاسم
+        "avatar_url": _avatar_url(e.person),
         "name_ar": e.person.name_for(lang),
         # localized ترتدّ للعربية إن لم يُملأ الإنجليزي (ق-i18n)
         "job_title": localized(e.job_title, locale=lang),
@@ -1601,10 +1603,14 @@ def import_template(request):
 
     Gate.require(request.user, "employees.create")
 
-    res = HttpResponse(imp.template_csv().encode("utf-8-sig"),
-                       content_type="text/csv; charset=utf-8")
+    # ⚠️ **وxlsx لا CSV**: فإكسل العربيّ يفتح CSV بالفواصل في
+    # عمودٍ واحد، فيظنّ العميل القالب معطوبًا.
+    res = HttpResponse(
+        imp.template_xlsx(),
+        content_type=("application/vnd.openxmlformats-officedocument"
+                      ".spreadsheetml.sheet"))
     res["Content-Disposition"] = (
-        'attachment; filename="employees_template.csv"')
+        'attachment; filename="employees_template.xlsx"')
     return res
 
 

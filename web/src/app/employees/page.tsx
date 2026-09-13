@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 
 import DocList, { type Column, type Stat } from "@/components/DocList";
 import { apiUpload, downloadFile, ApiError } from "@/lib/api";
+import AuthImage from "@/components/AuthImage";
 import { useT, type Dict } from "@/lib/prefs";
 
 const T: Dict = {
@@ -52,6 +53,7 @@ const T: Dict = {
 };
 
 type Employee = {
+  avatar_url?: string | null;
   id: number;
   employee_no: string;
   name_ar: string;
@@ -167,12 +169,34 @@ export default function EmployeesPage() {
         }
         cardView={(r) => (
           <>
-            <div className="spread">
-              <strong>{r.name_ar}</strong>
-              <span className="muted num"
-                    style={{ fontSize: ".78rem" }}>
-                {r.employee_no}
-              </span>
+            <div className="row" style={{ gap: 10,
+                                          alignItems: "center" }}>
+              {/* ق-155: الصورة — **فالوجه أسرع من الاسم** */}
+              {r.avatar_url ? (
+                <AuthImage src={String(r.avatar_url)} alt=""
+                           style={{ width: 44, height: 44,
+                                    borderRadius: "50%",
+                                    objectFit: "cover",
+                                    flexShrink: 0 }} />
+              ) : (
+                <div style={{
+                  width: 44, height: 44, borderRadius: "50%",
+                  background: "var(--paper-2)", flexShrink: 0,
+                  display: "grid", placeItems: "center",
+                  color: "var(--ink-3)", fontWeight: 600,
+                }}>
+                  {String(r.name_ar || "؟").trim().charAt(0)}
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="truncate" style={{ fontWeight: 600 }}>
+                  {r.name_ar}
+                </div>
+                <div className="muted num"
+                     style={{ fontSize: ".76rem" }}>
+                  {r.employee_no}
+                </div>
+              </div>
             </div>
             <div className="muted" style={{ fontSize: ".82rem",
                                             marginTop: 6 }}>

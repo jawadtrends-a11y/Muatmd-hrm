@@ -49,6 +49,30 @@ COLUMNS = [
     ("iban", "الآيبان", False, "SA0380000000608010167519"),
 ]
 
+#: قوائمُ منسدلة في القالب — ⚠️ **فالعميل قد لا يعرف الصيغة**
+#
+# وبلا قائمةٍ يكتب «ذكر» فيُرفض الملفّ، ويُعيد الرفع مرارًا
+# (بلاغ جواد).
+DROPDOWNS = {
+    "gender": ["male", "female"],
+    "id_type": ["national_id", "iqama"],
+}
+
+#: ⚠️ **والجنسيات الشائعة لا كلّها**: فقائمةٌ بمئتَي دولة تُرهق،
+# والحقل يبقى حرًّا لمن لم يجد جنسيّته.
+NATIONALITIES = [
+    ("SA", "السعودية"), ("EG", "مصر"), ("PK", "باكستان"),
+    ("IN", "الهند"), ("BD", "بنغلاديش"), ("YE", "اليمن"),
+    ("SD", "السودان"), ("SY", "سوريا"), ("JO", "الأردن"),
+    ("PH", "الفلبين"), ("LK", "سريلانكا"), ("NP", "نيبال"),
+    ("ID", "إندونيسيا"), ("LB", "لبنان"), ("PS", "فلسطين"),
+    ("IQ", "العراق"), ("TN", "تونس"), ("MA", "المغرب"),
+    ("DZ", "الجزائر"), ("ET", "إثيوبيا"), ("KE", "كينيا"),
+    ("NG", "نيجيريا"), ("TR", "تركيا"), ("GB", "بريطانيا"),
+    ("US", "أمريكا"),
+]
+
+
 #: بنود الأجر التي تُستورَد — **ورمزُها في النظام**
 SALARY_MAP = {
     "basic_salary": "BASIC",
@@ -57,16 +81,129 @@ SALARY_MAP = {
 }
 
 
-def template_csv():
+def template_xlsx():
     """
-    قالبٌ فارغٌ بعناوينه ومثالٍ واحد.
+    قالبٌ بصيغة Excel — **لا CSV**.
 
-    ⚠️ **والمثال سطرٌ يُحذف** — فمن يملأ يرى الصيغة المطلوبة.
+    ⚠️⚠️ **فإكسل العربيّ يتوقّع الفاصلة المنقوطة**: ويفتح ملفّ
+    CSV بالفواصل **في عمودٍ واحد**، فيظنّ العميل القالب معطوبًا.
+
+    **والـxlsx لا فواصل فيه ولا ترميز** — يفتح كما هو في كل بيئة.
     """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الموظفون"
+    ws.sheet_view.rightToLeft = True
+
+    head_fill = PatternFill("solid", start_color="1F4E5F")
+    req_fill = PatternFill("solid", start_color="C0392B")
+    bold = Font(bold=True, color="FFFFFF", size=11)
+
+    for i, (key, label, required, example) in enumerate(COLUMNS, 1):
+        c = ws.cell(row=1, column=i, value=label)
+        c.font = bold
+        # ⚠️ **والإلزاميّ بلونٍ مختلف** — فيُرى قبل أن يُقرأ
+        c.fill = req_fill if required else head_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions[c.column_letter].width = max(
+            len(label) + 6, 16)
+
+        ex = ws.cell(row=2, column=i, value=example)
+        ex.font = Font(italic=True, color="888888", size=10)
+        ex.alignment = Alignment(horizontal="center")
+
+    ws.freeze_panes = "A3"
+    ws.row_dimensions[1].height = 26
+
+    # ── القوائم المنسدلة (ق-155) ──
+    #
+    # ⚠️ **فالعميل قد لا يعرف الصيغة**: يكتب «ذكر» فيُرفض الملفّ،
+    # ويُعيد الرفع مرارًا (بلاغ جواد).
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    keys = [c[0] for c in COLUMNS]
+
+    for key, options in DROPDOWNS.items():
+        if key not in keys:
+            continue
+        col = get_column_letter(keys.index(key) + 1)
+        dv = DataValidation(
+            type="list", formula1='"' + ",".join(options) + '"',
+            allow_blank=True, showDropDown=False)
+        dv.error = "اختر من القائمة"
+        dv.errorTitle = "قيمة غير مقبولة"
+        ws.add_data_validation(dv)
+        dv.add(f"{col}3:{col}1000")
+
+    # ⚠️ **والجنسيات في ورقةٍ مرجعية**: فقائمةٌ طويلة لا تُكتب في
+    # الصيغة، والورقة تُخفى فلا تُربك من يملأ.
+    ref = wb.create_sheet("مرجع")
+    ref["A1"] = "الرمز"
+    ref["B1"] = "الجنسية"
+    for i, (code, name) in enumerate(NATIONALITIES, 2):
+        ref[f"A{i}"] = code
+        ref[f"B{i}"] = name
+    ref.sheet_state = "hidden"
+
+    if "nationality_code" in keys:
+        col = get_column_letter(keys.index("nationality_code") + 1)
+        dv = DataValidation(
+            type="list",
+            formula1=f"مرجع!$A$2:$A${len(NATIONALITIES) + 1}",
+            allow_blank=True, showDropDown=False)
+        # ⚠️ **ولا يُمنع غيرُها**: فمن لم يجد جنسيّته يكتبها
+        dv.showErrorMessage = False
+        dv.promptTitle = "الجنسية"
+        dv.prompt = "اختر من القائمة أو اكتب رمز الدولة بحرفين"
+        dv.showInputMessage = True
+        ws.add_data_validation(dv)
+        dv.add(f"{col}3:{col}1000")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def template_csv():
+    """CSV احتياطيّ — ⚠️ وبالفاصلة المنقوطة لإكسل العربيّ."""
     buf = io.StringIO()
-    w = csv.writer(buf)
+    w = csv.writer(buf, delimiter=";")
     w.writerow([c[1] for c in COLUMNS])
     w.writerow([c[3] for c in COLUMNS])
+    return buf.getvalue()
+
+
+def _xlsx_to_csv(data):
+    """
+    يحوّل xlsx إلى نصٍّ يُقرأ بالمنطق نفسه.
+
+    ⚠️ **فالتواريخ تعود كائناتٍ لا نصًّا** — وتُنسَّق هنا.
+    """
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(data), data_only=True)
+    ws = wb.active
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    for row in ws.iter_rows(values_only=True):
+        cells = []
+        for v in row:
+            if v is None:
+                cells.append("")
+            elif isinstance(v, datetime):
+                cells.append(v.date().isoformat())
+            elif isinstance(v, date):
+                cells.append(v.isoformat())
+            elif isinstance(v, float) and v.is_integer():
+                cells.append(str(int(v)))
+            else:
+                cells.append(str(v).strip())
+        w.writerow(cells)
     return buf.getvalue()
 
 
@@ -102,6 +239,10 @@ def parse_file(content, company):
     from apps.employees.models import Employment, Person
     from apps.organization.models import Department, JobTitle
 
+    # ⚠️ **والقراءة تقبل xlsx وCSV**: فالعميل قد يحفظ بأيّهما
+    if isinstance(content, bytes) and content[:2] == b"PK":
+        content = _xlsx_to_csv(content)
+
     if isinstance(content, bytes):
         for enc in ("utf-8-sig", "utf-8", "cp1256"):
             try:
@@ -112,7 +253,10 @@ def parse_file(content, company):
         else:
             raise ImportError_("تعذّر قراءة الملفّ — احفظه بترميز UTF-8")
 
-    reader = csv.reader(io.StringIO(content))
+    # ⚠️ **والفاصل يُكتشف**: فمن حفظ من إكسل العربيّ يحصل على «؛»
+    first = content.split("\n", 1)[0]
+    delim = ";" if first.count(";") > first.count(",") else ","
+    reader = csv.reader(io.StringIO(content), delimiter=delim)
     rows = [r for r in reader if any((c or "").strip() for c in r)]
     if len(rows) < 2:
         raise ImportError_("الملفّ فارغ — عبّئ صفًّا واحدًا على الأقلّ")

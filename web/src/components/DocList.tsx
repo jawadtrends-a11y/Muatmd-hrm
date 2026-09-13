@@ -98,8 +98,28 @@ export default function DocList<R>({
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  // ق-155: طريقة العرض — قائمةٌ أو بطاقات
+  // ق-155: طريقة العرض — **وتُحفظ فلا تُنسى بالتحديث** (بلاغ
+  // جواد): فمن اختار البطاقات يجدها كما تركها.
+  //
+  // ⚠️ **ومفتاحُها بالمسار**: فاختيارُه في الموظفين لا يقلب
+  // شاشةً أخرى.
   const [view, setView] = useState<"list" | "cards">("list");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem(
+        `doclist-view:${endpoint}`);
+      if (saved === "cards" || saved === "list") setView(saved);
+    } catch { /* الوضع الخاصّ يمنعه — والافتراض يكفي */ }
+  }, [endpoint]);
+
+  const pickView = (v: "list" | "cards") => {
+    setView(v);
+    try {
+      window.localStorage.setItem(`doclist-view:${endpoint}`, v);
+    } catch { /* يُتجاهل */ }
+  };
   const [reload, setReload] = useState(0);
 
   const query = useMemo(() => qs(filters || {}), [filters]);
@@ -207,14 +227,14 @@ export default function DocList<R>({
           <button
             className={`btn btn-sm ${view === "list" ? "btn-primary" : "btn-ghost"}`}
             title={L("listView")}
-            onClick={() => setView("list")}
+            onClick={() => pickView("list")}
             style={{ minWidth: 40, padding: "6px 10px" }}>
             ☰
           </button>
           <button
             className={`btn btn-sm ${view === "cards" ? "btn-primary" : "btn-ghost"}`}
             title={L("cardsView")}
-            onClick={() => setView("cards")}
+            onClick={() => pickView("cards")}
             style={{ minWidth: 40, padding: "6px 10px" }}>
             ▦
           </button>

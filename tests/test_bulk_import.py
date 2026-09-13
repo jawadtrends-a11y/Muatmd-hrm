@@ -6,6 +6,7 @@
 ⚠️⚠️ **والخطأ في سطرٍ يوقف الملفّ كلّه**: فاستيرادٌ نصفُه ناقصٌ
 **أسوأ من لا شيء** — والشركة لا تعرف من دخل ومن بقي.
 """
+import io
 from datetime import date
 
 import pytest
@@ -189,3 +190,40 @@ def test_example_row_is_skipped(env):
             imp.template_csv().encode("utf-8-sig"), env["comp"])
         assert out["total"] == 0
         assert out["errors"] == []
+
+
+def test_template_has_dropdowns(env):
+    """
+    ⚠️ **وقوائمُ منسدلة للحقول الملتبسة** (بلاغ جواد).
+
+    فبلا قائمةٍ يكتب العميل «ذكر» فيُرفض الملفّ، **ويُعيد الرفع
+    مرارًا**.
+    """
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(imp.template_xlsx()))
+    ws = wb.active
+    dvs = list(ws.data_validations.dataValidation)
+    assert len(dvs) >= 3, f"قوائم ناقصة: {len(dvs)}"
+
+    formulas = " ".join((d.formula1 or "") for d in dvs)
+    assert "male" in formulas and "female" in formulas
+    assert "national_id" in formulas and "iqama" in formulas
+
+    # ⚠️ والجنسيات في ورقةٍ مرجعية مخفيّة
+    assert "مرجع" in wb.sheetnames
+    assert wb["مرجع"].sheet_state == "hidden", (
+        "ورقة المرجع ظاهرة — تُربك من يملأ")
+
+
+def test_nationality_is_not_restricted(env):
+    """
+    ⚠️ **ولا تُمنع جنسيةٌ خارج القائمة**: فمن لم يجد جنسيّته
+    يكتبها — والقائمة إرشادٌ لا سجن.
+    """
+    with account_scope(env["account_id"]):
+        row = ("7301,أنطون,بيريز,male,MX,iqama,2077003300,"
+               "2026-03-01,,,,,7000,,,")
+        out = _parse(env, [row])
+        assert out["valid"] == 1, out["errors"]
+
