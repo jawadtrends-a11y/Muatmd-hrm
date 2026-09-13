@@ -19,6 +19,8 @@ const T: Dict = {
   search: { ar: "بحث…", en: "Search…" },
   empty: { ar: "لا نتائج", en: "No results" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
+  listView: { ar: "عرض قائمة", en: "List view" },
+  cardsView: { ar: "عرض بطاقات", en: "Card view" },
   error: { ar: "تعذّر تحميل البيانات", en: "Failed to load" },
   retry: { ar: "إعادة المحاولة", en: "Retry" },
   total: { ar: "الإجمالي", en: "Total" },
@@ -59,6 +61,14 @@ type Props<R> = {
   /** زر الإضافة */
   newHref?: string;
   newLabel?: { ar: string; en: string };
+  /** ق-155: أزرارٌ إضافية بجانب «جديد» — كالاستيراد */
+  actions?: React.ReactNode;
+  /**
+   * ق-155: عرضٌ بالبطاقات — **والمبدّل يظهر إن وُجدت**.
+   *
+   * ⚠️ فشاشةٌ بلا بطاقةٍ معرَّفة لا تُظهر زرًّا لا يفعل شيئًا.
+   */
+  cardView?: (row: R) => React.ReactNode;
   onRowClick?: (row: R) => void;
   /** يُعاد التحميل عند تغيّره */
   refreshKey?: unknown;
@@ -76,6 +86,8 @@ export default function DocList<R>({
   searchFields,
   newHref,
   newLabel,
+  actions,
+  cardView,
   onRowClick,
   refreshKey,
   emptyHint,
@@ -86,6 +98,8 @@ export default function DocList<R>({
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  // ق-155: طريقة العرض — قائمةٌ أو بطاقات
+  const [view, setView] = useState<"list" | "cards">("list");
   const [reload, setReload] = useState(0);
 
   const query = useMemo(() => qs(filters || {}), [filters]);
@@ -177,6 +191,8 @@ export default function DocList<R>({
         {filterBar}
         <div className="grow" />
 
+        {actions}
+
         {newHref && (
           <Link href={newHref} className="btn btn-primary">
             <IcPlus size={17} />
@@ -184,6 +200,26 @@ export default function DocList<R>({
           </Link>
         )}
       </div>
+
+      {/* ق-155: مبدّل العرض — ولا يظهر إلا لمن عرّف بطاقته */}
+      {cardView && (
+        <div className="row" style={{ gap: 4 }}>
+          <button
+            className={`btn btn-sm ${view === "list" ? "btn-primary" : "btn-ghost"}`}
+            title={L("listView")}
+            onClick={() => setView("list")}
+            style={{ minWidth: 40, padding: "6px 10px" }}>
+            ☰
+          </button>
+          <button
+            className={`btn btn-sm ${view === "cards" ? "btn-primary" : "btn-ghost"}`}
+            title={L("cardsView")}
+            onClick={() => setView("cards")}
+            style={{ minWidth: 40, padding: "6px 10px" }}>
+            ▦
+          </button>
+        </div>
+      )}
 
       {/* الجدول */}
       <div className="card" style={{ overflow: "hidden" }}>
@@ -209,6 +245,27 @@ export default function DocList<R>({
                 {emptyHint[lang]}
               </div>
             )}
+          </div>
+        ) : cardView && view === "cards" ? (
+          /* ق-155: البطاقات — شبكةٌ تتكيّف مع العرض */
+          <div style={{
+            display: "grid", gap: 12, padding: 14,
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(240px, 1fr))",
+          }}>
+            {visible.map((r) => (
+              <div key={String(rowKey(r))}
+                   onClick={() => onRowClick?.(r)}
+                   style={{
+                     border: "1px solid var(--line)",
+                     borderRadius: "var(--radius-sm)",
+                     padding: 14,
+                     cursor: onRowClick ? "pointer" : "default",
+                     background: "var(--paper)",
+                   }}>
+                {cardView(r)}
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
