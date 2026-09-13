@@ -157,6 +157,16 @@ const T: Dict = {
     ar: "مهامّ يومية يُسندها المديرون — وتفعيلها لا يُلزمهم",
     en: "Daily tasks managers may assign — not mandatory",
   },
+  presenceOn: { ar: "تتبّع التواجد في الموقع", en: "Presence tracking" },
+  presenceHint: {
+    ar: "داخل الموقع أو خارجه أثناء الفترة — ولا يُحفظ موقع الموظف",
+    en: "Inside/outside during shift — actual location never stored",
+  },
+  presenceTolerance: { ar: "تسامح الخروج (دقيقة)", en: "Tolerance (min)" },
+  toleranceHint: {
+    ar: "لا يُقترَح خصمٌ دونها — كساعة البريك",
+    en: "No deduction suggested below this — e.g. break time",
+  },
   eosbHint: {
     ar: "يجب تحديده قبل أول مسير مستحقات — الصمت هنا قرار مالي لم يتخذه أحد",
     en: "Must be set before the first settlement run",
@@ -253,6 +263,9 @@ type PayrollSettings = {
   allow_overtime_rate_choice: boolean;
   // ق-143: أنشطة العمل
   activities_enabled: boolean;
+  // ق-144: تتبّع التواجد
+  presence_tracking_enabled: boolean;
+  presence_tolerance_minutes: number;
   overtime_basis_options: { value: string; label: string }[];
   [k: string]: unknown;
 };
@@ -663,6 +676,27 @@ function PayrollPanel({
         </Row>
 
         {/* ق-137: أساس الإضافي — والخيار في الطلب */}
+        {/* ق-144: تتبّع التواجد — بعلم الموظف ولا يُحفظ موقعه */}
+        <Row label={L("presenceOn")} hint={L("presenceHint")}>
+          <select className="select"
+            value={data.presence_tracking_enabled ? "1" : "0"}
+            onChange={(e) =>
+              set("presence_tracking_enabled", e.target.value === "1")}>
+            <option value="1">{L("enabled")}</option>
+            <option value="0">{L("disabled")}</option>
+          </select>
+        </Row>
+
+        {data.presence_tracking_enabled && (
+        <Row label={L("presenceTolerance")} hint={L("toleranceHint")}>
+          <input className="input num" type="number" min={0}
+            style={{ maxWidth: 120 }}
+            value={String(data.presence_tolerance_minutes ?? 60)}
+            onChange={(e) =>
+              set("presence_tolerance_minutes", Number(e.target.value))} />
+        </Row>
+        )}
+
         {/* ق-143: أنشطة العمل — وتفعيلها لا يُلزم المديرين */}
         <Row label={L("activitiesOn")} hint={L("activitiesHint")}>
           <select className="select"

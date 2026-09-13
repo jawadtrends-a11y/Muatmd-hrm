@@ -51,6 +51,8 @@ const T: Dict = {
   expenses: { ar: "المصروفات", en: "Expenses" },
   my_activities: { ar: "أنشطتي", en: "My activities" },
   activities: { ar: "أنشطة العمل", en: "Work activities" },
+  my_presence: { ar: "تواجدي", en: "My presence" },
+  presence: { ar: "مراجعة التواجد", en: "Presence review" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
   myAttendance: { ar: "حضوري", en: "My Attendance" },

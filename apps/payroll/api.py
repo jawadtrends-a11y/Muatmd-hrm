@@ -141,6 +141,10 @@ def payroll_settings(request):
                       "allow_overtime_rate_choice", "overtime_basis_x2",
                       # ق-143: أنشطة العمل
                       "activities_enabled",
+                      # ق-144: تتبّع التواجد
+                      "presence_tracking_enabled",
+                      "presence_tolerance_minutes",
+                      "presence_retention_days",
                       "eosb_wage_basis", "exclude_unpaid_leave_from_service",
                       "allow_mobile_punch",
                       "company_bears_employee_gosi",
@@ -167,6 +171,9 @@ def payroll_settings(request):
         # ق-137: خيار المعامِل في الطلب وأساس ×2
         "allow_overtime_rate_choice": s.allow_overtime_rate_choice,
         "activities_enabled": s.activities_enabled,
+        "presence_tracking_enabled": s.presence_tracking_enabled,
+        "presence_tolerance_minutes": s.presence_tolerance_minutes,
+        "presence_retention_days": s.presence_retention_days,
         "overtime_basis_x2": s.overtime_basis_x2,
         "overtime_basis_options": [
             {"value": v, "label": str(l)} for v, l in OvertimeBasis.choices],
