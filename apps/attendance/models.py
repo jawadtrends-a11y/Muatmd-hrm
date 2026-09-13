@@ -269,3 +269,9 @@ from apps.attendance.models_sites import (  # noqa: E402,F401
 from apps.attendance.models_exemption import (  # noqa: E402,F401
     AttendanceExemption,
 )
+
+
+# تتبّع التواجد (ق-144)
+from apps.attendance.models_presence import (  # noqa: E402,F401
+    PresenceDay, PresencePing, PresenceState,
+)

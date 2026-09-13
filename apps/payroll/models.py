@@ -203,6 +203,18 @@ class PayrollSettings(CompanyScopedModel):
     #
     # فلا نمنعه (شركاتٌ تعمله)، **وننبّه عليه**، ونجعله خيارًا
     # مطفأً افتراضًا (قرار جواد).
+    # ق-144: **تتبّع التواجد في الموقع**.
+    #
+    # ⚠️ **والخصم يُقترَح ولا يقع**: فساعة البريك مرنة — والموارد
+    # تعتمد أو تترك (قرار جواد).
+    presence_tracking_enabled = models.BooleanField(
+        _("تتبّع التواجد في الموقع"), default=False)
+    presence_tolerance_minutes = models.PositiveSmallIntegerField(
+        _("تسامح الخروج (دقيقة)"), default=60,
+        help_text=_("لا يُقترَح خصمٌ دونها — كساعة البريك"))
+    presence_retention_days = models.PositiveSmallIntegerField(
+        _("مدّة حفظ النبضات (يومًا)"), default=90)
+
     # ق-143: **أنشطة العمل** — تُفعَّل أو تُغلق من الأساس.
     #
     # ⚠️ **وتفعيلها لا يُلزم المديرين**: من شاء أسند لموظفيه، ومن
