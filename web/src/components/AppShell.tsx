@@ -55,6 +55,8 @@ const T: Dict = {
   presence: { ar: "مراجعة التواجد", en: "Presence review" },
   my_reviews: { ar: "تقييماتي", en: "My reviews" },
   performance: { ar: "تقييم الأداء", en: "Performance" },
+  my_training: { ar: "تدريبي", en: "My training" },
+  training: { ar: "التدريب والدورات", en: "Training" },
   reports: { ar: "التقارير", en: "Reports" },
   org: { ar: "الهيكل التنظيمي", en: "Organization" },
   myAttendance: { ar: "حضوري", en: "My Attendance" },

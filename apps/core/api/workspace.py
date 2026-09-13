@@ -32,6 +32,9 @@ NAV_ITEMS = [
     # ق-146: تقييم الأداء — تقييماتي للجميع، وإدارته لمن يرى الموظفين
     {"key": "my_reviews",  "path": "/me/reviews",      "icon": "doc",      "permission": None},
     {"key": "performance", "path": "/performance",     "icon": "doc",      "permission": "employees.edit"},
+    # ق-149: التدريب — تدريبي للجميع، وإدارته لمن يرى الموظفين
+    {"key": "my_training", "path": "/me/training",     "icon": "doc",      "permission": None},
+    {"key": "training",    "path": "/training",        "icon": "doc",      "permission": "employees.edit"},
     # ق-119: الجزاءات — من يرى الحضور يراها، فهي منه تنشأ
     {"key": "penalties",   "path": "/penalties",       "icon": "doc",      "permission": "attendance.view"},
     # ق-129: السياسات — يراها كل موظف، وإقراره حجّة
