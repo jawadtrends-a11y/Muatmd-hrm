@@ -756,3 +756,9 @@ from apps.payroll.models_expenses import (  # noqa: E402,F401
 from apps.payroll.models_approval import (  # noqa: E402,F401
     PayrollApproval, PayrollApprovalDecision, PayrollApprovalStep,
 )
+
+
+# القيد المحاسبيّ (ق-152)
+from apps.payroll.models_gl import (  # noqa: E402,F401
+    GLAccountMap, GLGrouping, GLTemplate,
+)

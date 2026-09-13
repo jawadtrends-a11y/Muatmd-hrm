@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.access.gate import Gate
+from apps.core.features.gate import Features
 from apps.payroll.models import BankTemplate, PayrollRun, Payslip
 from apps.payroll.services.outputs import run_screens as rs
 from apps.payroll.services.outputs.bank_file import (
@@ -509,3 +510,244 @@ def bank_template_clone(request, template_id):
         for c in src.columns.order_by("position")])
 
     return Response(_template_json(new), status=201)
+
+
+# ══════════ القيد المحاسبيّ (ق-152) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def gl_accounts(request):
+    """
+    ربط بنود الأجر بحساباتها.
+
+    ⚠️ **وبندٌ بلا ربطٍ يمنع التصدير** — فالقائمة تُظهر ما ينقص.
+    """
+    from apps.payroll.models import GLAccountMap, PayComponent
+
+    Gate.require(request.user, "payroll.structures")
+    Features.require(_company_id(request), "erp_integration")
+
+    cid = _company_id(request)
+
+    if request.method == "GET":
+        maps = {m.component_code: m
+                for m in GLAccountMap.objects.filter(company_id=cid)}
+        comps = list(PayComponent.objects.filter(company_id=cid))
+
+        rows = []
+        for c in comps:
+            m = maps.get(c.code)
+            rows.append({
+                "component_code": c.code, "name_ar": c.name_ar,
+                "debit_account": m.debit_account if m else "",
+                "credit_account": m.credit_account if m else "",
+                "is_excluded": m.is_excluded if m else False,
+                "is_ready": m.is_ready if m else False,
+            })
+        # ⚠️ والطرف الدائن بندٌ افتراضيّ لا مكوّنَ له
+        payable = maps.get("NET_PAYABLE")
+        rows.append({
+            "component_code": "NET_PAYABLE",
+            "name_ar": "صافي الرواتب المستحقّة",
+            "debit_account": payable.debit_account if payable else "",
+            "credit_account": payable.credit_account if payable else "",
+            "is_excluded": False,
+            "is_ready": bool(payable and payable.credit_account),
+        })
+        return Response({"accounts": rows})
+
+    d = request.data
+    code = str(d.get("component_code") or "").strip()
+    if not code:
+        return Response({"detail": "رمز البند مطلوب"}, status=400)
+
+    from apps.accounts.models import Company
+
+    comp = Company.objects.filter(id=cid).first()
+    m, _ = GLAccountMap.objects.update_or_create(
+        company=comp, component_code=code,
+        defaults={
+            "account_id": comp.account_id,
+            "name_ar": str(d.get("name_ar") or "")[:150],
+            "debit_account": str(d.get("debit_account") or "")[:40],
+            "credit_account": str(d.get("credit_account") or "")[:40],
+            "is_excluded": bool(d.get("is_excluded", False)),
+        })
+    return Response({"component_code": m.component_code,
+                     "is_ready": m.is_ready})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def gl_templates(request):
+    """قوالب القيد — لكل نظامٍ ترتيبُه."""
+    from apps.payroll.models import GLGrouping, GLTemplate
+    from apps.payroll.services.outputs import gl_export as gl
+
+    Gate.require(request.user, "payroll.view")
+    Features.require(_company_id(request), "erp_integration")
+
+    if request.method == "GET":
+        qs = GLTemplate.objects.filter(company_id=_company_id(request))
+        return Response({
+            "templates": [{
+                "id": t.id, "code": t.code, "name_ar": t.name_ar,
+                "target_system": t.target_system,
+                "grouping": t.grouping,
+                "grouping_label": t.get_grouping_display(),
+                "columns": t.columns,
+                "delimiter": t.delimiter,
+                "include_header": t.include_header,
+                "is_active": t.is_active,
+            } for t in qs],
+            "groupings": [{"value": v, "label": lbl}
+                          for v, lbl in GLGrouping.choices],
+            "fields": [{"value": k, "label": v}
+                       for k, v in gl.AVAILABLE_FIELDS.items()],
+        })
+
+    Gate.require(request.user, "payroll.structures")
+    from apps.accounts.models import Company
+
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    d = request.data
+    code = str(d.get("code") or "").strip().upper()
+    if not code:
+        return Response({"detail": "الرمز مطلوب"}, status=400)
+    if GLTemplate.objects.filter(company=comp, code=code).exists():
+        return Response({"detail": "الرمز مستعمل"}, status=409)
+
+    t = GLTemplate.objects.create(
+        account=comp.account, company=comp, code=code,
+        name_ar=d.get("name_ar", code),
+        target_system=str(d.get("target_system") or "")[:80],
+        grouping=d.get("grouping") or GLGrouping.COMPANY,
+        columns=d.get("columns") or gl.default_columns(),
+        delimiter=str(d.get("delimiter") or ",")[:3],
+        include_header=bool(d.get("include_header", True)))
+    return Response({"id": t.id, "code": t.code},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(["PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
+def gl_template_detail(request, template_id):
+    """تعديل قالبٍ أو حذفه."""
+    from apps.payroll.models import GLGrouping, GLTemplate
+
+    Gate.require(request.user, "payroll.structures")
+    Features.require(_company_id(request), "erp_integration")
+
+    t = GLTemplate.objects.filter(
+        id=template_id, company_id=_company_id(request)).first()
+    if t is None:
+        return Response({"detail": "غير موجود"}, status=404)
+
+    if request.method == "DELETE":
+        t.delete()
+        return Response({"deleted": True})
+
+    d = request.data
+    for f in ("name_ar", "target_system"):
+        if f in d:
+            setattr(t, f, str(d[f] or ""))
+    if d.get("grouping") in GLGrouping.values:
+        t.grouping = d["grouping"]
+    if "columns" in d:
+        t.columns = d["columns"] or []
+    if "delimiter" in d:
+        t.delimiter = str(d["delimiter"] or ",")[:3]
+    if "include_header" in d:
+        t.include_header = bool(d["include_header"])
+    if "is_active" in d:
+        t.is_active = bool(d["is_active"])
+    t.save()
+    return Response({"id": t.id})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def gl_preview(request, run_id, template_id):
+    """
+    معاينة القيد قبل تصديره.
+
+    ⚠️ **فمن يرى ما ينقص يُصلحه قبل أن يُحمّل ملفًّا ناقصًا**.
+    """
+    from apps.payroll.models import GLTemplate, PayrollRun
+    from apps.payroll.services.outputs import gl_export as gl
+
+    Gate.require(request.user, "payroll.export")
+    Features.require(_company_id(request), "erp_integration")
+
+    run = PayrollRun.objects.filter(
+        id=run_id, company_id=_company_id(request)).first()
+    tpl = GLTemplate.objects.filter(
+        id=template_id, company_id=_company_id(request)).first()
+    if run is None or tpl is None:
+        return Response({"detail": "المسير أو القالب غير موجود"},
+                        status=404)
+
+    try:
+        e = gl.build_entry(run, tpl)
+    except gl.GLError as ex:
+        return Response({"detail": str(ex)}, status=409)
+
+    return Response({
+        "run_no": e.run_no, "period": e.period,
+        "line_count": len(e.lines),
+        "total_debit": str(e.total_debit),
+        "total_credit": str(e.total_credit),
+        "is_balanced": e.is_balanced,
+        "ready": e.ready,
+        "unmapped": e.unmapped,
+        "errors": e.errors,
+        "sample": [{
+            "account": l.account, "description": l.description,
+            "debit": str(l.debit) if l.debit else "",
+            "credit": str(l.credit) if l.credit else "",
+            "department": l.department, "employee_no": l.employee_no,
+        } for l in e.lines[:20]],
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def gl_download(request, run_id, template_id):
+    """
+    تنزيل القيد.
+
+    ⚠️⚠️ **ولا يُنزَّل غير المتوازن** — فتصديرُه يُضيّع وقت
+    المحاسب.
+    """
+    from apps.payroll.models import GLTemplate, PayrollRun
+    from apps.payroll.services.outputs import gl_export as gl
+
+    Gate.require(request.user, "payroll.export")
+    Features.require(_company_id(request), "erp_integration")
+
+    run = PayrollRun.objects.filter(
+        id=run_id, company_id=_company_id(request)).first()
+    tpl = GLTemplate.objects.filter(
+        id=template_id, company_id=_company_id(request)).first()
+    if run is None or tpl is None:
+        return Response({"detail": "المسير أو القالب غير موجود"},
+                        status=404)
+
+    try:
+        e = gl.build_entry(run, tpl)
+    except gl.GLError as ex:
+        return Response({"detail": str(ex)}, status=409)
+
+    if not e.ready:
+        return Response({
+            "detail": ("القيد غير جاهز — راجع المعاينة"),
+            "code": "not_ready",
+            "unmapped": e.unmapped, "errors": e.errors,
+            "is_balanced": e.is_balanced}, status=409)
+
+    text = gl.to_csv(e, tpl)
+    filename = f"GL_{run.run_no}_{tpl.code}.csv"
+    res = HttpResponse(text.encode(tpl.encoding or "utf-8-sig"),
+                       content_type="text/csv; charset=utf-8")
+    res["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return res

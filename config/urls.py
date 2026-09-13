@@ -369,6 +369,18 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-152: القيد المحاسبيّ
+    path("api/payroll/gl/accounts/", outputs_api.gl_accounts,
+         name="gl-accounts"),
+    path("api/payroll/gl/templates/", outputs_api.gl_templates,
+         name="gl-templates"),
+    path("api/payroll/gl/templates/<int:template_id>/",
+         outputs_api.gl_template_detail, name="gl-template-detail"),
+    path("api/payroll/runs/<int:run_id>/gl/<int:template_id>/preview/",
+         outputs_api.gl_preview, name="gl-preview"),
+    path("api/payroll/runs/<int:run_id>/gl/<int:template_id>/download/",
+         outputs_api.gl_download, name="gl-download"),
+
     # ق-151: واجهة العملاء البرمجية — **بمفتاحٍ لا بجلسة**
     path("api/v1/whoami/", public_api.whoami, name="pub-whoami"),
     path("api/v1/employees/", public_api.employees, name="pub-employees"),
