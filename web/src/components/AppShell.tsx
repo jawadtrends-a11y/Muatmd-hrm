@@ -388,6 +388,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // وبند "/" يُستثنى من البحث لأن startsWith يطابقه دائمًا.
     if (pathname === "/") return;
 
+    // ⚠️⚠️ **وملفّ الموظف نفسه استثناء**: «ملفي» يشير إلى
+    // /employees/<id> — وهو يطابق بند القائمة فيُفحص بـ
+    // employees.view، **فيُعاد الموظف للرئيسية ولا يرى ملفّه**.
+    //
+    // فكل موظفٍ يرى ملفّه بلا صلاحيةٍ إدارية، والخادم يحرس
+    // الباقي.
+    if (ws?.person?.employment_id
+        && pathname === `/employees/${ws.person.employment_id}`) {
+      return;
+    }
+
     const item = NAV
       .filter((n) => n.href !== "/" &&
         (pathname === n.href || pathname.startsWith(n.href + "/")))

@@ -218,6 +218,15 @@ class Employment(CompanyScopedModel):
         "organization.JobTitle", on_delete=models.PROTECT,
         null=True, blank=True, related_name="employments",
         verbose_name=_("المسمى الوظيفي"))
+
+    # ق-149: **ميزانية تدريبٍ يدوية** — تغلب الدرجة.
+    #
+    # ⚠️ فبلا درجاتٍ وظيفية تُدخل لكل موظف (قرار جواد)، **والفارغ
+    # يعني: ارجع للدرجة، فإن لم تكن فبلا سقف** — لا صفرًا.
+    training_budget_override = models.DecimalField(
+        _("ميزانية التدريب"), max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        help_text=_("تغلب ميزانية الدرجة — فارغ = من الدرجة"))
     # ق-82: الفصل المعتمَد يفتح المخالصة ولا يُنهي الخدمة.
     #
     # فمن أُقفل حسابه قبل إرجاع عهده يصعب متابعته، ويسقط من
@@ -483,4 +492,11 @@ from apps.employees.models_activities import (  # noqa: E402,F401
 from apps.employees.models_performance import (  # noqa: E402,F401
     ApprovalState, BehaviorRating, KPI, KPIAssignment, KPIDirection,
     KPIKind, KPIScale, PeerReview, ReviewCycle, ReviewKind,
+)
+
+
+# التدريب والدورات (ق-149)
+from apps.employees.models_training import (  # noqa: E402,F401
+    CourseDeliveryMode, NominationState, TrainingCourse,
+    TrainingNomination, TrainingRequest,
 )

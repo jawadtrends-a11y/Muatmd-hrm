@@ -110,6 +110,19 @@ class JobGrade(CompanyScopedModel):
         return self.name_ar
 
 
+    # ق-148: **ميزانية التدريب على المرتبة** — اختيارية.
+    #
+    # ⚠️ **والفارغ يعني: لا سقف من المرتبة** — فيُرجع لميزانية
+    # الموظف، فإن لم تكن فبلا سقف، والاعتماد هو الضابط.
+    training_budget = models.DecimalField(
+        _("ميزانية التدريب السنوية"), max_digits=12, decimal_places=2,
+        null=True, blank=True)
+
+    #: ⚠️ **مزايا تأتي لاحقًا** — فلا نُعيد الهجرة كلّما زادت واحدة
+    extras = models.JSONField(_("مزايا إضافية"), default=dict,
+                              blank=True)
+
+
 class JobStep(CompanyScopedModel):
     """الدرجة الوظيفية داخل المرتبة — اختيارية أيضًا."""
 
