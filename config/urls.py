@@ -38,6 +38,7 @@ from apps.accounts import api_auth as client_auth
 from apps.leaves import api as leaves_api
 from apps.leaves import api_custom_types as custom_types_api
 from apps.employees import api_activities as activities_api
+from apps.attendance import api_presence as presence_api
 from apps.notifications import api as notifications_api
 
 
@@ -364,6 +365,15 @@ urlpatterns = [
     path("api/attendance/monthly/", attendance_api.monthly_board, name="attendance-monthly"),
     path("api/payroll/bank-lookup/", payroll_api.bank_lookup, name="bank-lookup"),
     path("api/me/request-types/", leaves_api.request_types, name="request-types"),
+    # ق-144: تتبّع التواجد
+    path("api/presence/ping/", presence_api.ping, name="presence-ping"),
+    path("api/me/presence/", presence_api.my_presence,
+         name="my-presence"),
+    path("api/presence/", presence_api.presence_days,
+         name="presence-days"),
+    path("api/presence/<int:day_id>/review/", presence_api.review_day,
+         name="presence-review"),
+
     # ق-143: أنشطة العمل
     path("api/activities/", activities_api.activities, name="activities"),
     path("api/me/activities/", activities_api.my_activities,

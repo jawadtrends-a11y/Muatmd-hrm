@@ -62,7 +62,8 @@ FEATURES = [
        implemented=True, guarded_at="/api/attendance/shifts/"),
     _f("manager_edit_hours", "attendance", "تعديل ساعات الحضور من المدير",
        implemented=True, guarded_at="/api/attendance/days/"),
-    _f("employee_tracking", "attendance", "تتبع الموظفين"),
+    _f("employee_tracking", "attendance", "تتبع الموظفين",
+       implemented=True, guarded_at="/api/presence/"),
     _f("work_activities", "attendance", "أنشطة العمل",
        implemented=True, guarded_at="/api/activities/"),
 
