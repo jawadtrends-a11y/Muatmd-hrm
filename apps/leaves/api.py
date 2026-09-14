@@ -294,8 +294,11 @@ def leave_requests(request):
         })
 
     # ── إنشاء طلب ──
+    # ق-168: ⚠️⚠️ **اسمٌ مستورَدٌ لا وجود له** كشفه حارس الدورة
+    # الكاملة: **فتقديم أي طلبٍ كان يُخفق** — والاسم `LeaveError`.
+    from apps.leaves.services.balances import LeaveError
     from apps.leaves.services.leave_requests import (
-        LeaveRequestError, create_leave_request,
+        create_leave_request,
     )
 
     emp_id = request.data.get("employment_id")
@@ -319,7 +322,7 @@ def leave_requests(request):
             start_date=date.fromisoformat(request.data["start_date"]),
             requested_days=request.data.get("days"),
             note=request.data.get("note", ""))
-    except LeaveRequestError as e:
+    except LeaveError as e:
         return Response({"detail": str(e), "code": "invalid_request"},
                         status=400)
     except (KeyError, ValueError) as e:
