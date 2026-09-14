@@ -24,12 +24,44 @@ def permission_catalog(request):
     """الكتالوج مجمّعًا بالوحدات — لشاشة التوزيع بفئات مطوية."""
     Gate.require(request.user, "access.view")
 
+    # ق-161: ⚠️⚠️ **وحال ميزة كل صلاحية** (قرار جواد).
+    #
+    # **فالصلاحية تبقى ظاهرة ويُحجب ضبطها** حين تكون ميزتها خارج
+    # الباقة: **إخفاؤها يُضيّع فرصة بيع، وضبطُها يمنح ما لم
+    # يُشترَ**.
+    #
+    # ⚠️ **والحجب متكيّفٌ مع الباقة الفعلية** لا بقائمةٍ ثابتة.
+    from apps.core.features.catalog import FEATURES_BY_KEY
+    from apps.core.features.gate import Features
+
+    ctx = getattr(request, "account_ctx", None)
+    company_id = getattr(ctx, "active_company_id", None)
+
+    _cache = {}
+
+    def _enabled(feature_key):
+        if not feature_key:
+            return True, ""
+        if feature_key not in _cache:
+            f = FEATURES_BY_KEY.get(feature_key)
+            _cache[feature_key] = (
+                bool(company_id) and Features.enabled(company_id,
+                                                      feature_key),
+                getattr(f, "name_ar", "") if f else "",
+            )
+        return _cache[feature_key]
+
     modules = {}
     for p in PERMISSIONS:
+        on, fname = _enabled(p.feature)
         modules.setdefault(p.module, []).append({
             "key": p.key,
             "name_ar": p.name_ar,
             "is_protected": p.key in PROTECTED_OWNER_PERMISSIONS,
+            "feature": p.feature or "",
+            # ⚠️ **والضبط محجوب حين تكون الميزة خارج الباقة**
+            "feature_enabled": on,
+            "feature_name": fname,
         })
 
     return Response({

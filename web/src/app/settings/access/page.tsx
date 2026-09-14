@@ -36,6 +36,10 @@ const T: Dict = {
     ar: "لا تمنح صلاحيةً ليست لك — والنظام يرفضها",
     en: "You cannot grant what you don't have",
   },
+  needsFeature: {
+    ar: "غير متاحة في باقتكم — تفتحها ميزة",
+    en: "Not in your plan — unlocked by",
+  },
   code: { ar: "الرمز", en: "Code" },
   codeHint: {
     ar: "بالإنجليزية بلا مسافات — ولا يتغيّر بعد الحفظ",
@@ -60,7 +64,13 @@ type Role = {
   id: number; code: string; name_ar: string; default_scope: string;
   is_system: boolean; permission_count: number; assigned_users: number;
 };
-type Perm = { key: string; name_ar: string; is_protected: boolean };
+type Perm = {
+  key: string; name_ar: string; is_protected: boolean;
+  // ق-161: ⚠️ **وميزةُ الصلاحية** — تبقى ظاهرةً ويُحجب ضبطها
+  feature?: string;
+  feature_enabled?: boolean;
+  feature_name?: string;
+};
 type Module = { key: string; permissions: Perm[] };
 
 const SCOPES = [
@@ -340,14 +350,21 @@ function RoleDialog({ role, modules, mine, L, onClose, onSaved }: {
                   // ⚠️ ما لا يملكه لا يُعرض قابلًا للاختيار —
                   // والخادم يرفضه على كل حال
                   const owned = mine.includes(p.key);
+                  // ق-161: ⚠️⚠️ **وما ليس في الباقة يظهر ويُحجب**
+                  // (قرار جواد): **فإخفاؤه يُضيّع فرصة بيع،
+                  // وضبطُه يمنح ما لم يُشترَ**.
+                  const locked = p.feature_enabled === false;
+                  const can = owned && !locked;
                   return (
                     <button key={p.key} type="button"
-                            disabled={!owned}
-                            title={owned ? p.name_ar : L("newHint")}
+                            disabled={!can}
+                            title={locked
+                              ? `${L("needsFeature")}: ${p.feature_name || ""}`
+                              : (owned ? p.name_ar : L("newHint"))}
                             className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`}
-                            style={{ opacity: owned ? 1 : 0.4 }}
-                            onClick={() => toggle(p.key)}>
-                      {p.name_ar}
+                            style={{ opacity: can ? 1 : 0.4 }}
+                            onClick={() => can && toggle(p.key)}>
+                      {locked && "🔒 "}{p.name_ar}
                     </button>
                   );
                 })}
