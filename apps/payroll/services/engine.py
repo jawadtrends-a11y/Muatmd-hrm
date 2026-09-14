@@ -80,9 +80,13 @@ def _eligible_employments(run):
     from apps.employees.models import Employment, EmploymentStatus
     from calendar import monthrange
 
-    start = date(run.period_year, run.period_month, 1)
-    end = date(run.period_year, run.period_month,
-               monthrange(run.period_year, run.period_month)[1])
+    # ق-157: **المدى بتاريخ الاقتطاع** (بلاغ جواد).
+    #
+    # ⚠️ فشركةٌ باقتطاعٍ يوم ٢١ يكون راتب سبتمبر من ٢٢ أغسطس إلى
+    # ٢١ سبتمبر — **والتأهيل والحضور والإضافي كلّها تتبعه**.
+    from apps.payroll.services.period import run_range
+
+    start, end = run_range(run)
 
     qs = Employment.objects.filter(company=run.company).select_related(
         "person", "company")
@@ -143,9 +147,37 @@ def calculate_slip(*, run, employment, settings_obj):
         employment=employment, period_year=run.period_year,
         period_month=run.period_month).first()
 
-    absence_days = summary.unpaid_absent_days if summary else ZERO
-    overtime_minutes = summary.approved_overtime_minutes if summary else 0
-    worked_days = summary.worked_days if summary else ZERO
+    # ق-157: ⚠️⚠️ **والحضور بالمدى لا بالملخّص حين يكون اقتطاع**.
+    #
+    # فالملخّص الشهريّ **يبقى تقويميًّا لغرضه** (قرار جواد)، لكنّ
+    # المسير باقتطاعٍ يوم ٢١ يغطّي ٢٢ أغسطس → ٢١ سبتمبر — **وقراءةُ
+    # ملخّص سبتمبر تحتسب أيامًا خارج المدى وتُسقط أيامًا فيه**.
+    from apps.attendance.models import AttendanceDay, DayStatus
+    from apps.payroll.services.period import cutoff_day, run_range
+
+    # ⚠️ **والمدى يُحسب هنا**: فـcalculate_slip لا ترث متغيّرات
+    # دالّة التأهيل.
+    start, end = run_range(run)
+    _cut = cutoff_day(run.company_id)
+
+    if _cut:
+        days = AttendanceDay.objects.filter(
+            employment=employment,
+            work_date__gte=start, work_date__lte=end)
+        absence_days = Decimal(days.filter(
+            status=DayStatus.ABSENT).count())
+        worked_days = Decimal(days.filter(
+            status=DayStatus.PRESENT).count())
+        overtime_minutes = sum(
+            (d.approved_overtime_minutes or 0) for d in days)
+        source = "attendance_days_cutoff"
+    else:
+        absence_days = summary.unpaid_absent_days if summary else ZERO
+        overtime_minutes = (summary.approved_overtime_minutes
+                            if summary else 0)
+        worked_days = summary.worked_days if summary else ZERO
+        source = "monthly_summary" if summary else "no_summary"
+
     unpaid_leave = unpaid_leave_days_in_period(
         employment, run.period_year, run.period_month)
 
@@ -154,9 +186,10 @@ def calculate_slip(*, run, employment, settings_obj):
         "unpaid_absence_days": str(absence_days),
         "unpaid_leave_days": str(unpaid_leave),
         "approved_overtime_minutes": overtime_minutes,
-        "source": "monthly_summary" if summary else "no_summary",
+        "source": source,
+        "period": f"{start} → {end}",
     }
-    if summary is None:
+    if not _cut and summary is None:
         warnings.append("لا ملخص حضور لهذه الفترة — احتُسب الشهر كاملًا")
 
     # ── 3. الاستحقاقات ──
@@ -204,12 +237,11 @@ def calculate_slip(*, run, employment, settings_obj):
     from apps.attendance.models import AttendanceDay as _AD
 
     by_rate = {}
-    # نهاية الشهر بلا monthrange — فهي مظلَّلة في هذا النطاق
-    _ot_start = date(run.period_year, run.period_month, 1)
-    _ot_end = (date(run.period_year + 1, 1, 1)
-               if run.period_month == 12
-               else date(run.period_year, run.period_month + 1, 1)
-               ) - timedelta(days=1)
+    # ⚠️ **والإضافي بالمدى نفسه** (ق-157): فمدًى للحضور وآخر
+    # للإضافي يجعل القسيمة لا تُفسَّر.
+    from apps.payroll.services.period import run_range as _rr
+
+    _ot_start, _ot_end = _rr(run)
     for row in (_AD.objects
                 .filter(employment=employment,
                         work_date__gte=_ot_start, work_date__lte=_ot_end,
@@ -413,11 +445,13 @@ def calculate_slip(*, run, employment, settings_obj):
     # بلا مراجعة — والمراجعة هي الضابط.
     from apps.employees.models import WorkActivity
 
+    # ⚠️ **وبالمدى لا بالشهر** (ق-157): فنشاطٌ يوم ٢٥ أغسطس يدخل
+    # مسير سبتمبر حين يكون الاقتطاع ٢١ — وترشيحُه بالشهر يُسقطه.
+    _act_start, _act_end = _rr(run)
     acts = list(WorkActivity.objects.filter(
         employment=employment, is_reviewed=True, is_paid=False,
         settled_amount__isnull=False,
-        work_date__year=run.period_year,
-        work_date__month=run.period_month))
+        work_date__gte=_act_start, work_date__lte=_act_end))
 
     act_total = sum((a.settled_amount for a in acts), ZERO)
     if act_total:
@@ -821,10 +855,13 @@ def approve_run(run, approved_by_person):
     # ق-143: أنشطة العمل تُعلَّم مدفوعةً — عند الاعتماد لا الحساب
     from apps.employees.models import WorkActivity
 
+    # ⚠️ **وبالمدى كذلك** — فما دخل القسيمة هو ما يُعلَّم مدفوعًا
+    from apps.payroll.services.period import run_range as _rr2
+
+    _ap_start, _ap_end = _rr2(run)
     WorkActivity.objects.filter(
         company=run.company, is_reviewed=True, is_paid=False,
-        work_date__year=run.period_year,
-        work_date__month=run.period_month).update(
+        work_date__gte=_ap_start, work_date__lte=_ap_end).update(
             is_paid=True, payroll_year=run.period_year,
             payroll_month=run.period_month)
 

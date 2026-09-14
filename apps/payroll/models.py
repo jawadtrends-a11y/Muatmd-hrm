@@ -177,6 +177,26 @@ class PayrollSettings(CompanyScopedModel):
     allow_mobile_punch = models.BooleanField(
         _("بصمة الجوال"), default=True)
 
+    # ق-157: **تاريخ الاقتطاع** (بلاغ جواد).
+    #
+    # فإعداد الرواتب يسبق نهاية الشهر: شركةٌ باقتطاعٍ يوم ٢١ يكون
+    # **راتب سبتمبر من ٢٢ أغسطس إلى ٢١ سبتمبر**.
+    #
+    # ⚠️ **وصفرٌ يعني الشهر التقويميّ** — وهو الافتراض، فمن لم
+    # يضبطه لا يتغيّر عليه شيء.
+    payroll_cutoff_day = models.PositiveSmallIntegerField(
+        _("يوم الاقتطاع"), default=0,
+        validators=[MaxValueValidator(28)],
+        help_text=_("٠ = الشهر التقويميّ · ٢١ = من ٢٢ الشهر الماضي "
+                    "إلى ٢١ الحاليّ. ⚠️ وأقصاه ٢٨ فشهر فبراير"))
+
+    #: ق-157: ⚠️ **وحدُّ قِدَم الأثر الرجعيّ** — سنةٌ ثم يُغلق
+    #
+    # فأثرٌ عن يومٍ مضت عليه سنةٌ لا يُراجَع: الدفاتر أُقفلت،
+    # وصاحبه قد ترك العمل (قرار جواد).
+    retro_max_age_days = models.PositiveSmallIntegerField(
+        _("أقصى قِدَم للأثر الرجعيّ (يومًا)"), default=365)
+
     payroll_days_per_month = models.PositiveSmallIntegerField(
         _("أيام الشهر للاحتساب"), default=30,
         validators=[MinValueValidator(28), MaxValueValidator(31)],
