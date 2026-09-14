@@ -196,6 +196,12 @@ urlpatterns = [
          name="exemptions"),
     path("api/attendance/exemptions/<int:exemption_id>/revoke/",
          exemptions_api.revoke_exemption, name="exemption-revoke"),
+    # ق-171: استيراد الحضور
+    path("api/attendance/import/template/",
+         attendance_api.day_import_template,
+         name="day-import-template"),
+    path("api/attendance/import/", attendance_api.day_import,
+         name="day-import"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
     # أجهزة البصمة
@@ -370,6 +376,12 @@ urlpatterns = [
     # ق-169: الاستحقاق الفرديّ — كلُّ موظفٍ حسب عقده
     path("api/employees/<int:employment_id>/entitlements/",
          leaves_api.employee_entitlements, name="employee-entitlements"),
+    # ق-170: استيراد أرصدة الإجازات
+    path("api/leaves/balances/import/template/",
+         leaves_api.balance_import_template,
+         name="balance-import-template"),
+    path("api/leaves/balances/import/", leaves_api.balance_import,
+         name="balance-import"),
     path("api/leaves/types/", leaves_api.leave_types, name="leave-types"),
     # إدارة أنواع الإجازات (ق-83)
     path("api/leaves/types/new/", leaves_api.leave_type_create, name="leave-type-create"),

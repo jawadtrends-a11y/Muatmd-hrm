@@ -30,7 +30,7 @@ class ImportError_(Exception):
 # ⚠️ والعنوان عربيٌّ لأن من يملأ الملفّ موظفُ موارد لا مبرمج.
 COLUMNS = [
     ("employee_no", "الرقم الوظيفي", True,
-     "1001 — ولا يتكرّر"),
+     "مثال: 1001 — ولا يتكرّر"),
     ("first_name_ar", "الاسم الأول", True, "محمد"),
     ("family_name_ar", "اسم العائلة", True, "العتيبي"),
     ("gender", "الجنس", True, "male أو female"),
@@ -293,8 +293,9 @@ def parse_file(content, company):
             return (raw[i].strip() if i is not None and i < len(raw)
                     else "")
 
-        # ⚠️ سطر المثال في القالب يُتخطّى بلا خطأ
-        if cell("employee_no").startswith("1001 —"):
+        # ⚠️⚠️ **وسطر المثال يُعلَّم بعلامةٍ لا تلتبس ببيانات**:
+        # فمطابقةُ القيم **تحذف صفًّا حقيقيًّا صامتًا**.
+        if cell("employee_no").startswith("مثال"):
             continue
 
         rec, row_errors = {"_row": n}, []

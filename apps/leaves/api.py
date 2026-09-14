@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from apps.core.i18n import request_locale
@@ -1651,3 +1652,91 @@ def employee_entitlements(request, employment_id):
                   "effective_from": eff})
     return Response({"id": ent.id,
                      "days_per_year": str(ent.days_per_year)})
+
+
+# ══════════ استيراد الأرصدة (ق-170) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def balance_import_template(request):
+    """قالب استيراد الأرصدة."""
+    from django.http import HttpResponse
+
+    from apps.leaves.services import import_balances as imp
+
+    Gate.require(request.user, "leaves.manage")
+    res = HttpResponse(
+        imp.template_xlsx(),
+        content_type=("application/vnd.openxmlformats-officedocument"
+                      ".spreadsheetml.sheet"))
+    res["Content-Disposition"] = (
+        'attachment; filename="leave_balances_template.xlsx"')
+    return res
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def balance_import(request):
+    """
+    استيراد أرصدة الإجازات — معاينةً وتنفيذًا.
+
+    ⚠️⚠️ **والرصيد افتتاحيٌّ بتاريخه** (قرار جواد): والاستحقاق
+    اليوميّ **يُضاف إليه** من ذلك التاريخ — **لا يحلّ محلّه**.
+
+    ⚠️ **والخطأ في سطرٍ يوقف الملفّ كلّه**.
+    """
+    from apps.accounts.models import Company
+    from apps.leaves.models import LeaveType
+    from apps.leaves.services import import_balances as imp
+
+    Gate.require(request.user, "leaves.manage")
+    company_id = _company_id(request)
+    comp = Company.objects.filter(id=company_id).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    lt = LeaveType.objects.filter(
+        id=request.data.get("leave_type_id"),
+        company_id=company_id).first()
+    if lt is None:
+        return Response({"detail": "حدّد نوع الإجازة"}, status=400)
+
+    f = request.FILES.get("file")
+    if f is None:
+        return Response({"detail": "أرفق الملفّ"}, status=400)
+    if f.size > 5 * 1024 * 1024:
+        return Response({"detail": "الملفّ أكبر من ٥ ميغابايت"},
+                        status=400)
+
+    try:
+        out = imp.parse_file(f.read(), comp, lt)
+    except imp.BalanceImportError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    preview = {
+        "total": out["total"], "valid": out["valid"],
+        "invalid": out["invalid"], "can_import": out["can_import"],
+        "errors": out["errors"][:100],
+        "sample": [{
+            "employee_no": r["employee_no"],
+            "balance": str(r["balance"]),
+            "as_of": r["as_of"],
+        } for r in out["rows"][:20]],
+    }
+
+    if request.data.get("execute") not in ("1", "true", True):
+        return Response(preview)
+
+    if not out["can_import"]:
+        return Response({
+            "detail": (f"الملفّ فيه {out['invalid']} خطأً — "
+                       "لا يُستورَد حتى تُصلَح كلّها"),
+            "code": "has_errors", **preview}, status=400)
+
+    try:
+        res = imp.execute(company=comp, leave_type=lt,
+                          parsed_rows=out["rows"])
+    except imp.BalanceImportError as e:
+        return Response({"detail": str(e), "code": "rolled_back"},
+                        status=400)
+    return Response(res, status=status.HTTP_201_CREATED)

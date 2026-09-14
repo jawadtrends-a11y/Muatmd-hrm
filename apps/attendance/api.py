@@ -1318,3 +1318,80 @@ def device_setup_guide(request):
             "card_number · area_name · terminal_alias · terminal_sn"
         ),
     })
+
+
+# ══════════ استيراد الحضور (ق-171) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def day_import_template(request):
+    """قالب استيراد الحضور."""
+    from django.http import HttpResponse
+
+    from apps.attendance.services import import_days as imp
+
+    Gate.require(request.user, "attendance.edit")
+    res = HttpResponse(
+        imp.template_xlsx(),
+        content_type=("application/vnd.openxmlformats-officedocument"
+                      ".spreadsheetml.sheet"))
+    res["Content-Disposition"] = (
+        'attachment; filename="attendance_template.xlsx"')
+    return res
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def day_import(request):
+    """
+    استيراد الحضور — معاينةً وتنفيذًا.
+
+    ⚠️⚠️ **ولا يُستورَد يومٌ في مسيرٍ معتمد**: فالأجر احتُسب
+    عليه، **وتغييرُه يجعل القسيمة لا تفسّر نفسها**.
+    """
+    from apps.accounts.models import Company
+    from apps.attendance.services import import_days as imp
+
+    Gate.require(request.user, "attendance.edit")
+    comp = Company.objects.filter(id=_company_id(request)).first()
+    if comp is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    f = request.FILES.get("file")
+    if f is None:
+        return Response({"detail": "أرفق الملفّ"}, status=400)
+    if f.size > 10 * 1024 * 1024:
+        return Response({"detail": "الملفّ أكبر من ١٠ ميغابايت"},
+                        status=400)
+
+    try:
+        out = imp.parse_file(f.read(), comp)
+    except imp.DayImportError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    preview = {
+        "total": out["total"], "valid": out["valid"],
+        "invalid": out["invalid"], "can_import": out["can_import"],
+        "errors": out["errors"][:100],
+        "sample": [{
+            "employee_no": r["employee_no"],
+            "work_date": r["work_date"],
+            "status": r["status"],
+        } for r in out["rows"][:20]],
+    }
+
+    if request.data.get("execute") not in ("1", "true", True):
+        return Response(preview)
+
+    if not out["can_import"]:
+        return Response({
+            "detail": (f"الملفّ فيه {out['invalid']} خطأً — "
+                       "لا يُستورَد حتى تُصلَح كلّها"),
+            "code": "has_errors", **preview}, status=400)
+
+    try:
+        res = imp.execute(company=comp, parsed_rows=out["rows"])
+    except imp.DayImportError as e:
+        return Response({"detail": str(e), "code": "rolled_back"},
+                        status=400)
+    return Response(res, status=status.HTTP_201_CREATED)
