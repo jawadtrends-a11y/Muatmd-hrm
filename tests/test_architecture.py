@@ -373,3 +373,57 @@ def test_no_native_date_input():
         "تقويم المتصفح الأصلي في الشاشات — استخدم DateField:\n"
         + "\n".join(offenders)
     )
+
+
+def test_no_missing_translation_keys():
+    """
+    ⚠️⚠️ **ولا مفتاحَ يُستدعى بلا ترجمة** (بلاغ جواد).
+
+    فـ`L("key")` بلا تعريفٍ يعرض **المفتاح الخام** على الشاشة —
+    «cancel» بدل «إلغاء»، **ويظنّ العميل النظام معطوبًا**.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "web" / "src"
+    if not root.exists():
+        pytest.skip("شجرة الواجهة غير متاحة")
+
+    missing = []
+    for f in root.rglob("*.tsx"):
+        t = f.read_text(encoding="utf-8")
+        # ⚠️ **والمكوّن الذي يستقبل L من أبيه يُستثنى**: فمفاتيحه
+        # معرَّفةٌ هناك لا هنا.
+        if re.search(r'^\s+L: \(k: string', t, re.M):
+            continue
+        defined = set(re.findall(r'^\s{2}(\w+):\s*\{\s*ar:', t, re.M))
+        used = set(re.findall(r'L\("(\w+)"\)', t))
+        gap = used - defined
+        if gap:
+            missing.append(f"{f.name}: {sorted(gap)}")
+
+    assert not missing, "مفاتيح بلا ترجمة:\n  " + "\n  ".join(missing)
+
+
+def test_every_translation_has_english():
+    """
+    ⚠️ **وكل ترجمةٍ بمقابلها الإنجليزيّ**: فشاشةٌ نصفُها عربيٌّ
+    ونصفها إنجليزيّ أسوأ من واحدةٍ بلغة.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "web" / "src"
+    if not root.exists():
+        pytest.skip("شجرة الواجهة غير متاحة")
+
+    half = []
+    pattern = re.compile(
+        r'^\s{2}(\w+):\s*\{\s*ar:\s*"([^"]*)"\s*(,\s*en:\s*"([^"]*)")?\s*\}',
+        re.M)
+    for f in root.rglob("*.tsx"):
+        for m in pattern.finditer(f.read_text(encoding="utf-8")):
+            if not m.group(3) or not (m.group(4) or "").strip():
+                half.append(f"{f.name}: {m.group(1)}")
+
+    assert not half, "ترجمات بلا إنجليزية:\n  " + "\n  ".join(half[:20])

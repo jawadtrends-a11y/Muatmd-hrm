@@ -17,6 +17,8 @@ import { IcCheck, IcDoc } from "@/components/Icons";
 import DynField from "@/components/RequestFields";
 
 const T: Dict = {
+  yes: { ar: "نعم", en: "Yes" },
+  no: { ar: "لا", en: "No" },
   title: { ar: "إسناد طلب", en: "Assign request" },
   hint: {
     ar: "تقدّم الطلب نيابةً عن أحد موظفيك — ويسير في سلسلة اعتماده المعتادة",

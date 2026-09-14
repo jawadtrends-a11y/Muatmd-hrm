@@ -14,6 +14,7 @@ import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcDownload } from "@/components/Icons";
 
 const T: Dict = {
+  cancel: { ar: "إلغاء", en: "Cancel" },
   back: { ar: "رجوع", en: "Back" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   empty: { ar: "لا بيانات", en: "No data" },
