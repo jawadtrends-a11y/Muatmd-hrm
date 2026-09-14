@@ -188,7 +188,8 @@ def test_employee_cannot_list_all(env):
     emp = _client(env, "employee", Scope.OWN, username="emp1")
     r = emp.get("/api/employees/")
     assert r.status_code == 200
-    assert r.json() == [], "الموظف يرى موظفين آخرين"
+    # ق-166: الردّ صار {rows, meta} بعد الترقيم
+    assert r.json()["rows"] == [], "الموظف يرى موظفين آخرين"
 
 
 @pytest.mark.django_db(transaction=True)

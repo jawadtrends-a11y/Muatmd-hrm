@@ -101,10 +101,50 @@ def employees(request):
             "person", "job_title", "department")
         if request.GET.get("status"):
             qs = qs.filter(status=request.GET["status"])
+        # ق-167: ⚠️⚠️ **والبحث في كل ما يُعرف به الموظف** (بلاغ
+        # جواد): فكان في **اسم العائلة وحده** — ومن يبحث برقمه
+        # الوظيفيّ أو هويّته **لا يجده**.
+        #
+        # ⚠️ **والبحث في الخادم لا العميل**: فالعميل لا يملك إلا
+        # صفحته، **وبحثٌ فيها يُخفي من في الصفحات الأخرى**.
         if request.GET.get("q"):
-            q = request.GET["q"]
-            qs = qs.filter(person__family_name_ar__icontains=q)
-        return Response([_employment_brief(e, request_locale(request)) for e in qs])
+            from django.db.models import Q
+
+            q = request.GET["q"].strip()
+            qs = qs.filter(
+                Q(employee_no__icontains=q)
+                | Q(person__first_name_ar__icontains=q)
+                | Q(person__family_name_ar__icontains=q)
+                | Q(person__father_name_ar__icontains=q)
+                | Q(person__grandfather_name_ar__icontains=q)
+                | Q(person__full_name_en__icontains=q)
+                | Q(person__id_number__icontains=q)
+                | Q(person__mobile_e164__icontains=q)
+                | Q(job_title__name_ar__icontains=q)
+                | Q(department__name_ar__icontains=q))
+        # ق-166: ⚠️⚠️ **والترقيم في الخادم** (قرار جواد): فشركةٌ
+        # بألف موظف **لا تُرسَل في ردٍّ واحد**.
+        #
+        # ⚠️ **والصيغة موحّدة** `{rows, meta}` — فالواجهة تقرأ
+        # واحدةً لا عشرًا.
+        from apps.core.pagination import paginate
+
+        # ⚠️ **و`all=1` يتجاوز الترقيم** — للقوائم المنسدلة:
+        # فمن يختار موظفًا من قائمةٍ **يحتاج الكلّ لا صفحة**.
+        #
+        # ⚠️ **وهي محروسةٌ بسقفٍ صلب**: فألفُ موظفٍ في منسدلةٍ
+        # يُثقل المتصفّح، **والبحث بالاقتراحات هو الحلّ لاحقًا**.
+        if request.GET.get("all") == "1":
+            return Response([
+                _employment_brief(e, request_locale(request))
+                for e in qs.order_by("employee_no")[:2000]])
+
+        rows, meta = paginate(qs.order_by("employee_no"), request)
+        return Response({
+            "rows": [_employment_brief(e, request_locale(request))
+                     for e in rows],
+            "meta": meta,
+        })
 
     Gate.require(request.user, "employees.create")
     from apps.accounts.models import Company
@@ -1734,6 +1774,21 @@ def my_team(request):
 
     qs = my_team_queryset(me).select_related(
         "person", "department", "job_title", "direct_manager__person")
+
+    # ق-167: ⚠️ **والبحث هنا كذلك** — فالاقتراحات الفورية تناديه.
+    if request.GET.get("q"):
+        from django.db.models import Q
+
+        q = request.GET["q"].strip()
+        qs = qs.filter(
+            Q(employee_no__icontains=q)
+            | Q(person__first_name_ar__icontains=q)
+            | Q(person__father_name_ar__icontains=q)
+            | Q(person__family_name_ar__icontains=q)
+            | Q(person__full_name_en__icontains=q)
+            | Q(person__id_number__icontains=q)
+            | Q(job_title__name_ar__icontains=q)
+            | Q(department__name_ar__icontains=q))
 
     rows = [{
         "id": e.id,

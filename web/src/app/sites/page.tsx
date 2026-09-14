@@ -290,7 +290,7 @@ function AssignDialog({
   const load = useCallback(() => {
     Promise.all([
       apiGet<Assignment[]>(`/sites/${site.id}/employees/`).catch(() => []),
-      apiGet<Employee[]>("/employees/?status=active").catch(() => []),
+      apiGet<Employee[]>("/employees/?status=active&all=1").catch(() => []),
     ]).then(([a, e]) => { setRows(a); setPool(e); setBusy(false); });
   }, [site.id]);
 

@@ -111,7 +111,7 @@ export default function AdvancesPage() {
       .then((d) =>
         setCanEdit((d.permissions || []).includes("payroll.structures")))
       .catch(() => setCanEdit(false));
-    apiGet<Emp[]>("/employees/").then(setEmps).catch(() => setEmps([]));
+    apiGet<Emp[]>("/employees/?all=1").then(setEmps).catch(() => setEmps([]));
   }, []);
 
   function startNew() {

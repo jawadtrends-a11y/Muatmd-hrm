@@ -1225,7 +1225,7 @@ function ProfileInner({
     apiGet<any[]>("/org/cost-centers/")
       .then((r) => setCostCenters(Array.isArray(r) ? r : []))
       .catch(() => setCostCenters([]));
-    apiGet<any[]>("/employees/")
+    apiGet<any[]>("/employees/?all=1")
       .then((r) => setPeers2(Array.isArray(r) ? r : []))
       .catch(() => setPeers2([]));
   }, []);

@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost, qs, ApiError } from "@/lib/api";
+import EmployeePicker, { type PickedEmployee }
+  from "@/components/EmployeePicker";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcCheck, IcDoc } from "@/components/Icons";
 import DynField from "@/components/RequestFields";
@@ -52,6 +54,8 @@ export default function AssignRequestPage() {
 
   const [emps, setEmps] = useState<Emp[]>([]);
   const [empId, setEmpId] = useState<number | null>(null);
+  // ق-167: الموظف المختار — للعرض في المكوّن
+  const [picked, setPicked] = useState<PickedEmployee | null>(null);
   const [types, setTypes] = useState<ReqType[]>([]);
   const [typeCode, setTypeCode] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -187,19 +191,19 @@ export default function AssignRequestPage() {
           <div className="stack" style={{ gap: 14 }}>
             <div className="field">
               <label className="label">{L("employee")}</label>
-              <select className="select" value={empId ?? ""}
+              {/* ق-167: ⚠️⚠️ **اقتراحاتٌ فورية لا منسدلة** (بلاغ
+                  جواد): فشركةٌ بألف موظف **لا تُعرض في قائمةٍ
+                  واحدة** — والمتصفّح يثقل، والعين تضيع.
+
+                  ⚠️ **ومن فريقه وحدهم**: فالإسناد لمرؤوسيه. */}
+              <EmployeePicker
+                endpoint="/me/team/"
+                value={picked}
                 onChange={(e) => {
-                  const id = Number(e.target.value);
-                  setEmpId(id || null);
-                  if (id) loadTypes(id);
-                }}>
-                <option value="">{L("pickEmployee")}</option>
-                {emps.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.employee_no} — {e.name_ar}
-                  </option>
-                ))}
-              </select>
+                  setPicked(e);
+                  setEmpId(e?.id ?? null);
+                  if (e) loadTypes(e.id);
+                }} />
             </div>
 
             {types.length > 0 && (

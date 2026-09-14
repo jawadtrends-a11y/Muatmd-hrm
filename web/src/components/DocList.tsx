@@ -151,22 +151,47 @@ export default function DocList<R>({
       window.localStorage.setItem(`doclist-view:${endpoint}`, v);
     } catch { /* يُتجاهل */ }
   };
+  const [meta, setMeta] = useState<
+    { total: number; pages: number } | null>(null);
   const [reload, setReload] = useState(0);
 
-  const query = useMemo(() => qs(filters || {}), [filters]);
+  // ق-166: ⚠️ **والصفحة تُطلب من الخادم** — فالترقيم في العميل
+  // يُرسل الكلّ ثم يقطّعه، **وذاك يثقل عند الألوف** (قرار جواد).
+  // ق-167: ⚠️⚠️ **والبحث في الخادم لا العميل** (بلاغ جواد):
+  // فالعميل لا يملك إلا صفحته — **وبحثٌ فيها يُخفي من في الصفحات
+  // الأخرى**.
+  //
+  // ⚠️ **وبمهلةٍ قصيرة**: فطلبٌ مع كل حرفٍ يُثقل الخادم.
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const query = useMemo(
+    () => qs({
+      ...(filters || {}), page, page_size: pageSize,
+      ...(debounced ? { q: debounced } : {}),
+    }),
+    [filters, page, pageSize, debounced]);
 
   useEffect(() => {
     let alive = true;
     setBusy(true);
     setError("");
 
-    apiGet<R[] | { rows?: R[]; data?: R[] }>(`${endpoint}${query}`)
+    apiGet<R[] | { rows?: R[]; data?: R[];
+                   meta?: { total: number; pages: number } }>(
+      `${endpoint}${query}`)
       .then((res) => {
         if (!alive) return;
         const list = Array.isArray(res)
           ? res
           : (res.rows ?? res.data ?? []);
         setRows(list as R[]);
+        // ⚠️ **ومسارٌ بلا ترقيمٍ يعمل كما كان**: فـ`meta` غائبةٌ
+        // فيُقطَّع محلّيًّا — **فلا نكسر ما لم نُرقّمه بعد**.
+        setMeta(Array.isArray(res) ? null : (res.meta ?? null));
         setBusy(false);
       })
       .catch((e: ApiError) => {
@@ -184,6 +209,9 @@ export default function DocList<R>({
   }, [endpoint, query, refreshKey, reload]);
 
   const visible = useMemo(() => {
+    // ⚠️ **ولا ترشيحَ محلّيّ حين رشّح الخادم**: فترشيحٌ ثانٍ على
+    // الصفحة **يُخفي نتائجَ صحيحة**.
+    if (meta !== null) return rows;
     if (!search.trim() || !searchFields) return rows;
     const q = search.trim().toLowerCase();
     return rows.filter((r) => searchFields(r).toLowerCase().includes(q));
@@ -193,15 +221,22 @@ export default function DocList<R>({
   // في شركةٍ بألف **رقمٌ خاطئ**.
   const cards = stats?.(visible) ?? [];
 
-  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  // ⚠️ **والترقيم من الخادم إن رقّم** — وإلا محلّيًّا.
+  const serverPaged = meta !== null;
+  const totalCount = serverPaged ? meta!.total : visible.length;
+  const totalPages = serverPaged
+    ? Math.max(1, meta!.pages)
+    : Math.max(1, Math.ceil(visible.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paged = useMemo(
-    () => visible.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [visible, safePage, pageSize]);
+    () => (serverPaged
+      ? visible
+      : visible.slice((safePage - 1) * pageSize, safePage * pageSize)),
+    [visible, safePage, pageSize, serverPaged]);
 
   // ⚠️ **والبحث يُرجع للصفحة الأولى**: فنتيجةٌ في الصفحة الخامسة
   // تبدو مفقودة.
-  useEffect(() => { setPage(1); }, [search]);
+  useEffect(() => { setPage(1); }, [debounced]);
 
   return (
     <div className="stack">
@@ -385,7 +420,7 @@ export default function DocList<R>({
         <div className="spread" style={{ flexWrap: "wrap", gap: 10 }}>
           <div className="muted" style={{ fontSize: ".85rem" }}>
             {L("total")}:{" "}
-            <span className="num">{visible.length}</span> {L("rows")}
+            <span className="num">{totalCount}</span> {L("rows")}
             {totalPages > 1 && (
               <> · {L("page")}{" "}
                 <span className="num">{safePage}</span>/

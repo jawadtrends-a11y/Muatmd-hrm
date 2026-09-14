@@ -167,7 +167,8 @@ def test_specific_person_step(env):
         pytest.skip("لا سلاسل افتراضية")
 
     c = _client(env)
-    pid = c.get("/api/employees/").json()[0]["person_id"]
+    # ق-166: الردّ صار {rows, meta} بعد الترقيم
+    pid = c.get("/api/employees/").json()["rows"][0]["person_id"]
 
     r = c.post(f"/api/leaves/chains/{env['chain_id']}/steps/",
                data=json.dumps({"approver_type": "specific_person",
