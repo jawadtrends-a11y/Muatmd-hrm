@@ -457,7 +457,11 @@ function typeName(
 }
 
 
-export default function LeavesPage() {
+/**
+ * ق-159: ⚠️ **وشاشة الفريق تُرشّح بالفريق** (تصويب جواد).
+ */
+export default function LeavesPage({ teamOnly = false }:
+  { teamOnly?: boolean } = {}) {
   const { L, lang } = useT(T);
 
   const [approvals, setApprovals] = useState<Req[]>([]);
@@ -489,7 +493,7 @@ export default function LeavesPage() {
     );
 
     jobs.push(
-      apiGet<Req[]>(`/leaves/requests/${qs({ status })}`)
+      apiGet<Req[]>(`/leaves/requests/${qs({ status, ...(teamOnly ? { team: 1 } : {}) })}`)
         .then((d) => { setAll(d); setCanViewAll(true); })
         .catch(() => setCanViewAll(false)),
     );

@@ -1703,3 +1703,52 @@ def import_execute(request):
                         status=400)
 
     return Response(res, status=status.HTTP_201_CREATED)
+
+
+# ══════════ فريقي (ق-159) ══════════
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_team(request):
+    """
+    فريقي — ⚠️⚠️ **مرؤوسيّ وموظفو إدارتي وحدهم**.
+
+    **تصويب جواد:** الشاشة كانت تنادي `/employees/` العامّ،
+    **فيُرجع ما يسمح به نطاق المستخدم** — ومديرٌ بنطاق شركةٍ يرى
+    الجميع في شاشةٍ عنوانها «فريقي».
+
+    ⚠️ **والترشيح بالفريق دائمًا لا بالنطاق**: فالشاشة تعني ما
+    تقوله، **والشركة كلّها لها شاشتها**.
+    """
+    from apps.core.services.team import my_team_queryset
+
+    from apps.employees.models import EmploymentStatus
+
+    person = getattr(request.user, "person", None)
+    me = (Employment.objects.filter(
+        person=person, company_id=_company_id(request),
+        status=EmploymentStatus.ACTIVE).first()
+        if person else None)
+    if me is None:
+        return Response({"rows": [], "total": 0})
+
+    qs = my_team_queryset(me).select_related(
+        "person", "department", "job_title", "direct_manager__person")
+
+    rows = [{
+        "id": e.id,
+        "employee_no": e.employee_no,
+        "name_ar": e.person.name_for(request_locale(request)),
+        "department": getattr(e.department, "name_ar", "") or "",
+        "job_title": getattr(e.job_title, "name_ar", "") or "",
+        "join_date": e.join_date,
+        "status": e.status,
+        "manager": (e.direct_manager.person.display_name
+                    if e.direct_manager else ""),
+        # ⚠️ **وسبب ظهوره** — فمن يقرأ يعرف لماذا يراه
+        "via": ("direct" if e.direct_manager_id == me.id
+                else "department"),
+        "avatar_url": _avatar_url(e.person),
+    } for e in qs[:300]]
+
+    return Response({"rows": rows, "total": len(rows)})

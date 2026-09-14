@@ -100,7 +100,14 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function AttendancePage() {
+/**
+ * ق-159: ⚠️ **وشاشة الفريق تُرشّح بالفريق** (تصويب جواد).
+ *
+ * فالشاشة نفسها تخدم الموارد والمدير — **والفرق في الترشيح لا
+ * في الكود**.
+ */
+export default function AttendancePage({ teamOnly = false }:
+  { teamOnly?: boolean } = {}) {
   const { L, lang } = useT(T);
   const [mode, setMode] = useState<"daily" | "monthly">("daily");
   const [day, setDay] = useState(today());
@@ -121,10 +128,11 @@ export default function AttendancePage() {
     setBusy(true);
     setError("");
 
+    const team = teamOnly ? { team: 1 } : {};
     const url =
       mode === "daily"
-        ? `/attendance/daily/${qs({ date: day, page })}`
-        : `/attendance/monthly/${qs({ year, month, page })}`;
+        ? `/attendance/daily/${qs({ date: day, page, ...team })}`
+        : `/attendance/monthly/${qs({ year, month, page, ...team })}`;
 
     apiGet<{
       rows: DailyRow[] | MonthlyRow[];
@@ -152,7 +160,7 @@ export default function AttendancePage() {
     return () => { alive = false; };
     // L مستثناة: تتغيّر مرجعيًا في كل رسم فتعيد إطلاق الطلب
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, day, year, month, page]);
+  }, [mode, day, year, month, page, teamOnly]);
 
   // تغيير الفلتر يعيدنا للصفحة الأولى — وإلا بقينا على صفحة 7
   // لتاريخ فيه ثلاث صفحات فقط

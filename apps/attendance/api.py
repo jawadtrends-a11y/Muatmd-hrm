@@ -469,6 +469,14 @@ def daily_board(request):
 
     من حضر، ومن تأخر، ومن غاب، ومن في إجازة.
     """
+    # ق-159: ⚠️ **وترشيحُ الفريق حين تطلبه الشاشة** — فشاشة
+    # «حضور المرؤوسين» تعني مرؤوسيه لا الشركة (تصويب جواد).
+    _team_ids = None
+    if request.GET.get("team") == "1":
+        from apps.core.services.team import team_employment_ids
+        _team_ids = team_employment_ids(request.user,
+                                        _company_id(request))
+
     from apps.attendance.models import AttendanceDay
     from apps.employees.models import Employment, EmploymentStatus
 
@@ -495,6 +503,12 @@ def daily_board(request):
     ).filter(company_id=company_id,
              status=EmploymentStatus.ACTIVE).select_related(
         "person", "department").order_by("employee_no")
+
+    # ق-159: ⚠️⚠️ **وشاشة «فريقي» تُرشّح بالفريق لا بالنطاق**
+    # (تصويب جواد): فمديرٌ عامّ بنطاق شركةٍ كان يرى الجميع في
+    # شاشةٍ عنوانها «حضور المرؤوسين».
+    if _team_ids is not None:
+        employments = employments.filter(id__in=_team_ids)
 
     page, page_size = _page_params(request)
     total = employments.count()
@@ -569,6 +583,14 @@ def monthly_board(request):
     AttendanceMonthlySummary فيُقرأ منه — فلا تتغيّر أرقام مسير
     معتمد بأثر رجعي لو صُحّحت بصمة بعده (ق-69).
     """
+    # ق-159: ⚠️ **وترشيحُ الفريق حين تطلبه الشاشة** — فشاشة
+    # «حضور المرؤوسين» تعني مرؤوسيه لا الشركة (تصويب جواد).
+    _team_ids = None
+    if request.GET.get("team") == "1":
+        from apps.core.services.team import team_employment_ids
+        _team_ids = team_employment_ids(request.user,
+                                        _company_id(request))
+
     from calendar import monthrange
 
     from django.db.models import Count, Q, Sum
@@ -594,6 +616,12 @@ def monthly_board(request):
     ).filter(company_id=company_id,
              status=EmploymentStatus.ACTIVE).select_related(
         "person", "department").order_by("employee_no")
+
+    # ق-159: ⚠️⚠️ **وشاشة «فريقي» تُرشّح بالفريق لا بالنطاق**
+    # (تصويب جواد): فمديرٌ عامّ بنطاق شركةٍ كان يرى الجميع في
+    # شاشةٍ عنوانها «حضور المرؤوسين».
+    if _team_ids is not None:
+        employments = employments.filter(id__in=_team_ids)
 
     page, page_size = _page_params(request)
     total = employments.count()

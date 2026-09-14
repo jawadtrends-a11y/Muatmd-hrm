@@ -108,6 +108,20 @@ class Account(TimeStampedModel):
 class Company(TimeStampedModel):
     """شركة داخل الحساب — لها سجلها التجاري واشتراكها وباقتها."""
 
+    # ق-160: **صلاحيات مدير الإدارة** — قابلةٌ للضبط (قرار جواد).
+    #
+    # ⚠️⚠️ **فمطاردةُ كل احتمالٍ عبث**: والعميل يريد نظامه
+    # الداخليّ لا رغبتنا — **فيزيد وينقص بحرّية**.
+    #
+    # ⚠️ **والضمانة في النطاق لا في القائمة**: فمهما مُنح، يُطبَّق
+    # **على فريقه وحده** — ومن منح `payroll.view` رأى رواتب فريقه
+    # لا الشركة.
+    #
+    # وفارغٌ يعني: **الافتراض** (الست أدناه) لا «بلا شيء».
+    dept_manager_permissions = models.JSONField(
+        _("صلاحيات مدير الإدارة"), default=list, blank=True,
+        help_text=_("فارغ = الافتراض"))
+
     account = models.ForeignKey(
         Account, on_delete=models.CASCADE,
         verbose_name=_("الحساب"), related_name="companies",

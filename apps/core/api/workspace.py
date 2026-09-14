@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.access.gate import Gate
+from apps.core.services.team import has_reports
 
 # كل مدخل تنقّل يعلن صلاحيته — لا شروط في الواجهة
 NAV_ITEMS = [
@@ -80,30 +81,6 @@ def _active_employment_id(person, company):
     return qs.values_list("id", flat=True).first()
 
 
-def _has_reports(user, company):
-    """
-    أله مرؤوسون؟
-
-    ⚠️ **فمجموعة «فريقي» لا تظهر لمن لا فريق له** — وزرٌّ يفتح
-    قائمةً فارغة يُربك.
-    """
-    from apps.employees.models import Employment, EmploymentStatus
-
-    person = getattr(user, "person", None)
-    if person is None or company is None:
-        return False
-
-    mine = list(Employment.objects.filter(
-        person=person, company=company,
-        status=EmploymentStatus.ACTIVE).values_list("id", flat=True))
-    if not mine:
-        return False
-
-    return Employment.objects.filter(
-        direct_manager_id__in=mine,
-        status=EmploymentStatus.ACTIVE).exists()
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def workspace(request):
@@ -161,7 +138,7 @@ def workspace(request):
         # ق-159: ⚠️ **و«فريقي» لمن له مرؤوسون فعلًا** (قرار جواد):
         # فمدير الموارد بمرؤوسين يحتاجها لفريقه، **وموظفُ الموارد
         # بلا مرؤوسين يراها فارغة**.
-        "has_reports": _has_reports(user, active),
+        "has_reports": has_reports(user, active),
         "navigation": [
             {k: v for k, v in item.items() if k != "permission"}
             for item in NAV_ITEMS if _allowed(item["permission"], perms)

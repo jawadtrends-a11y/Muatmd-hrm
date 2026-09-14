@@ -9,5 +9,6 @@
 import AttendancePage from "@/app/attendance/page";
 
 export default function TeamAttendancePage() {
-  return <AttendancePage />;
+  // ⚠️ **والفريق وحده** — لا الشركة كلّها
+  return <AttendancePage teamOnly />;
 }

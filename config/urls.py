@@ -148,6 +148,10 @@ urlpatterns = [
          employees_api.import_preview, name="import-preview"),
     path("api/employees/import/execute/",
          employees_api.import_execute, name="import-execute"),
+    # ق-159: فريقي — ⚠️ مرؤوسيّ وموظفو إدارتي وحدهم
+    path("api/me/team/", employees_api.my_team, name="my-team"),
+    # ق-159: فريقي — ⚠️ مرؤوسيّ وموظفو إدارتي وحدهم
+    path("api/me/team/", employees_api.my_team, name="my-team"),
     path("api/employees/", employees_api.employees, name="employees"),
     # ق-119 وق-121: الجزاءات التأديبية — اللائحة والسجلّ والتوقيع
     path("api/penalties/violations/", penalties_api.violations,

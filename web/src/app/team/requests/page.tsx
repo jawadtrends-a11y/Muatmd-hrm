@@ -9,5 +9,6 @@
 import LeavesPage from "@/app/leaves/page";
 
 export default function TeamRequestsPage() {
-  return <LeavesPage />;
+  // ⚠️ **والفريق وحده** — لا الشركة كلّها
+  return <LeavesPage teamOnly />;
 }

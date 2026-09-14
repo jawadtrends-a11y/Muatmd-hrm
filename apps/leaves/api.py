@@ -237,8 +237,19 @@ def leave_requests(request):
 
     if request.method == "GET":
         Gate.require(request.user, "leaves.view")
+
+        # ق-159: ⚠️⚠️ **وشاشة «طلبات المرؤوسين» تُرشّح بالفريق**
+        # (تصويب جواد): فمديرٌ عامّ بنطاق شركةٍ كان يرى طلبات
+        # الجميع في شاشةٍ عنوانها مرؤوسوه.
+        _team_ids = None
+        if request.GET.get("team") == "1":
+            from apps.core.services.team import team_employment_ids
+            _team_ids = team_employment_ids(request.user, company_id)
+
         qs = Gate.filter_queryset(request.user, "leaves.view",
                                   Request.objects.all())
+        if _team_ids is not None:
+            qs = qs.filter(employment_id__in=_team_ids)
         qs = qs.filter(company_id=company_id).select_related(
             "employment__person")
 

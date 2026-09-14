@@ -57,6 +57,42 @@ def _delegated_manager_ids(employment):
     return [d.absentee_id for d in active_delegations_for(employment)]
 
 
+#: ق-160: **افتراض صلاحيات مدير الإدارة** — والعميل يزيد وينقص.
+#
+# ⚠️ **فمطاردةُ كل احتمالٍ عبث**: والعميل يريد نظامه الداخليّ لا
+# رغبتنا (قرار جواد).
+#
+# ⚠️⚠️ **والضمانة في النطاق لا في القائمة**: فمهما مُنح يُطبَّق
+# **على فريقه وحده** — ومن مُنح `payroll.view` رأى رواتب فريقه لا
+# الشركة.
+DEFAULT_DEPT_MANAGER_PERMISSIONS = (
+    "employees.view",
+    "attendance.view",
+    "leaves.view",
+    "requests.view",
+    "requests.approve",
+    "requests.manage",
+)
+
+
+def dept_manager_permissions(company_id):
+    """
+    صلاحيات مدير الإدارة في هذه الشركة.
+
+    ⚠️ **وفارغٌ يعني الافتراض** لا «بلا شيء»: فشركةٌ لم تضبطه
+    **يبقى مديرها بلا صلاحية** — وذاك ليس ما أرادت.
+    """
+    from apps.accounts.models import Company
+    from apps.core.access.catalog import PERMISSION_KEYS
+
+    c = Company.objects.filter(id=company_id).only(
+        "dept_manager_permissions").first()
+    raw = (c.dept_manager_permissions if c else None) or None
+    keys = raw or DEFAULT_DEPT_MANAGER_PERMISSIONS
+    # ⚠️ **ومفتاحٌ مخترَع يُسقط**: فالكتالوج يرفعه استثناءً
+    return frozenset(k for k in keys if k in PERMISSION_KEYS)
+
+
 class Gate:
     """نقطة الفحص الوحيدة. لا يُفحص أي صلاحية خارجها."""
 
@@ -133,9 +169,47 @@ class Gate:
             if best is None or granted.rank > best.rank:
                 best = granted
 
+        # ق-160: ⚠️⚠️ **ومديرُ الإدارة يكتسب صلاحيات فريقه**
+        # (قرار جواد): فإسنادُه مديرًا **قرارٌ تنظيميّ يحمل أثره**.
+        #
+        # ⚠️ **ونطاقها `team` دائمًا**: فهي على فريقه وحده — وهذه
+        # هي الضمانة، لا حصرُ القائمة.
+        if (active
+                and permission_key in dept_manager_permissions(active)
+                and cls._leads_a_department(membership)):
+            team = Scope.TEAM
+            if best is None or team.rank > best.rank:
+                best = team
+
         if best is None:
             return Decision(False, Scope.OWN, "لا دور يمنح هذه الصلاحية")
         return Decision(True, best)
+
+    @classmethod
+    def _leads_a_department(cls, membership):
+        """
+        أيدير إدارةً؟
+
+        ⚠️ **فالإسناد قرارٌ تنظيميّ يحمل أثره** — ومن أُسنِد
+        مديرًا بلا صلاحية لا يرى من يديرهم (قرار جواد).
+        """
+        from apps.employees.models import Employment, EmploymentStatus
+        from apps.organization.models import Department
+
+        person = getattr(membership.user, "person", None)
+        company_id = membership.active_company_id
+        if person is None or company_id is None:
+            return False
+
+        mine = list(Employment.objects.filter(
+            person=person, company_id=company_id,
+            status=EmploymentStatus.ACTIVE).values_list("id", flat=True))
+        if not mine:
+            return False
+
+        return Department.objects.filter(
+            company_id=company_id,
+            manager_employment_id__in=mine).exists()
 
     @classmethod
     def _override(cls, membership, permission_key):
@@ -202,7 +276,15 @@ class Gate:
         if d.scope is Scope.BRANCH:
             return qs.filter(**{f"{prefix}branch_id": emp.branch_id})
         if d.scope is Scope.DEPARTMENT:
-            return qs.filter(**{f"{prefix}department_id": emp.department_id})
+            # ق-159: ⚠️⚠️ **وإداراتُه التي يديرها معها** (قرار
+            # جواد): فمن أُسند مديرًا لإدارةٍ **يرى موظفيها** ولو
+            # لم تكن إدارته هو — **وبلا هذا يُسنَد مديرًا ولا يرى
+            # أحدًا**.
+            #
+            # ⚠️ **والمدير المباشر شيءٌ آخر**: قد يكون المشرف لا
+            # مدير الإدارة.
+            dept_ids = cls._managed_department_ids(emp)
+            return qs.filter(**{f"{prefix}department_id__in": dept_ids})
         if d.scope is Scope.TEAM:
             # ق-75: النائب يرى مرؤوسي من ينوب عنه — طوال المدة
             # المقبولة لا قبلها ولا بعدها. فالإنابة تنقل المهام
@@ -211,6 +293,21 @@ class Gate:
             return qs.filter(
                 **{f"{prefix}direct_manager_id__in": managers})
         return qs.filter(**{f"{prefix}id": emp.id})
+
+    @classmethod
+    def _managed_department_ids(cls, emp):
+        """
+        إدارات الموظف: إدارتُه هو **وما يديره**.
+
+        ⚠️ **فمديرُ إدارةٍ غير إدارته يراها** — وبلا هذا يُسنَد
+        مديرًا ولا يصل موظفيه (قرار جواد).
+        """
+        from apps.organization.models import Department
+
+        ids = {emp.department_id} if emp.department_id else set()
+        ids |= set(Department.objects.filter(
+            manager_employment_id=emp.id).values_list("id", flat=True))
+        return list(ids) or [-1]
 
     # الحقول التي يُفلتر بها النطاق مباشرة على Employment
     _SCOPE_FIELDS = ("branch", "department", "direct_manager")
@@ -317,4 +414,11 @@ class Gate:
                 keys.add(o.permission_key)
             else:
                 keys.discard(o.permission_key)
+
+        # ق-160: ⚠️ **وصلاحيات مدير الإدارة** — وإلا ظهر البند في
+        # القائمة وحُجب عند الفتح، أو العكس.
+        if membership.active_company_id and cls._leads_a_department(
+                membership):
+            keys |= dept_manager_permissions(
+                membership.active_company_id)
         return keys

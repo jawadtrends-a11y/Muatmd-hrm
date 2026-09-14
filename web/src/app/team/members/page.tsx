@@ -50,7 +50,10 @@ export default function TeamMembersPage() {
 
   useEffect(() => {
     let alive = true;
-    apiGet<Row[] | { rows: Row[] }>("/employees/")
+    // ق-159: ⚠️⚠️ **ومسار الفريق لا /employees/ العامّ**
+    // (تصويب جواد): فمديرٌ بنطاق شركةٍ كان يرى الجميع في شاشةٍ
+    // عنوانها «فريقي».
+    apiGet<Row[] | { rows: Row[] }>("/me/team/")
       .then((res) => {
         if (!alive) return;
         setRows(Array.isArray(res) ? res : (res.rows ?? []));
