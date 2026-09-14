@@ -271,8 +271,27 @@ def leave_requests(request):
         if request.GET.get("type"):
             qs = qs.filter(request_type=request.GET["type"])
 
-        return Response([_serialize_request(r, lang=request_locale(request))
-                         for r in qs.order_by("-created_at")[:200]])
+        # ق-167: ⚠️ **والبحث في الخادم** — فالعميل لا يملك إلا
+        # صفحته.
+        if request.GET.get("q"):
+            q = request.GET["q"].strip()
+            qs = qs.filter(
+                Q(request_no__icontains=q)
+                | Q(employment__employee_no__icontains=q)
+                | Q(employment__person__first_name_ar__icontains=q)
+                | Q(employment__person__family_name_ar__icontains=q))
+
+        # ق-166: ⚠️ **والترقيم بصيغته الموحّدة** — فالسقف الثابت
+        # (٢٠٠) كان **يُخفي ما بعده بلا بيان**.
+        from apps.core.pagination import paginate
+
+        rows, meta = paginate(qs.order_by("-created_at"), request)
+        return Response({
+            "rows": [_serialize_request(r,
+                                        lang=request_locale(request))
+                     for r in rows],
+            "meta": meta,
+        })
 
     # ── إنشاء طلب ──
     from apps.leaves.services.leave_requests import (

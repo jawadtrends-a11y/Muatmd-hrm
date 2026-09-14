@@ -373,7 +373,18 @@ def payroll_runs(request):
         if request.GET.get("run_type"):
             qs = qs.filter(run_type=request.GET["run_type"])
 
-        return Response([
+        # ق-167: ⚠️ **والبحث برقم المسير** — فمن يبحث عنه بينها
+        # **لا يقلّب الصفحات**.
+        if request.GET.get("q"):
+            qs = qs.filter(run_no__icontains=request.GET["q"].strip())
+
+        # ق-166: الترقيم بصيغته الموحّدة
+        from apps.core.pagination import paginate
+
+        _rows, _meta = paginate(
+            qs.order_by("-period_year", "-period_month", "-id"),
+            request)
+        return Response({"meta": _meta, "rows": [
             {
                 "id": r.id,
                 "run_no": r.run_no,
@@ -395,8 +406,8 @@ def payroll_runs(request):
                 "calculated_at": r.calculated_at,
                 "approved_at": r.approved_at,
             }
-            for r in qs.order_by("-period_year", "-period_month", "-id")[:100]
-        ])
+            for r in _rows
+        ]})
 
     # ── إنشاء مسير ──
     Gate.require(request.user, "payroll.create")

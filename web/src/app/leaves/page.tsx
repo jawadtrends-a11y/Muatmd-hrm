@@ -493,7 +493,11 @@ export default function LeavesPage({ teamOnly = false }:
     );
 
     jobs.push(
-      apiGet<Req[]>(`/leaves/requests/${qs({ status, ...(teamOnly ? { team: 1 } : {}) })}`)
+      // ق-166: الردّ صار {rows, meta} بعد الترقيم
+      apiGet<{ rows: Req[] } | Req[]>(
+        `/leaves/requests/${qs({ status, page_size: 100,
+          ...(teamOnly ? { team: 1 } : {}) })}`)
+        .then((d) => (Array.isArray(d) ? d : d.rows))
         .then((d) => { setAll(d); setCanViewAll(true); })
         .catch(() => setCanViewAll(false)),
     );

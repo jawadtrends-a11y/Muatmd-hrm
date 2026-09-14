@@ -339,8 +339,11 @@ def test_cancelled_hidden_from_others(env):
         req, _ = submit_request(req)
         cancel_request(request_obj=req, by_employment=env["emp"])
 
-    mine = _client(env["emp"]).get("/api/leaves/requests/").json()
-    theirs = _client(env["hrm"]).get("/api/leaves/requests/").json()
+    # ق-166: الردّ صار {rows, meta} بعد الترقيم
+    mine = _client(env["emp"]).get(
+        "/api/leaves/requests/").json()["rows"]
+    theirs = _client(env["hrm"]).get(
+        "/api/leaves/requests/").json()["rows"]
 
     assert any(x["request_no"] == "C-4" for x in mine), "أُخفي عن مقدّمه"
     assert not any(x["request_no"] == "C-4" for x in theirs), (

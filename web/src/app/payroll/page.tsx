@@ -349,7 +349,10 @@ export default function PayrollPage() {
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      setRuns(await apiGet<Run[]>(`/payroll/runs/${qs({ year })}`));
+      // ق-166: الردّ صار {rows, meta} بعد الترقيم
+      const _r = await apiGet<{ rows: Run[] } | Run[]>(
+        `/payroll/runs/${qs({ year, page_size: 100 })}`);
+      setRuns(Array.isArray(_r) ? _r : _r.rows);
       apiGet<RetroRow[]>("/payroll/retro/")
         .then(setRetroRows).catch(() => setRetroRows([]));
     } catch (e) {
