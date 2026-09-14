@@ -42,6 +42,9 @@ def test_no_raw_queryset_in_api_views():
     SETTINGS_MODELS = {
         "LeaveType", "PayComponent", "PayrollSettings", "Shift",
         "BankTemplate", "Holiday", "JobTitle", "ApprovalChain",
+        # ق-156: مركز التكلفة إعدادٌ كالمسمّى الوظيفيّ — لا يحمل
+        # بيانات موظفين، والعزل بـcompany_id كافٍ فيه
+        "CostCenter",
         # رموز البنوك (ق-57): حقيقة نظامية مشتركة بين كل الحسابات
         "Bank",
         # الملفات (ق-61): معزولة بـRLS، والوصول عبر مسار محمي

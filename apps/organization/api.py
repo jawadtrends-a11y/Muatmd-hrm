@@ -70,6 +70,10 @@ def _usage(model_name, obj, user):
     if model_name == "job_title":
         return emps.filter(job_title=obj, status="active").count(), 0
 
+    # ق-156: مركز التكلفة — ويُعدّ كغيره بالبوّابة
+    if model_name == "cost_center":
+        return emps.filter(cost_center=obj, status="active").count(), 0
+
     return 0, 0
 
 
@@ -195,9 +199,12 @@ def _set_manager(request, dept, mgr_id, company_id):
         dept.save(update_fields=["manager_employment_id"])
         return True, ""
 
-    e = Employment.objects.filter(
-        id=mgr_id, company_id=company_id,
-        status=EmploymentStatus.ACTIVE).first()
+    # ⚠️ **وعبر البوّابة لا خامًا**: فمن لا يرى الموظف لا يُسنده
+    # مديرًا — والنطاق يُحترم هنا كما في كل قراءة.
+    e = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=mgr_id, company_id=company_id,
+             status=EmploymentStatus.ACTIVE).first()
     if e is None:
         return False, "المدير غير موجود في هذه الشركة أو غير نشط"
 
@@ -445,8 +452,9 @@ def department_detail(request, dept_id):
     # مديرٍ معلَن** رغم أن مكانه محجوز.
     if request.method == "PUT" and "manager_employment_id" in request.data:
         company_id = _company(request)
-        dept = Department.objects.filter(
-            id=dept_id, company_id=company_id).first()
+        dept = Gate.filter_queryset(
+            request.user, "org.manage", Department.objects.all()
+        ).filter(id=dept_id, company_id=company_id).first()
         if dept is None:
             return _err("الإدارة غير موجودة", "not_found", 404)
         ok, err = _set_manager(
@@ -555,7 +563,7 @@ def cost_center_detail(request, center_id):
         return _err("غير موجود", "not_found", 404)
 
     if request.method == "DELETE":
-        used = Employment.objects.filter(cost_center=c).count()
+        used = _usage("cost_center", c, request.user)[0]
         if used:
             c.is_active = False
             c.save(update_fields=["is_active"])
