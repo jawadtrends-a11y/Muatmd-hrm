@@ -9,6 +9,9 @@
  * 🔑 لا يُعرَّف مكوّن داخل مكوّن (ضياع التركيز بعد كل حرف).
  */
 import { useEffect, useMemo, useState } from "react";
+
+/** ق-166: أحجام الصفحة المتاحة (قرار جواد) */
+const PAGE_SIZES = [10, 25, 50, 100];
 import Link from "next/link";
 
 import { apiGet, qs, ApiError } from "@/lib/api";
@@ -25,6 +28,8 @@ const T: Dict = {
   retry: { ar: "إعادة المحاولة", en: "Retry" },
   total: { ar: "الإجمالي", en: "Total" },
   rows: { ar: "سجل", en: "records" },
+  page: { ar: "صفحة", en: "Page" },
+  perPage: { ar: "في الصفحة", en: "Per page" },
 };
 
 export type Column<R> = {
@@ -105,6 +110,32 @@ export default function DocList<R>({
   // شاشةً أخرى.
   const [view, setView] = useState<"list" | "cards">("list");
 
+  // ق-166: **حجم الصفحة** (بلاغ جواد) — ⚠️ فشركةٌ بألف موظف
+  // **لا تُعرض في صفحةٍ واحدة**، والمستخدم يختار ما يناسبه.
+  //
+  // ⚠️ **ويُحفظ بالمسار** كطريقة العرض: فمن اختار ١٠٠ لا يعود
+  // لعشرة في كل فتح.
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const v = Number(window.localStorage.getItem(
+        `doclist-size:${endpoint}`));
+      if (PAGE_SIZES.includes(v)) setPageSize(v);
+    } catch { /* الوضع الخاصّ يمنعه */ }
+  }, [endpoint]);
+
+  const pickSize = (n: number) => {
+    setPageSize(n);
+    setPage(1);
+    try {
+      window.localStorage.setItem(`doclist-size:${endpoint}`,
+                                  String(n));
+    } catch { /* يُتجاهل */ }
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -158,7 +189,19 @@ export default function DocList<R>({
     return rows.filter((r) => searchFields(r).toLowerCase().includes(q));
   }, [rows, search, searchFields]);
 
+  // ⚠️ **والمجاميع على الكلّ لا الصفحة**: فـ«الموظفون ١٠»
+  // في شركةٍ بألف **رقمٌ خاطئ**.
   const cards = stats?.(visible) ?? [];
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paged = useMemo(
+    () => visible.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [visible, safePage, pageSize]);
+
+  // ⚠️ **والبحث يُرجع للصفحة الأولى**: فنتيجةٌ في الصفحة الخامسة
+  // تبدو مفقودة.
+  useEffect(() => { setPage(1); }, [search]);
 
   return (
     <div className="stack">
@@ -273,7 +316,7 @@ export default function DocList<R>({
             gridTemplateColumns:
               "repeat(auto-fill, minmax(240px, 1fr))",
           }}>
-            {visible.map((r) => (
+            {paged.map((r) => (
               <div key={String(rowKey(r))}
                    onClick={() => onRowClick?.(r)}
                    style={{
@@ -307,7 +350,7 @@ export default function DocList<R>({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row) => (
+                {paged.map((row) => (
                   <tr
                     key={rowKey(row)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -337,9 +380,52 @@ export default function DocList<R>({
         )}
       </div>
 
+      {/* ق-166: **شريط الترقيم وحجم الصفحة** (بلاغ جواد) */}
       {!busy && !error && visible.length > 0 && (
-        <div className="muted" style={{ fontSize: ".85rem" }}>
-          {L("total")}: <span className="num">{visible.length}</span> {L("rows")}
+        <div className="spread" style={{ flexWrap: "wrap", gap: 10 }}>
+          <div className="muted" style={{ fontSize: ".85rem" }}>
+            {L("total")}:{" "}
+            <span className="num">{visible.length}</span> {L("rows")}
+            {totalPages > 1 && (
+              <> · {L("page")}{" "}
+                <span className="num">{safePage}</span>/
+                <span className="num">{totalPages}</span>
+              </>
+            )}
+          </div>
+
+          <div className="row" style={{ gap: 10, alignItems: "center" }}>
+            {/* ⚠️ **ولا يظهر التنقّل بصفحةٍ واحدة** — فزرٌّ
+                معطَّل يُربك */}
+            {totalPages > 1 && (
+              <div className="row" style={{ gap: 4 }}>
+                <button className="btn btn-sm btn-ghost"
+                        disabled={safePage <= 1}
+                        onClick={() => setPage(safePage - 1)}>
+                  {lang === "ar" ? "›" : "‹"}
+                </button>
+                <button className="btn btn-sm btn-ghost"
+                        disabled={safePage >= totalPages}
+                        onClick={() => setPage(safePage + 1)}>
+                  {lang === "ar" ? "‹" : "›"}
+                </button>
+              </div>
+            )}
+
+            <div className="row" style={{ gap: 6,
+                                          alignItems: "center" }}>
+              <span className="muted" style={{ fontSize: ".8rem" }}>
+                {L("perPage")}
+              </span>
+              <select className="select" value={pageSize}
+                      style={{ width: 78, padding: "5px 8px" }}
+                      onChange={(e) => pickSize(Number(e.target.value))}>
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       )}
     </div>
