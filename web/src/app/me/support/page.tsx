@@ -40,7 +40,7 @@ const T: Dict = {
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   newTitle: { ar: "تذكرة جديدة", en: "New ticket" },
   sla: {
-    ar: "نردّ خلال {n} {unit} — بحسب باقتكم",
+    ar: "نردّ خلال {n} {unit}",
     en: "We respond within {n} {unit}",
   },
   hoursBiz: { ar: "ساعة عمل", en: "business hours" },

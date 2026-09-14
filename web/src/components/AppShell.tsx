@@ -31,6 +31,12 @@ const PUBLIC_PATHS = ["/login", "/join", "/billing/callback",
 
 const T: Dict = {
   home: { ar: "الرئيسية", en: "Home" },
+  // ق-159: عناوين المجموعات الستّ
+  grpMe: { ar: "شؤوني", en: "My workspace" },
+  grpHr: { ar: "الموارد البشرية", en: "HR" },
+  grpPay: { ar: "الرواتب", en: "Payroll" },
+  grpDev: { ar: "الأداء والتدريب", en: "Development" },
+  grpOrg: { ar: "المنشأة", en: "Organization" },
   employees: { ar: "الموظفون", en: "Employees" },
   attendance: { ar: "الحضور والانصراف", en: "Attendance" },
   leaves: { ar: "الإجازات والطلبات", en: "Leaves & Requests" },
@@ -98,6 +104,8 @@ type Workspace = {
   account: { name: string } | null;
   company: { name: string } | null;
   permissions: string[];
+  /** ق-159: أله مرؤوسون؟ — و«فريقي» لا تظهر لمن لا فريق له */
+  has_reports?: boolean;
   /** نطاق كل صلاحية على حدة (ق-67) — الاستثناء الشخصي قد يوسّعه */
   permission_scopes?: Record<string, string>;
   roles?: { code: string; name_ar: string; scope: string }[];
@@ -140,14 +148,36 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", key: "home", icon: IcHome },
 
-  // ── إدارية: تحتاج نطاقًا أوسع من «نفسي» (ق-58) ──
-  { href: "/employees", key: "employees", icon: IcUsers,
-    perms: ["employees.view"], needsScope: true },
-  { href: "/attendance", key: "attendance", icon: IcClock,
-    perms: ["attendance.view"], needsScope: true },
-  { href: "/leaves", key: "leaves", icon: IcLeave,
-    perms: ["leaves.view"], needsScope: true },
-  // ق-68: إدارة الفريق — بنود المشرف مجموعة تحت عنوان واحد
+  // ═══ ق-159: ستُّ مجموعات (قرار جواد) ═══
+  //
+  // ⚠️ **فخمسةٌ وعشرون بندًا مسطّحةً تُرهق العين** — والمجموعة
+  // تُفتح عند الحاجة.
+
+  // ── ١. الموظف: شؤونه هو ──
+  {
+    href: "/me", key: "grpMe", icon: IcUser,
+    children: [
+      { href: "/me/requests", key: "myServices", icon: IcDoc,
+        perms: ["requests.create"] },
+      { href: "/me/leaves", key: "myLeaves", icon: IcLeave,
+        perms: ["leaves.view", "requests.create"] },
+      { href: "/me/attendance", key: "myAttendance", icon: IcClock,
+        perms: ["attendance.view"] },
+      { href: "/me", key: "myPayslips", icon: IcPayroll,
+        perms: ["payslips.view_own"] },
+      { href: "/me/letters", key: "myLetters", icon: IcDoc,
+        perms: ["requests.create"] },
+      { href: "/me/track", key: "myTrack", icon: IcDoc,
+        perms: ["requests.create"] },
+      { href: "/me/training", key: "my_training", icon: IcDoc },
+      { href: "/me/reviews", key: "my_reviews", icon: IcDoc },
+      { href: "/me/activities", key: "my_activities", icon: IcDoc },
+      { href: "/me/presence", key: "my_presence", icon: IcClock },
+      { href: "/me/support", key: "support", icon: IcAlert },
+    ],
+  },
+
+  // ── ٢. فريقي: ⚠️ **لمن له مرؤوسون** — لا لمن يحمل دورًا ──
   {
     href: "/team", key: "team", icon: IcUsers,
     perms: ["employees.view"], needsScope: true, minScope: "team",
@@ -162,40 +192,78 @@ const NAV: NavItem[] = [
         perms: ["requests.manage"] },
     ],
   },
-  { href: "/advances", key: "advances", icon: IcWallet,
-    perms: ["payroll.view"], needsScope: true },
-  { href: "/assets", key: "assets", icon: IcDoc,
-    perms: ["employees.view"], needsScope: true },
-  { href: "/payroll", key: "payroll", icon: IcPayroll,
-    perms: ["payroll.view"], needsScope: true },
-  // ق-102: يظهر لمن يملك أيًّا من صلاحيتَي الإرسال — والشاشة
-  // نفسها تحصر مدير الإدارة بإدارته
-  { href: "/announcements", key: "announcements", icon: IcDoc,
-    perms: ["announcements.send_company",
-            "announcements.send_department"] },
-  { href: "/reports", key: "reports", icon: IcChart,
-    perms: ["payroll.view", "employees.view"], needsScope: true },
-  // ق-68: مدير الإدارة يرى الهيكل، ويبدّل موقع عمل موظفيه من
-  // المواقع المضافة — فيظهران له من نطاق إدارته
-  { href: "/org", key: "org", icon: IcOrg,
-    perms: ["org.view"], needsScope: true, minScope: "department" },
-  { href: "/sites", key: "sites", icon: IcClock,
-    perms: ["sites.view"] },
 
-  // ── شخصية: لكل موظف عن نفسه ──
-  { href: "/me/attendance", key: "myAttendance", icon: IcClock,
-    perms: ["attendance.view"] },
-  { href: "/me/leaves", key: "myLeaves", icon: IcLeave,
-    perms: ["leaves.view", "requests.create"] },
-  { href: "/me/requests", key: "myServices", icon: IcDoc,
-    perms: ["requests.create"] },
-  { href: "/me/track", key: "myTrack", icon: IcDoc,
-    perms: ["requests.create"] },
-  { href: "/me", key: "myPayslips", icon: IcPayroll,
-    perms: ["payslips.view_own"] },
-  { href: "/me/letters", key: "myLetters", icon: IcDoc,
-    perms: ["requests.create"] },
-  // ق-58: حسابي لكل مستخدم — صورته ولغته وكلمة مروره
+  // ── ٣. الموارد البشرية: الشركة كلّها ──
+  {
+    href: "/employees", key: "grpHr", icon: IcUsers,
+    perms: ["employees.view"], needsScope: true,
+    children: [
+      { href: "/employees", key: "employees", icon: IcUsers,
+        perms: ["employees.view"] },
+      { href: "/attendance", key: "attendance", icon: IcClock,
+        perms: ["attendance.view"] },
+      { href: "/leaves", key: "leaves", icon: IcLeave,
+        perms: ["leaves.view"] },
+      { href: "/assets", key: "assets", icon: IcDoc,
+        perms: ["employees.view"] },
+      { href: "/announcements", key: "announcements", icon: IcDoc,
+        perms: ["announcements.send_company",
+                "announcements.send_department"] },
+    ],
+  },
+
+  // ── ٤. الرواتب ──
+  {
+    href: "/payroll", key: "grpPay", icon: IcPayroll,
+    perms: ["payroll.view"], needsScope: true,
+    children: [
+      { href: "/payroll", key: "payroll", icon: IcPayroll,
+        perms: ["payroll.view"] },
+      { href: "/advances", key: "advances", icon: IcWallet,
+        perms: ["payroll.view"] },
+      { href: "/allowance-claims", key: "allowance_claims",
+        icon: IcWallet, perms: ["payroll.view"] },
+      { href: "/expenses", key: "expenses", icon: IcWallet,
+        perms: ["payroll.view"] },
+      { href: "/penalties", key: "penalties", icon: IcAlert,
+        perms: ["payroll.view"] },
+    ],
+  },
+
+  // ── ٥. التطوير ──
+  {
+    href: "/performance", key: "grpDev", icon: IcChart,
+    perms: ["employees.view"], needsScope: true,
+    children: [
+      { href: "/performance", key: "performance", icon: IcChart,
+        perms: ["employees.edit"] },
+      { href: "/training", key: "training", icon: IcDoc,
+        perms: ["employees.edit"] },
+      { href: "/activities", key: "activities", icon: IcDoc,
+        perms: ["employees.edit"] },
+      { href: "/presence", key: "presence", icon: IcClock,
+        perms: ["attendance.edit"] },
+    ],
+  },
+
+  // ── ٦. المنشأة ──
+  {
+    href: "/org", key: "grpOrg", icon: IcOrg,
+    perms: ["org.view"], needsScope: true, minScope: "department",
+    children: [
+      { href: "/org", key: "org", icon: IcOrg, perms: ["org.view"] },
+      { href: "/sites", key: "sites", icon: IcClock,
+        perms: ["sites.view"] },
+      { href: "/reports", key: "reports", icon: IcChart,
+        perms: ["payroll.view", "employees.view"] },
+      { href: "/policies", key: "policies", icon: IcDoc,
+        perms: ["employees.view"] },
+      { href: "/settings", key: "settings", icon: IcDoc,
+        perms: ["account.view", "payroll.structures"] },
+    ],
+  },
+
+  // ── حسابي: خارج المجموعات — فهو دائم الحضور ──
   { href: "/me/notifications", key: "myNotifications", icon: IcAlert },
   { href: "/me/account", key: "myAccount", icon: IcUser },
 ];
@@ -327,6 +395,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     (SCOPE_RANK[scopes[perm]] ?? 0) >= min;
 
   const can = (item: NavItem) => {
+    // ق-159: ⚠️ **و«فريقي» لمن له مرؤوسون فعلًا** (قرار جواد):
+    // فمن لا فريق له يراها فارغة — والزرّ الذي يفتح فراغًا يُربك.
+    if (item.key === "team" && ws?.has_reports === false) return false;
     if (!item.perms) return true;
     const held = item.perms.filter((p) => perms.has(p));
     if (held.length === 0) return false;
