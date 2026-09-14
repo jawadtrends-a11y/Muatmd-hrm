@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost, ApiError } from "@/lib/api";
+import EmployeePicker, { type PickedEmployee }
+  from "@/components/EmployeePicker";
 import { useT, type Dict } from "@/lib/prefs";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { IcAlert, IcCheck, IcPlus, IcWallet, IcX } from "@/components/Icons";
@@ -83,6 +85,8 @@ export default function AdvancesPage() {
   const { L } = useT(T);
   const [rows, setRows] = useState<Advance[]>([]);
   const [emps, setEmps] = useState<Emp[]>([]);
+  // ق-167: الموظف المختار — للعرض في المكوّن
+  const [picked, setPicked] = useState<PickedEmployee | null>(null);
   const [busy, setBusy] = useState(true);
   const [denied, setDenied] = useState(false);
   const [off, setOff] = useState(false);
@@ -242,15 +246,15 @@ export default function AdvancesPage() {
           <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
             <div className="field" style={{ minWidth: 220 }}>
               <label className="label">{L("employee")}</label>
-              <select className="select" value={f("employment_id")}
-                onChange={(e) => set("employment_id", e.target.value)}>
-                <option value="">— {L("pickEmployee")} —</option>
-                {emps.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.employee_no} — {e.name_ar}
-                  </option>
-                ))}
-              </select>
+              {/* ق-167: ⚠️ **اقتراحاتٌ فورية لا منسدلة** (بلاغ
+                  جواد): فشركةٌ بألف موظف **لا تُعرض في قائمةٍ
+                  واحدة** */}
+              <EmployeePicker
+                value={picked}
+                onChange={(e) => {
+                  setPicked(e);
+                  set("employment_id", e ? String(e.id) : "");
+                }} />
             </div>
 
             <div className="field" style={{ minWidth: 140 }}>
