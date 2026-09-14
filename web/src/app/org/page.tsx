@@ -34,6 +34,9 @@ const T: Dict = {
   gosiNo: { ar: "رقم منشأة التأمينات", en: "GOSI No." },
   branch: { ar: "الفرع", en: "Branch" },
   parent: { ar: "القسم الأعلى", en: "Parent" },
+  manager: { ar: "مدير الإدارة", en: "Manager" },
+  noManager: { ar: "بلا مدير", en: "No manager" },
+  costCenters: { ar: "مراكز التكلفة", en: "Cost centers" },
   none: { ar: "بلا", en: "None" },
   molCode: { ar: "رمز المهنة في قوى", en: "MOL occupation code" },
   saudiOnly: { ar: "محجوز للسعوديين", en: "Saudization reserved" },
@@ -65,7 +68,8 @@ const T: Dict = {
   },
 };
 
-const TABS = ["branches", "departments", "jobTitles"] as const;
+const TABS = ["branches", "departments", "jobTitles",
+              "costCenters"] as const;
 type Tab = (typeof TABS)[number];
 
 type Branch = {
@@ -289,6 +293,11 @@ export default function OrgPage() {
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [depts, setDepts] = useState<Department[]>([]);
+  // ق-156: زملاء الشركة — لاختيار مدير الإدارة
+  // ق-156: مراكز التكلفة — كان نموذجها بلا مسار ولا شاشة
+  const [centers, setCenters] = useState<Record<string, unknown>[]>([]);
+  const [peers, setPeers] = useState<
+    { employment_id: number; name: string }[]>([]);
   const [titles, setTitles] = useState<JobTitle[]>([]);
 
   const [busy, setBusy] = useState(true);
@@ -302,17 +311,24 @@ export default function OrgPage() {
 
   const load = useCallback(async () => {
     setBusy(true);
-    const [b, d, j] = await Promise.all([
+    const [b, d, pr, j, cc] = await Promise.all([
       apiGet<Branch[]>("/org/branches/").catch((e: ApiError) => {
         if (e.isForbidden) setDenied(true);
         return [] as Branch[];
       }),
       apiGet<Department[]>("/org/departments/").catch(() => [] as Department[]),
+      // ق-156: زملاء الشركة — لاختيار مدير الإدارة
+      apiGet<{ rows: { employment_id: number; name: string }[] }>(
+        "/directory/").then((d) => d.rows || []).catch(() => []),
       apiGet<JobTitle[]>("/org/job-titles/").catch(() => [] as JobTitle[]),
+      apiGet<Record<string, unknown>[]>("/org/cost-centers/?active=0")
+        .catch(() => []),
     ]);
     setBranches(b);
     setDepts(d);
+    setPeers(pr);
     setTitles(j);
+    setCenters(cc);
     setBusy(false);
   }, []);
 
@@ -328,6 +344,7 @@ export default function OrgPage() {
     branches: "/org/branches/",
     departments: "/org/departments/",
     jobTitles: "/org/job-titles/",
+    costCenters: "/org/cost-centers/",
   };
 
   async function remove(row: any) {
@@ -394,6 +411,18 @@ export default function OrgPage() {
         options: [{ value: "", label: L("none") },
                   ...depts.map((d) => ({ value: String(d.id),
                                          label: d.name_ar }))] },
+      // ⚠️ **والمدير من موظفي الشركة**: فلا يُكتب اسمًا حرًّا
+      { key: "manager_employment_id", label: L("manager"),
+        kind: "select",
+        options: [{ value: "", label: L("none") },
+                  ...peers.map((p) => ({
+                    value: String(p.employment_id),
+                    label: p.name }))] },
+    ],
+    costCenters: [
+      { key: "code", label: L("code"), required: true },
+      { key: "name_ar", label: L("nameAr"), required: true },
+      { key: "name_en", label: L("nameEn") },
     ],
     jobTitles: [
       { key: "name_ar", label: L("nameAr"), required: true },
@@ -443,6 +472,22 @@ export default function OrgPage() {
             {nameCell(r)}
           </span>
         ) },
+      // ق-156: **مدير الإدارة** — كان الحقل مبنيًّا ومعطَّلًا
+      { key: "manager_name", label: L("manager"), width: 200,
+        render: (r) => (
+          (r.manager_name as string) || (
+            <span className="muted" style={{ fontSize: ".82rem" }}>
+              {L("noManager")}
+            </span>
+          )
+        ) },
+      { key: "is_active", label: "", width: 100,
+        render: (r) => badge(Boolean(r.is_active)) },
+    ],
+    costCenters: [
+      { key: "code", label: L("code"), width: 130 },
+      { key: "name_ar", label: L("nameAr"), width: 300,
+        render: nameCell },
       { key: "is_active", label: "", width: 100,
         render: (r) => badge(Boolean(r.is_active)) },
     ],
@@ -464,6 +509,7 @@ export default function OrgPage() {
     branches: branches as unknown as Record<string, unknown>[],
     departments: depts as unknown as Record<string, unknown>[],
     jobTitles: titles as unknown as Record<string, unknown>[],
+    costCenters: centers as unknown as Record<string, unknown>[],
   };
 
   const HINTS: Partial<Record<Tab, string>> = {
