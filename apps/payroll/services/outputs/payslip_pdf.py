@@ -40,36 +40,40 @@ def _kv_table(rows, styles, widths=(55 * mm, 40 * mm)):
     return t
 
 
-def _money_table(title, lines, total_label, total, styles):
+def _money_table(title, lines, total_label, total, styles,
+                 lab=None):
     """
     جدولُ بنودٍ بمجموعه.
 
     ⚠️ **والبيان مع كل بند** — فمن يقرأ يعرف كيف حُسب (ق-٨٠).
     """
-    data = [[Paragraph(ar("المبلغ"), styles["head"]),
-             Paragraph(ar("البيان"), styles["head"]),
+    # ⚠️ **والعناوين بلغة الحمولة** (بلاغ جواد): فكانت ثابتةً
+    # بالعربية — **فتختلط بالإنجليزية في قسيمةٍ إنجليزية**.
+    #
+    # ⚠️⚠️ **ولا عمودَ لشرح الاحتساب** (قرار جواد): **فالقسيمة
+    # وثيقةُ الموظف لا ورقةَ عمل المحاسب** — والتفصيل يُشوّشه.
+    lab = lab or {}
+    data = [[Paragraph(ar(lab.get("amount", "المبلغ")),
+                       styles["head"]),
              Paragraph(ar(title), styles["head"])]]
 
     for ln in lines:
         data.append([
             Paragraph(str(ln.get("amount", "")), styles["cell"]),
-            Paragraph(ar(ln.get("explanation", "")), styles["cell"]),
             Paragraph(ar(ln.get("name", "")), styles["cell"]),
         ])
 
     if not lines:
         data.append([Paragraph("—", styles["cell"]),
-                     Paragraph("", styles["cell"]),
-                     Paragraph(ar("لا بنود"), styles["cell"])])
+                     Paragraph(ar(lab.get("no_items", "لا بنود")),
+                               styles["cell"])])
 
     data.append([
         Paragraph(str(total), styles["total"]),
-        Paragraph("", styles["cell"]),
         Paragraph(ar(total_label), styles["total"]),
     ])
 
-    t = Table(data, colWidths=(28 * mm, 62 * mm, 55 * mm),
-              hAlign="CENTER")
+    t = Table(data, colWidths=(45 * mm, 100 * mm), hAlign="CENTER")
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), INK),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -173,7 +177,7 @@ def build_payslip_pdf(data):
         lab.get("earnings", "الاستحقاقات"),
         data.get("earnings", []),
         lab.get("total_earnings", "إجمالي الاستحقاقات"),
-        tot.get("earnings", "0.00"), st))
+        tot.get("earnings", "0.00"), st, lab))
     story.append(Spacer(1, 8))
 
     # ── الاستقطاعات ──
@@ -181,7 +185,7 @@ def build_payslip_pdf(data):
         lab.get("deductions", "الاستقطاعات"),
         data.get("deductions", []),
         lab.get("total_deductions", "إجمالي الاستقطاعات"),
-        tot.get("deductions", "0.00"), st))
+        tot.get("deductions", "0.00"), st, lab))
     story.append(Spacer(1, 10))
 
     # ── الصافي ── ⚠️ **بارزًا**: فهو ما يُبحث عنه أوّلًا
