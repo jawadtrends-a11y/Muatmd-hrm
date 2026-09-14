@@ -122,6 +122,33 @@ def merge_into_run(*, adjustments, run, actor=None):
 
 
 @transaction.atomic
+def _is_expired(adjustment):
+    """
+    ⚠️ **أمضت مدّة التسوية؟** — والحدّ من إعدادات الشركة.
+
+    فأثرٌ عن شهرٍ مضت عليه سنةٌ لا يُراجَع (قرار جواد).
+    """
+    from datetime import date
+
+    from django.utils import timezone
+
+    from apps.payroll.models import PayrollSettings
+
+    st = PayrollSettings.objects.filter(
+        company_id=adjustment.company_id).first()
+    max_days = (st.retro_max_age_days or 365) if st else 365
+    if not max_days:
+        return False
+
+    # من آخر يومٍ في شهر الاستحقاق
+    from calendar import monthrange
+
+    last = date(adjustment.period_year, adjustment.period_month,
+                monthrange(adjustment.period_year,
+                           adjustment.period_month)[1])
+    return (timezone.localdate() - last).days > max_days
+
+
 def decide_adjustment(*, adjustment, action, actor=None, note="",
                       run=None):
     """
@@ -136,6 +163,22 @@ def decide_adjustment(*, adjustment, action, actor=None, note="",
 
     if action not in ("select", "defer", "cancel"):
         raise RetroError("الإجراء إما إدراج أو تأجيل أو إلغاء")
+
+    # ق-158: ⚠️ **والإلغاء بسببٍ مكتوب** (قرار جواد).
+    #
+    # فتسويةٌ تُلغى بلا سبب تترك الموظف بلا جوابٍ إن سأل، **ومن
+    # ألغاها بلا مساءلة**.
+    if action == "cancel" and not (note or "").strip():
+        raise RetroError(
+            "بيّن سبب الإلغاء — فمن أُلغيت تسويته يستحقّ جوابًا")
+
+    # ق-158: ⚠️⚠️ **وأثرٌ مضت عليه سنةٌ لا يُدرج** (قرار جواد).
+    #
+    # فالدفاتر أُقفلت، وصاحبه قد ترك العمل — **وإدراجُه يخلط
+    # سنةً ماليةً بأخرى**.
+    if action == "select" and _is_expired(adjustment):
+        raise RetroError(
+            "مضت مدّة التسوية — لا تُدرج، والباقي إلغاؤها بسببها")
 
     if action == "select":
         if run is None:

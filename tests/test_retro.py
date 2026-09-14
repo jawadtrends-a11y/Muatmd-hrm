@@ -226,7 +226,8 @@ def test_cancel_ends_it(env):
             employment=env["emp"], year=2026, month=8,
             source=RetroSource.ATTENDANCE_FIX,
             amount_before=0, amount_after=100)
-        decide_adjustment(adjustment=adj, action="cancel")
+        decide_adjustment(adjustment=adj, action="cancel",
+                          note="خطأ في التسجيل")
         revive_deferred(company=env["comp"])
         adj.refresh_from_db()
 
@@ -241,7 +242,8 @@ def test_decision_is_final(env):
             employment=env["emp"], year=2026, month=8,
             source=RetroSource.ATTENDANCE_FIX,
             amount_before=0, amount_after=100)
-        decide_adjustment(adjustment=adj, action="cancel")
+        decide_adjustment(adjustment=adj, action="cancel",
+                          note="خطأ في التسجيل")
         with pytest.raises(RetroError):
             decide_adjustment(adjustment=adj, action="defer")
 
@@ -525,3 +527,70 @@ def test_unpaid_leave_leaves_no_retro(env):
     assert no_pay is None, "رُدّ خصم إجازة بلا أجر — دُفع أجر لم يُستحق"
     assert with_pay is not None, (
         "المدفوعة لم تردّ خصمها — والحارس لا يفرّق بين النوعين")
+
+
+# ══════════ قرارات ق-158 ══════════
+
+def test_cancel_requires_a_reason(env):
+    """
+    ⚠️ **والإلغاء بسببٍ مكتوب** (قرار جواد).
+
+    فتسويةٌ تُلغى بلا سبب تترك الموظف بلا جوابٍ إن سأل، **ومن
+    ألغاها بلا مساءلة**.
+    """
+    with account_scope(env["account_id"]):
+        adj = record_adjustment(
+            employment=env["emp"], year=2026, month=8,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=100)
+        with pytest.raises(RetroError) as e:
+            decide_adjustment(adjustment=adj, action="cancel")
+        assert "سبب" in str(e.value)
+
+        adj.refresh_from_db()
+        assert adj.status == RetroStatus.PENDING, "أُلغيت بلا سبب"
+
+
+def test_expired_adjustment_cannot_be_merged(env):
+    """
+    ⚠️⚠️ **وأثرٌ مضت عليه سنةٌ لا يُدرج** (قرار جواد).
+
+    فالدفاتر أُقفلت، وصاحبه قد ترك العمل — **وإدراجُه يخلط سنةً
+    ماليةً بأخرى**.
+    """
+    from datetime import date
+
+    from apps.payroll.models import PayrollRunType
+    from apps.payroll.services import engine
+
+    with account_scope(env["account_id"]):
+        old_year = date.today().year - 2
+        adj = record_adjustment(
+            employment=env["emp"], year=old_year, month=1,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=100)
+
+        run = engine.create_run(company=env["comp"],
+                                run_type=PayrollRunType.REGULAR,
+                                year=2026, month=10)
+        with pytest.raises(RetroError) as e:
+            decide_adjustment(adjustment=adj, action="select", run=run)
+        assert "مدّة" in str(e.value)
+
+
+def test_expired_can_still_be_cancelled(env):
+    """
+    **والمنتهية تُلغى** — فلا تبقى معلّقةً للأبد في القائمة.
+    """
+    from datetime import date
+
+    with account_scope(env["account_id"]):
+        old_year = date.today().year - 2
+        adj = record_adjustment(
+            employment=env["emp"], year=old_year, month=1,
+            source=RetroSource.ATTENDANCE_FIX,
+            amount_before=0, amount_after=100)
+        decide_adjustment(adjustment=adj, action="cancel",
+                          note="مضت مدّتها")
+        adj.refresh_from_db()
+        assert adj.status == RetroStatus.CANCELLED
