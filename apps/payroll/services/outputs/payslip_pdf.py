@@ -30,7 +30,7 @@ def _kv_table(rows, styles, widths=(55 * mm, 40 * mm)):
     """
     data = [[Paragraph(ar(str(v)), styles["cell"]),
              Paragraph(ar(str(k)), styles["cell"])] for k, v in rows]
-    t = Table(data, colWidths=widths, hAlign="RIGHT")
+    t = Table(data, colWidths=widths, hAlign="CENTER")
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
@@ -69,7 +69,7 @@ def _money_table(title, lines, total_label, total, styles):
     ])
 
     t = Table(data, colWidths=(28 * mm, 62 * mm, 55 * mm),
-              hAlign="RIGHT")
+              hAlign="CENTER")
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), INK),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -80,6 +80,38 @@ def _money_table(title, lines, total_label, total, styles):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     return t
+
+
+def _center(style):
+    """نسخةٌ موسَّطة من نمطٍ قائم."""
+    from reportlab.lib.styles import ParagraphStyle
+
+    return ParagraphStyle(style.name + "_c", parent=style, alignment=1)
+
+
+def _logo_flowable(path, max_h=18 * mm):
+    """
+    شعارُ الشركة — **أو None**.
+
+    ⚠️ **وإخفاقُه لا يكسر القسيمة**: فملفٌّ مفقودٌ أو تالف
+    **يُتخطّى**، والأرقام أهمّ منه.
+    """
+    if not path:
+        return None
+    try:
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import Image
+
+        reader = ImageReader(path)
+        iw, ih = reader.getSize()
+        if not ih:
+            return None
+        w = max_h * (iw / ih)
+        img = Image(path, width=w, height=max_h)
+        img.hAlign = "CENTER"
+        return img
+    except Exception:          # noqa: BLE001
+        return None
 
 
 def build_payslip_pdf(data):
@@ -106,12 +138,22 @@ def build_payslip_pdf(data):
 
     story = []
 
-    # ── الترويسة ──
+    # ── الترويسة: الشعار ثم الاسم ──
+    #
+    # ⚠️ **ووثيقةٌ بلا شعارٍ لا تبدو رسمية** (بلاغ جواد).
+    # **وإخفاقُ تحميله لا يكسر القسيمة** — فالأرقام أهمّ منه.
+    logo = _logo_flowable(data.get("logo_path"))
+    if logo is not None:
+        story.append(logo)
+        story.append(Spacer(1, 6))
+
+    # ⚠️ **والعنوان موسَّط** — فالكتلة في وسط الصفحة أوضح من
+    # محاذاةٍ لحافّة.
     story.append(Paragraph(ar(data.get("company_name", "")),
-                           st["title"]))
+                           _center(st["title"])))
     story.append(Paragraph(ar(lab.get("title", "قسيمة راتب")),
-                           st["sub"]))
-    story.append(Spacer(1, 8))
+                           _center(st["sub"])))
+    story.append(Spacer(1, 10))
 
     # ── الموظف والفترة ──
     story.append(_kv_table([
@@ -148,7 +190,7 @@ def build_payslip_pdf(data):
                     ParagraphStyle_net(st)),
           Paragraph(ar(lab.get("net_pay", "صافي المستحق")),
                     ParagraphStyle_net(st))]],
-        colWidths=(60 * mm, 85 * mm), hAlign="RIGHT")
+        colWidths=(60 * mm, 85 * mm), hAlign="CENTER")
     net.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), INK),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),

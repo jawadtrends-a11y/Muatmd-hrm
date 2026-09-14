@@ -35,6 +35,8 @@ def _serialize(c):
     return {
         "id": c.id,
         "code": c.code,
+        # ق-164: **شعار الشركة** — فمن رفعه يراه عند فتح الشاشة
+        "logo_url": (f"/api/files/{c.logo_id}/" if c.logo_id else ""),
         "legal_name_ar": c.legal_name_ar,
         "legal_name_en": c.legal_name_en,
         "cr_number": c.cr_number,
@@ -201,3 +203,51 @@ def switch_company(request):
     m.active_company_id = cid
     m.save(update_fields=["active_company"])
     return Response({"switched": True, "active_id": cid})
+
+
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def company_logo(request):
+    """
+    شعار الشركة — رفعًا وحذفًا (ق-164).
+
+    ⚠️ **بلاغ جواد:** وثيقةٌ بلا شعارٍ لا تبدو رسمية — **والشعار
+    لكل شركةٍ لا للحساب**.
+
+    ⚠️ **ونوع `logo` مبنيٌّ سلفًا** في مخزن الملفّات.
+    """
+    from apps.core.models_files import FileKind
+    from apps.core.services import files as files_svc
+
+    Gate.require(request.user, "company.edit")
+
+    ctx = getattr(request, "account_ctx", None)
+    company_id = getattr(ctx, "active_company_id", None)
+    company = Company.objects.filter(id=company_id).first()
+    if company is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    if request.method == "DELETE":
+        company.logo = None
+        company.save(update_fields=["logo"])
+        return Response({"removed": True})
+
+    up = request.FILES.get("file")
+    if up is None:
+        return Response({"detail": "أرفق الشعار"}, status=400)
+
+    try:
+        stored, _dup = files_svc.store(
+            uploaded=up, kind=FileKind.LOGO, account=company.account,
+            company=company,
+            uploaded_by=getattr(request.user, "person", None))
+    except Exception as e:          # noqa: BLE001
+        return Response({"detail": str(e)}, status=400)
+
+    company.logo = stored
+    company.save(update_fields=["logo"])
+    return Response({
+        "id": stored.id,
+        "url": f"/api/files/{stored.id}/",
+        "name": stored.original_name,
+    }, status=status.HTTP_201_CREATED)

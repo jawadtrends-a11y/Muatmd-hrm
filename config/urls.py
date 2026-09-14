@@ -114,6 +114,9 @@ urlpatterns = [
          name="my-subscription"),
     path("api/account/pay-overage/", subscribe_api.pay_overage,
          name="pay-overage"),
+    # ق-164: شعار الشركة — لكل شركةٍ شعارها
+    path("api/company/logo/", accounts_company_api.company_logo,
+         name="company-logo"),
     path("api/company/settings/", accounts_company_api.company_settings,
          name="company-settings"),
     # مبدّل الشركات — لمن له توظيف في أكثر من شركة

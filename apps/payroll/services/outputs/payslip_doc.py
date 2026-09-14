@@ -92,6 +92,11 @@ class PayslipDocument:
     totals: dict = field(default_factory=dict)
     optional: dict = field(default_factory=dict)
     note: str = ""
+    #: ق-164: **مسار شعار الشركة** — أو فراغٌ إن لم يُرفع.
+    #
+    # ⚠️ **وفي آخر الهيكل**: فحقلٌ بافتراضٍ وسط حقولٍ بلا افتراض
+    # يرفعه dataclass خطأً.
+    logo_path: str = ""
 
 
 def _month_name(month, locale):
@@ -101,6 +106,24 @@ def _month_name(month, locale):
 
 def _fmt(value):
     return f"{Decimal(value):,.2f}"
+
+
+def _company_logo_path(company):
+    """
+    مسارُ شعار الشركة على القرص — **أو فراغ**.
+
+    ⚠️ **وإخفاقُه لا يكسر القسيمة**: فشعارٌ مفقود يُتخطّى،
+    **والأرقام أهمّ منه**.
+    """
+    f = getattr(company, "logo", None)
+    if f is None:
+        return ""
+    try:
+        path = getattr(f, "path", None) or getattr(
+            getattr(f, "file", None), "path", "")
+        return str(path or "")
+    except Exception:          # noqa: BLE001
+        return ""
 
 
 def build_payslip_document(slip, locale=None, settings_obj=None):
@@ -130,6 +153,7 @@ def build_payslip_document(slip, locale=None, settings_obj=None):
         locale=loc,
         labels=labels,
         company_name=slip.company.legal_name_ar,
+        logo_path=_company_logo_path(slip.company),
         period_label=period,
         employee={
             "name": (person.full_name_en
@@ -214,6 +238,7 @@ def to_dict(doc: PayslipDocument) -> dict:
         "locale": doc.locale,
         "labels": doc.labels,
         "company_name": doc.company_name,
+        "logo_path": doc.logo_path,
         "period": doc.period_label,
         "employee": doc.employee,
         "earnings": doc.earnings,

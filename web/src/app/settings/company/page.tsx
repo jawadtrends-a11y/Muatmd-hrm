@@ -6,12 +6,21 @@
  * يرسل من noreply-hr@muatmd.sa، ولكل شركة بريدها الذي يعود إليه
  * الردّ — لا يصل ردّ موظف شركةٍ شركةً أخرى.
  */
-import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiGet, apiPut, apiUpload, apiDelete, ApiError } from "@/lib/api";
+import AuthImage from "@/components/AuthImage";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck } from "@/components/Icons";
 
 const T: Dict = {
+  logo: { ar: "شعار الشركة", en: "Company logo" },
+  noLogo: { ar: "بلا شعار", en: "No logo" },
+  uploadLogo: { ar: "رفع شعار", en: "Upload" },
+  removeLogo: { ar: "حذف", en: "Remove" },
+  logoHint: {
+    ar: "يظهر في القسائم والخطابات والتقارير — PNG أو JPG",
+    en: "Shown on payslips, letters and reports",
+  },
   title: { ar: "بيانات المنشأة", en: "Company details" },
   subtitle: {
     ar: "السجل التجاري والأرقام النظامية وبريد التواصل",
@@ -93,6 +102,32 @@ const MONTHS_EN = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
 export default function CompanySettingsPage() {
+  // ق-164: شعار الشركة
+  const logoRef = useRef<HTMLInputElement>(null);
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  const uploadLogo = async (f: File) => {
+    setLogoBusy(true);
+    try {
+      const out = await apiUpload<{ url: string }>(
+        "/company/logo/", f, "file");
+      setLogoUrl(out.url);
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : String(e));
+    } finally { setLogoBusy(false); }
+  };
+
+  const removeLogo = async () => {
+    setLogoBusy(true);
+    try {
+      await apiDelete("/company/logo/");
+      setLogoUrl("");
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : String(e));
+    } finally { setLogoBusy(false); }
+  };
+
   const { L, lang } = useT(T);
   const [data, setData] = useState<Company | null>(null);
   const [perms, setPerms] = useState<string[]>([]);
@@ -111,6 +146,9 @@ export default function CompanySettingsPage() {
       setPerms(p.permissions || []);
       const c = await apiGet<Company>("/company/settings/");
       setData(c);
+      // ق-164: الشعار المرفوع — فمن رفعه يراه عند الفتح
+      setLogoUrl((c as unknown as { logo_url?: string })
+        .logo_url || "");
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -200,6 +238,53 @@ export default function CompanySettingsPage() {
           <IcCheck /> {msg}
         </div>
       )}
+
+      {/* ق-164: **شعار الشركة** (بلاغ جواد) — فوثيقةٌ بلا شعار
+          لا تبدو رسمية، **ولكل شركةٍ شعارها** */}
+      <div className="card" style={{ padding: 20 }}>
+        <h3 style={{ margin: "0 0 14px" }}>{L("logo")}</h3>
+        <div className="row" style={{ gap: 16, alignItems: "center" }}>
+          <div style={{
+            width: 96, height: 96, borderRadius: "var(--radius-sm)",
+            border: "1px dashed var(--line)", display: "grid",
+            placeItems: "center", overflow: "hidden",
+            background: "var(--paper-2)", flexShrink: 0,
+          }}>
+            {logoUrl ? (
+              <AuthImage src={logoUrl} alt=""
+                         style={{ maxWidth: "100%", maxHeight: "100%",
+                                  objectFit: "contain" }} />
+            ) : (
+              <span className="muted" style={{ fontSize: ".78rem" }}>
+                {L("noLogo")}
+              </span>
+            )}
+          </div>
+          <div>
+            <input ref={logoRef} type="file" accept="image/*"
+                   style={{ display: "none" }}
+                   onChange={(e) => e.target.files?.[0]
+                     && uploadLogo(e.target.files[0])} />
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn btn-sm" disabled={logoBusy}
+                      onClick={() => logoRef.current?.click()}>
+                {logoBusy ? "…" : L("uploadLogo")}
+              </button>
+              {logoUrl && (
+                <button className="btn btn-sm btn-danger"
+                        disabled={logoBusy} onClick={removeLogo}>
+                  {L("removeLogo")}
+                </button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: ".78rem",
+                                            marginTop: 8,
+                                            lineHeight: 1.8 }}>
+              {L("logoHint")}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ margin: "0 0 14px" }}>{L("secIdentity")}</h3>

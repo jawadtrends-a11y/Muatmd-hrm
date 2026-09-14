@@ -108,6 +108,15 @@ class Account(TimeStampedModel):
 class Company(TimeStampedModel):
     """شركة داخل الحساب — لها سجلها التجاري واشتراكها وباقتها."""
 
+    # ق-164: **شعار الشركة** (بلاغ جواد).
+    #
+    # ⚠️ **ويمسّ القسيمة والخطابات والتقارير** — لا القسيمة وحدها:
+    # فوثيقةٌ بلا شعار **لا تبدو رسمية**.
+    logo = models.ForeignKey(
+        "core.StoredFile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="company_logos",
+        verbose_name=_("شعار الشركة"))
+
 
     account = models.ForeignKey(
         Account, on_delete=models.CASCADE,
