@@ -367,6 +367,9 @@ urlpatterns = [
     path("api/leaves/chains/", leaves_api.approval_chains, name="approval-chains"),
     path("api/leaves/chains/<int:chain_id>/", leaves_api.approval_chain_detail, name="approval-chain-detail"),
     path("api/leaves/chains/<int:chain_id>/steps/", leaves_api.chain_steps, name="chain-steps"),
+    # ق-169: الاستحقاق الفرديّ — كلُّ موظفٍ حسب عقده
+    path("api/employees/<int:employment_id>/entitlements/",
+         leaves_api.employee_entitlements, name="employee-entitlements"),
     path("api/leaves/types/", leaves_api.leave_types, name="leave-types"),
     # إدارة أنواع الإجازات (ق-83)
     path("api/leaves/types/new/", leaves_api.leave_type_create, name="leave-type-create"),

@@ -125,6 +125,16 @@ const T: Dict = {
 
   // العقد
   contractType: { ar: "نوع العقد", en: "Contract type" },
+  leaveDays: { ar: "أرصدة الإجازات", en: "Leave entitlements" },
+  leaveDaysHint: {
+    ar: "⚠️ فارغٌ = افتراض الشركة · ولا يُنزَل عن الحدّ النظاميّ",
+    en: "Empty = company default",
+  },
+  leaveType: { ar: "النوع", en: "Type" },
+  defaultDays: { ar: "افتراض الشركة", en: "Company default" },
+  statutoryMin: { ar: "الحدّ النظاميّ", en: "Statutory min" },
+  ownDays: { ar: "رصيده بعقده", en: "Contract days" },
+  useDefault: { ar: "بلا تخصيص", en: "Default" },
   contractStart: { ar: "بداية العقد", en: "Start" },
   contractEnd: { ar: "نهاية العقد", en: "End" },
   joinDate: { ar: "تاريخ المباشرة", en: "Join date" },
@@ -1179,6 +1189,32 @@ function ProfileInner({
 }) {
   /** تعديل بيانات الوظيفة — لمن يملك employees.edit (ق-98) */
   const [canEditJob, setCanEditJob] = useState(false);
+
+  // ق-169: أرصدة الإجازات بعقده
+  type EntRow = {
+    leave_type_id: number; code: string; name_ar: string;
+    default_days: string | null; statutory_min: string | null;
+    days_per_year: string | null;
+  };
+  const [ents, setEnts] = useState<EntRow[]>([]);
+
+  const saveEnt = async (typeId: number, raw: string) => {
+    try {
+      await apiPost(`/employees/${empId}/entitlements/`, {
+        leave_type_id: typeId,
+        days_per_year: raw.trim() === "" ? null : raw.trim(),
+      });
+      // ⚠️ **ونُعيد القراءة**: فالخادم قد يرفض دون الحدّ النظاميّ
+      const d = await apiGet<{ entitlements: EntRow[] }>(
+        `/employees/${empId}/entitlements/`);
+      setEnts(d.entitlements || []);
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : String(e));
+      const d = await apiGet<{ entitlements: EntRow[] }>(
+        `/employees/${empId}/entitlements/`).catch(() => null);
+      if (d) setEnts(d.entitlements || []);
+    }
+  };
   const [jobTitles, setJobTitles] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   // ق-131: وسومه ووسوم الشركة
@@ -1225,6 +1261,11 @@ function ProfileInner({
     apiGet<any[]>("/org/cost-centers/")
       .then((r) => setCostCenters(Array.isArray(r) ? r : []))
       .catch(() => setCostCenters([]));
+    // ق-169: أرصدة الإجازات — وإخفاقُ الجلب قائمةٌ فارغة
+    apiGet<{ entitlements: EntRow[] }>(
+      `/employees/${empId}/entitlements/`)
+      .then((d) => setEnts(d.entitlements || []))
+      .catch(() => setEnts([]));
     apiGet<any[]>("/employees/?all=1")
       .then((r) => setPeers2(Array.isArray(r) ? r : []))
       .catch(() => setPeers2([]));
@@ -1625,6 +1666,71 @@ function ProfileInner({
                 </>
               ) },
           ]} />
+
+          {/* ق-169: ⚠️⚠️ **أرصدة الإجازات بعقده** (بلاغ جواد):
+              فالنموذج كان مبنيًّا ومعطَّلًا — **والرصيد يسري على
+              الشركة كلّها**، ومن أراد موظفًا بثلاثين يومًا لا يجد
+              سبيلًا. */}
+          <div style={{ marginTop: 22, paddingTop: 18,
+                        borderTop: "1px solid var(--line)" }}>
+            <div className="spread" style={{ marginBottom: 10 }}>
+              <h3 style={{ fontSize: "1rem", margin: 0 }}>
+                {L("leaveDays")}
+              </h3>
+              <span className="muted" style={{ fontSize: ".8rem" }}>
+                {L("leaveDaysHint")}
+              </span>
+            </div>
+
+            {ents.length === 0 ? (
+              <div className="muted" style={{ fontSize: ".85rem" }}>
+                —
+              </div>
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{L("leaveType")}</th>
+                    <th style={{ width: 130 }}>{L("defaultDays")}</th>
+                    <th style={{ width: 130 }}>{L("statutoryMin")}</th>
+                    <th style={{ width: 160 }}>{L("ownDays")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ents.map((e) => (
+                    <tr key={e.leave_type_id}>
+                      <td style={{ fontWeight: 500 }}>{e.name_ar}</td>
+                      <td>
+                        <span className="num muted">
+                          {e.default_days ?? "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="num muted">
+                          {e.statutory_min ?? "—"}
+                        </span>
+                      </td>
+                      <td>
+                        {canEditJob ? (
+                          <input className="input num"
+                            style={{ width: 120 }}
+                            type="number" step="0.5" min={0}
+                            defaultValue={e.days_per_year ?? ""}
+                            placeholder={L("useDefault")}
+                            onBlur={(ev) => saveEnt(
+                              e.leave_type_id, ev.target.value)} />
+                        ) : (
+                          <span className="num">
+                            {e.days_per_year ?? L("useDefault")}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

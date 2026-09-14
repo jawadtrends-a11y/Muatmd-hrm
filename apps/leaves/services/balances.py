@@ -212,7 +212,20 @@ def accrue(employment, leave_type, as_of=None):
     bal = ensure_balance(employment, leave_type, day.year)
     annual = annual_days_for(employment, leave_type, day)
 
-    if leave_type.accrual_method == AccrualMethod.ANNUAL:
+    # ق-169: ⚠️⚠️ **واليوميّ هو الأدقّ** (قرار جواد): **الرصيد ÷
+    # أساس الأيام، لكل يوم خدمة**.
+    #
+    # فالشهريّ يقسم على «شهرٍ = ٣٠ يومًا»، **فسنةٌ كاملة تعطي
+    # ١٢٫١٧ شهرًا** وتُقيَّد بـ١٢ — واليوميّ يُنهي الالتباس:
+    # رصيدُ ٣٠ يعطي ٢٫٥ شهريًّا، و٢١ يعطي ١٫٧٥.
+    if leave_type.accrual_method == AccrualMethod.DAILY:
+        start = max(employment.effective_service_start,
+                    date(day.year, 1, 1))
+        # ⚠️ **واليوم الأول يُحتسب**: فمن باشر اليوم استحقّ يومه
+        served = Decimal(max((day - start).days + 1, 0))
+        basis = Decimal(leave_type.accrual_basis_days or 365)
+        bal.accrued = r2(min(annual * served / basis, annual))
+    elif leave_type.accrual_method == AccrualMethod.ANNUAL:
         bal.accrued = annual
     elif leave_type.accrual_method == AccrualMethod.MONTHLY:
         start = max(employment.effective_service_start,
@@ -314,6 +327,21 @@ def check_eligibility(employment, leave_type, as_of=None):
             errors.append(
                 f"{leave_type.name_ar} مخصصة لـ"
                 f"{leave_type.get_gender_restriction_display()}")
+
+    # ق-169: ⚠️⚠️ **ومدّة الانتظار قبل الاستهلاك** (قرار جواد).
+    #
+    # **فالرصيد يُستحقّ من اليوم الأول، والاستهلاك يُمنع** حتى
+    # تمضي المدّة — **وهما أمران مختلفان**.
+    #
+    # ⚠️ **وبعدها يستهلك ما استحقّ كلَّه أو بعضه**: فالمنع على
+    # التوقيت لا المقدار.
+    waiting = getattr(leave_type, "waiting_period_days", 0) or 0
+    if waiting:
+        served = (day - employment.effective_service_start).days
+        if served < waiting:
+            errors.append(
+                f"{leave_type.name_ar} تُستهلك بعد {waiting} يومًا "
+                f"من المباشرة — مضى {max(served, 0)}")
 
     if leave_type.min_service_months:
         months = Decimal(

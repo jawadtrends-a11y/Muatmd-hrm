@@ -5,6 +5,7 @@ API الإجازات والطلبات.
 /me/approvals/ نقطة مستقلة.
 """
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
@@ -89,6 +90,13 @@ def leave_types(request):
             "statutory_min_days": str(t.statutory_min_days),
             "pay_percentage": str(t.pay_percentage),
             "accrual_method": t.accrual_method,
+        "accrual_basis_days": t.accrual_basis_days,
+        "waiting_period_days": t.waiting_period_days,
+        "is_contractual": t.is_contractual,
+            # ق-169: الحقول الثلاثة الجديدة
+            "accrual_basis_days": t.accrual_basis_days,
+            "waiting_period_days": t.waiting_period_days,
+            "is_contractual": t.is_contractual,
             "days_after_five_years": str(t.days_after_five_years),
             "days_per_event": str(t.days_per_event),
             "carry_forward_policy": t.carry_forward_policy,
@@ -1196,6 +1204,9 @@ def _leave_type_json(t):
         "is_paid": t.is_paid,
         "pay_percentage": str(t.pay_percentage),
         "accrual_method": t.accrual_method,
+        "accrual_basis_days": t.accrual_basis_days,
+        "waiting_period_days": t.waiting_period_days,
+        "is_contractual": t.is_contractual,
         "days_per_year": str(t.days_per_year),
         "days_after_five_years": str(t.days_after_five_years),
         "days_per_event": str(t.days_per_event),
@@ -1295,6 +1306,9 @@ def leave_type_detail(request, type_id):
 
     d = request.data
     for f in ("name_ar", "name_en", "name_ur", "accrual_method",
+              # ق-169: أساس الأيام ومدّة الانتظار والرصيد التعاقديّ
+              "accrual_basis_days", "waiting_period_days",
+              "is_contractual",
               "carry_forward_policy"):
         if f in d:
             setattr(t, f, d[f])
@@ -1536,3 +1550,104 @@ def _log_chain(request, chain, summary):
     log_action(instance=chain, action="update",
                actor=getattr(request.user, "person", None),
                label=chain.request_type, summary=summary, channel="web")
+
+
+# ══════════ الاستحقاق الفرديّ (ق-169) ══════════
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def employee_entitlements(request, employment_id):
+    """
+    أرصدة موظفٍ بعينه — **كلٌّ حسب عقده** (بلاغ جواد).
+
+    ⚠️⚠️ **فالنموذج كان مبنيًّا ومعطَّلًا**: لا مسارَ ولا شاشة —
+    **فالرصيد يسري على الشركة كلّها**، ومن أراد موظفًا بثلاثين
+    يومًا لا يجد سبيلًا.
+
+    ⚠️ **والحدّ النظاميّ قيدٌ صارم**: فأقلّ منه **إسقاطٌ لحقّ** —
+    والخدمة تمنعه.
+    """
+    from apps.employees.models import Employment
+    from apps.leaves.models import LeaveEntitlement, LeaveType
+
+    company_id = _company_id(request)
+    emp = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all()
+    ).filter(id=employment_id, company_id=company_id).first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"}, status=404)
+
+    if request.method == "GET":
+        rows = {
+            e.leave_type_id: e for e in
+            LeaveEntitlement.objects.filter(employment=emp)
+            .order_by("-effective_from")
+        }
+        return Response({"entitlements": [{
+            "leave_type_id": t.id,
+            "code": t.code,
+            "name_ar": t.name_ar,
+            # ⚠️ **وافتراض النوع يُعرض** — فمن لم يُخصَّص له شيء
+            # يعرف ما يسري عليه
+            "default_days": (str(t.days_per_year)
+                             if t.days_per_year is not None else None),
+            "statutory_min": (str(t.statutory_min_days)
+                              if getattr(t, "statutory_min_days", None)
+                              is not None else None),
+            "days_per_year": (str(rows[t.id].days_per_year)
+                              if t.id in rows else None),
+            "effective_from": (rows[t.id].effective_from
+                               if t.id in rows else None),
+            "entitlement_id": (rows[t.id].id if t.id in rows else None),
+        } for t in LeaveType.objects.filter(
+            company_id=company_id, is_active=True,
+            # ق-169: ⚠️ **والسنوية وحدها** (قرار جواد): فالمرضية
+            # والخاصة **تُستحقّ بواقعتها لا برصيد** — وإظهارها
+            # كأرصدةٍ **يوحي بأنها واجبٌ على الشركة**.
+            is_contractual=True,
+        )]})
+
+    Gate.require(request.user, "leaves.manage")
+
+    from datetime import date as _date
+
+    d = request.data
+    lt = LeaveType.objects.filter(
+        id=d.get("leave_type_id"), company_id=company_id).first()
+    if lt is None:
+        return Response({"detail": "نوع الإجازة غير موجود"}, status=404)
+
+    # ⚠️ **وفراغٌ يعني: ارجع لافتراض النوع** — لا صفرًا
+    raw = d.get("days_per_year")
+    if raw in (None, ""):
+        LeaveEntitlement.objects.filter(employment=emp,
+                                        leave_type=lt).delete()
+        return Response({"cleared": True})
+
+    try:
+        days = Decimal(str(raw))
+    except (InvalidOperation, TypeError):
+        return Response({"detail": "رقم غير صالح"}, status=400)
+
+    floor = getattr(lt, "statutory_min_days", None)
+    if floor is not None and days < floor:
+        return Response({
+            "detail": (f"الحدّ النظاميّ لـ{lt.name_ar} هو {floor} "
+                       "يومًا — ولا يُنزَل عنه"),
+            "code": "below_statutory"}, status=400)
+
+    eff = d.get("effective_from")
+    try:
+        eff = (_date.fromisoformat(str(eff)) if eff
+               else emp.effective_service_start)
+    except ValueError:
+        return Response({"detail": "تاريخ غير صالح"}, status=400)
+
+    ent, _created = LeaveEntitlement.objects.update_or_create(
+        employment=emp, leave_type=lt,
+        defaults={"account_id": emp.account_id,
+                  "company_id": emp.company_id,
+                  "days_per_year": days,
+                  "effective_from": eff})
+    return Response({"id": ent.id,
+                     "days_per_year": str(ent.days_per_year)})

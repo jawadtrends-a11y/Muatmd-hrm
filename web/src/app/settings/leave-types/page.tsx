@@ -60,6 +60,16 @@ const T: Dict = {
     en: "The code cannot change — logic references it",
   },
   accrual: { ar: "طريقة الاستحقاق", en: "Accrual" },
+  daily: { ar: "يومية بالتناسب", en: "Daily pro-rata" },
+  monthly: { ar: "شهرية بالتناسب", en: "Monthly pro-rata" },
+  basisDays: { ar: "أساس الأيام", en: "Basis days" },
+  basisHint: { ar: "٣٦٥ للتقويم", en: "365 for calendar" },
+  waiting: { ar: "بدء الاستهلاك", en: "Usage starts" },
+  fromDay1: { ar: "من أول يوم", en: "From day 1" },
+  afterDays: { ar: "بعد مدّة", en: "After" },
+  contractual: { ar: "رصيد تعاقديّ", en: "Contractual" },
+  yes: { ar: "نعم", en: "Yes" },
+  no: { ar: "لا", en: "No" },
   annual: { ar: "سنوية", en: "Annual" },
   perEventM: { ar: "بالحالة", en: "Per event" },
   none: { ar: "لا ترحيل", en: "None" },
@@ -75,6 +85,10 @@ type LeaveType = {
   is_paid: boolean;
   pay_percentage: string;
   accrual_method: string;
+  // ق-169: أساس الأيام ومدّة الانتظار والرصيد التعاقديّ
+  accrual_basis_days: string | number;
+  waiting_period_days: string | number;
+  is_contractual: boolean;
   days_per_year: string;
   days_after_five_years: string;
   days_per_event: string;
@@ -118,6 +132,8 @@ export default function LeaveTypesPage() {
     setDraft({
       code: "", name_ar: "", is_paid: true, pay_percentage: "100",
       accrual_method: "annual", days_per_year: "0",
+      accrual_basis_days: "365", waiting_period_days: "0",
+      is_contractual: false,
       days_per_event: "0", days_after_five_years: "0",
       statutory_min_days: "0", carry_forward_policy: "none",
       max_carry_forward_days: "0",
@@ -265,8 +281,64 @@ export default function LeaveTypesPage() {
               <label className="label">{L("accrual")}</label>
               <select className="select" value={f("accrual_method")}
                 onChange={(e) => set("accrual_method", e.target.value)}>
+                {/* ق-169: ⚠️ **واليوميّ هو الأدقّ** (قرار جواد):
+                    فالشهريّ يقسم على «شهرٍ = ٣٠ يومًا» */}
+                <option value="daily">{L("daily")}</option>
+                <option value="monthly">{L("monthly")}</option>
                 <option value="annual">{L("annual")}</option>
                 <option value="per_event">{L("perEventM")}</option>
+              </select>
+            </div>
+
+            {/* ق-169: **أساس الأيام** — تختاره الشركة */}
+            {["daily", "monthly"].includes(f("accrual_method")) && (
+            <div className="field" style={{ minWidth: 130 }}>
+              <label className="label">{L("basisDays")}</label>
+              <input className="input num" type="number" min={1}
+                value={f("accrual_basis_days")}
+                onChange={(e) => set("accrual_basis_days",
+                                     e.target.value)} />
+              <span className="muted" style={{ fontSize: ".75rem" }}>
+                {L("basisHint")}
+              </span>
+            </div>
+            )}
+
+            {/* ق-169: ⚠️⚠️ **ومدّة الانتظار قبل الاستهلاك**:
+                فالرصيد يُستحقّ من اليوم الأول، والاستهلاك قد
+                يُمنع — **وهما أمران مختلفان** */}
+            <div className="field" style={{ minWidth: 190 }}>
+              <label className="label">{L("waiting")}</label>
+              <div className="row" style={{ gap: 6 }}>
+                <select className="select" style={{ width: 120 }}
+                  value={Number(f("waiting_period_days")) > 0
+                    ? "after" : "day1"}
+                  onChange={(e) => set("waiting_period_days",
+                    e.target.value === "day1" ? "0" : "90")}>
+                  <option value="day1">{L("fromDay1")}</option>
+                  <option value="after">{L("afterDays")}</option>
+                </select>
+                {Number(f("waiting_period_days")) > 0 && (
+                  <input className="input num" type="number" min={1}
+                    style={{ width: 80 }}
+                    value={f("waiting_period_days")}
+                    onChange={(e) => set("waiting_period_days",
+                                         e.target.value)} />
+                )}
+              </div>
+            </div>
+
+            {/* ق-169: ⚠️ **ورصيدٌ تعاقديّ** — يظهر في عقد الموظف:
+                فالمرضية والخاصة **تُستحقّ بواقعتها لا برصيد**،
+                وإظهارها **يوحي بأنها واجبٌ على الشركة** */}
+            <div className="field" style={{ minWidth: 160 }}>
+              <label className="label">{L("contractual")}</label>
+              <select className="select"
+                value={f("is_contractual") ? "1" : "0"}
+                onChange={(e) => set("is_contractual",
+                                     e.target.value === "1")}>
+                <option value="1">{L("yes")}</option>
+                <option value="0">{L("no")}</option>
               </select>
             </div>
 
