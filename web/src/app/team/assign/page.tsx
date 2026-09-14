@@ -70,8 +70,11 @@ export default function AssignRequestPage() {
 
   // المرؤوسون
   useEffect(() => {
-    apiGet<Emp[]>("/employees/")
-      .then((r) => { setEmps(r); setBusy(false); })
+    // ق-159: ⚠️⚠️ **وفريقي لا الشركة** (تصويب جواد): فالإسناد
+    // لمرؤوسيه — ومسارُ الموظفين العامّ يُرجع ما يسمح به نطاقه،
+    // **فمديرٌ بنطاق شركةٍ كان يُسند للجميع**.
+    apiGet<{ rows: Emp[] }>("/me/team/")
+      .then((r) => { setEmps(r.rows || []); setBusy(false); })
       .catch((e: ApiError) => { setError(e.message); setBusy(false); });
     apiGet<{ code: string; name_ar: string;
              requires_attachment?: boolean }[]>("/leaves/types/")
