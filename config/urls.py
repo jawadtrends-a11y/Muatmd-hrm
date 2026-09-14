@@ -219,6 +219,9 @@ urlpatterns = [
     path("api/payroll/runs/<int:run_id>/bank/<int:template_id>/download/", outputs_api.bank_file_download, name="bank-download"),
     path("api/payroll/runs/<int:run_id>/wps/preview/", outputs_api.wps_preview, name="wps-preview"),
     path("api/payroll/runs/<int:run_id>/wps/download/", outputs_api.wps_download, name="wps-download"),
+    # ق-163: القسيمة PDF — **والزرّ يفتحها لا البيانات الخام**
+    path("api/payslips/<int:payslip_id>/pdf/", outputs_api.payslip_pdf,
+         name="payslip-pdf"),
     path("api/payslips/<int:payslip_id>/", outputs_api.payslip_detail, name="payslip-detail"),
     path("api/me/payslips/", outputs_api.my_payslips, name="my-payslips"),
     # ق-134: كتالوج المخصّصات المصروفة

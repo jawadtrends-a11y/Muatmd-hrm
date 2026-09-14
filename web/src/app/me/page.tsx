@@ -129,7 +129,7 @@ export default function MyPayslipsPage() {
                   <td className="muted truncate">{p.company}</td>
                   <td style={{ textAlign: "end" }}>
                     <button className="btn btn-sm btn-ghost"
-                      onClick={() => openForView(`/payslips/${p.payslip_id}/`)}>
+                      onClick={() => openForView(`/payslips/${p.payslip_id}/pdf/`)}>
                       {L("view")}
                     </button>
                   </td>

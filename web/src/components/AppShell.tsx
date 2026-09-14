@@ -155,7 +155,10 @@ const NAV: NavItem[] = [
 
   // ── ١. الموظف: شؤونه هو ──
   {
-    href: "/me", key: "grpMe", icon: IcUser,
+    // ⚠️ **ومسار المجموعة لا يصطدم ببندٍ فيها** (بلاغ جواد):
+    // فـ«/me» هو نفسه «قسائم راتبي» — **فيُضاء البند بمجرّد فتح
+    // المجموعة**، ويظنّ المستخدم أنها فتحت صفحة.
+    href: "/me/", key: "grpMe", icon: IcUser,
     children: [
       { href: "/me/requests", key: "myServices", icon: IcDoc,
         perms: ["requests.create"] },
@@ -173,7 +176,6 @@ const NAV: NavItem[] = [
       { href: "/me/reviews", key: "my_reviews", icon: IcDoc },
       { href: "/me/activities", key: "my_activities", icon: IcDoc },
       { href: "/me/presence", key: "my_presence", icon: IcClock },
-      { href: "/me/support", key: "support", icon: IcAlert },
     ],
   },
 
@@ -801,6 +803,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   {L("myProfile")}
                 </Link>
                 )}
+
+                {/* ق-162: **الدعم الفنيّ في قائمة الحساب**
+                    (بلاغ جواد) — فهو خدمةٌ لا شاشة عمل */}
+                <Link
+                  href="/me/support"
+                  onClick={() => setAccountOpen(false)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "9px 12px",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--ink-2)",
+                  }}
+                >
+                  <IcAlert size={18} />
+                  {L("support")}
+                </Link>
+
                 {perms.has("account.view") && (
                 <Link
                   href="/subscribe"

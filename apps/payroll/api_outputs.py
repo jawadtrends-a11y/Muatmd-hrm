@@ -751,3 +751,36 @@ def gl_download(request, run_id, template_id):
                        content_type="text/csv; charset=utf-8")
     res["Content-Disposition"] = f'attachment; filename="{filename}"'
     return res
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def payslip_pdf(request, payslip_id):
+    """
+    قسيمة الراتب بصيغة PDF (ق-163).
+
+    ⚠️ **بلاغ جواد:** الزرّ كان يفتح JSON خامًا — **والقسيمة
+    وثيقةٌ يحملها الموظف للبنك** لا شاشةً يقرؤها.
+
+    ⚠️⚠️ **وتُبنى من حمولة `payslip_detail` نفسها**: فحسابٌ ثانٍ
+    هنا **قد يخالف المسير**.
+    """
+    from apps.payroll.services.outputs.payslip_pdf import (
+        build_payslip_pdf, payslip_filename)
+
+    # نستدعي التفصيل نفسه — بصلاحياته وحراسته
+    res = payslip_detail(request._request if hasattr(request, "_request")
+                         else request, payslip_id)
+    if res.status_code != 200:
+        return res
+
+    data = res.data
+    try:
+        pdf = build_payslip_pdf(data)
+    except FileNotFoundError as e:
+        return Response({"detail": str(e)}, status=500)
+
+    out = HttpResponse(pdf, content_type="application/pdf")
+    out["Content-Disposition"] = (
+        f'inline; filename="{payslip_filename(data)}"')
+    return out
