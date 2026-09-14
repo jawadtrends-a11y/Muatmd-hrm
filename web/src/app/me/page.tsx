@@ -12,6 +12,7 @@ import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc } from "@/components/Icons";
 
 const T: Dict = {
+  viewEn: { ar: "عرض بالإنجليزية", en: "View in English" },
   title: { ar: "قسائم راتبي", en: "My payslips" },
   subtitle: {
     ar: "قسائم الرواتب المعتمدة",
@@ -128,6 +129,15 @@ export default function MyPayslipsPage() {
                   </td>
                   <td className="muted truncate">{p.company}</td>
                   <td style={{ textAlign: "end" }}>
+                    {/* ق-165: **وبالإنجليزية كذلك** (بلاغ
+                        جواد): فالقسيمة تُرسل لجهاتٍ لا تقرأ
+                        العربية — والمسار يقبل locale سلفًا */}
+                    <button className="btn btn-sm btn-ghost"
+                      title={L("viewEn")}
+                      onClick={() => openForView(
+                        `/payslips/${p.payslip_id}/pdf/?locale=en`)}>
+                      EN
+                    </button>
                     <button className="btn btn-sm btn-ghost"
                       onClick={() => openForView(`/payslips/${p.payslip_id}/pdf/`)}>
                       {L("view")}
