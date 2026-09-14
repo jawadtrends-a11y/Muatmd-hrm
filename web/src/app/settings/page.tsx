@@ -201,6 +201,17 @@ const T: Dict = {
   flagged: { ar: "حسب أعلام المكوّنات", en: "By component flags" },
   notSet: { ar: "لم يُحدَّد بعد", en: "Not set" },
   daysPerMonth: { ar: "أيام الشهر للاحتساب", en: "Days per month" },
+  cutoffDay: { ar: "يوم الاقتطاع", en: "Cutoff day" },
+  cutoffHint: {
+    ar: "يوم إقفال الحضور للمسير — فإعداد الرواتب يسبق نهاية الشهر",
+    en: "Attendance cutoff for the payroll period",
+  },
+  calendarMonth: { ar: "الشهر التقويميّ (بلا اقتطاع)",
+                   en: "Calendar month" },
+  cutoffExample: {
+    ar: "⚠️ راتب سبتمبر يُحسب من {n} أغسطس إلى {d} سبتمبر — والحضور والإضافي والخصومات كلّها بهذا المدى",
+    en: "September pay covers {n} Aug → {d} Sep",
+  },
   varianceThreshold: { ar: "عتبة تنبيه الفروقات %", en: "Variance threshold %" },
   advancesEnabled: { ar: "تمكين نظام السلف", en: "Enable advances" },
   advanceMax: { ar: "الحد الأقصى للسلفة", en: "Max advance amount" },
@@ -259,6 +270,8 @@ type PayrollSettings = {
   eosb_wage_basis: string;
   allow_mobile_punch: boolean;
   payroll_days_per_month: number;
+  // ق-157: تاريخ الاقتطاع — ٠ يعني الشهر التقويميّ
+  payroll_cutoff_day: number;
   variance_threshold_percent: string;
   advances_enabled: boolean;
   advance_max_amount: string | null;
@@ -785,6 +798,32 @@ function PayrollPanel({
             value={data.payroll_days_per_month}
             onChange={(e) => set("payroll_days_per_month",
                                  Number(e.target.value))} />
+        </Row>
+
+        {/* ق-157: **تاريخ الاقتطاع** — ويُبيَّن أثره فورًا */}
+        <Row label={L("cutoffDay")} hint={L("cutoffHint")}>
+          <div>
+            <select className="select"
+              value={String(data.payroll_cutoff_day ?? 0)}
+              onChange={(e) => set("payroll_cutoff_day",
+                                   Number(e.target.value))}>
+              <option value="0">{L("calendarMonth")}</option>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            {/* ⚠️ **والمثال يُبيّن ما سيقع** — فرقمٌ مجرَّد
+                يُساء فهمه */}
+            {!!data.payroll_cutoff_day && (
+              <div className="muted" style={{ fontSize: ".8rem",
+                                              marginTop: 6,
+                                              lineHeight: 1.8 }}>
+                {L("cutoffExample")
+                  .replace("{d}", String(data.payroll_cutoff_day))
+                  .replace("{n}", String(data.payroll_cutoff_day + 1))}
+              </div>
+            )}
+          </div>
         </Row>
 
         <Row label={L("varianceThreshold")}>

@@ -135,7 +135,9 @@ def payroll_settings(request):
         return Response({"detail": "لا إعدادات لهذه الشركة"}, status=404)
 
     if request.method == "PUT":
-        for field in ("payroll_days_per_month", "working_hours_per_day",
+        # ق-157: تاريخ الاقتطاع — ويُقيَّد بـ٢٨ في النموذج
+        for field in ("payroll_days_per_month", "payroll_cutoff_day",
+                      "working_hours_per_day",
                       "ramadan_hours_per_day", "overtime_basis",
                       # ق-137: معامِل الإضافي — الخيار وأساسه
                       "allow_overtime_rate_choice", "overtime_basis_x2",
@@ -165,6 +167,7 @@ def payroll_settings(request):
 
     return Response({
         "payroll_days_per_month": s.payroll_days_per_month,
+        "payroll_cutoff_day": s.payroll_cutoff_day,
         "working_hours_per_day": str(s.working_hours_per_day),
         "ramadan_hours_per_day": str(s.ramadan_hours_per_day),
         "overtime_basis": s.overtime_basis,
