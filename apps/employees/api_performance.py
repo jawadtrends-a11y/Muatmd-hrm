@@ -56,6 +56,8 @@ def _assign_json(a):
         "employment_id": a.employment_id,
         "employee": a.employment.person.display_name,
         "employee_no": a.employment.employee_no,
+        # ق-191: **رقم الارتباط** — فبطاقة الأداء تُفتح به
+        "employment_id": a.employment_id,
         "kpi": a.kpi.name_ar, "kpi_id": a.kpi_id,
         "scale": a.kpi.scale, "unit": a.kpi.unit,
         "target": str(a.target), "weight": a.weight,

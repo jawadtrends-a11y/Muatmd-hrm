@@ -5,7 +5,7 @@
  * ⚠️ **والمؤشّر لا يُقاس به قبل اعتماد الموارد**.
  */
 import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiPost, apiPut, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, qs, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
 import { IcAlert, IcCheck, IcDoc } from "@/components/Icons";
@@ -41,6 +41,17 @@ const T: Dict = {
   actual: { ar: "الفعليّ", en: "Actual" },
   score: { ar: "الدرجة", en: "Score" },
   enterActual: { ar: "إدخال الفعليّ", en: "Enter actual" },
+  scorecard: { ar: "البطاقة", en: "Scorecard" },
+  scTitle: { ar: "بطاقة الأداء", en: "Scorecard" },
+  scHint: {
+    ar: "⚠️ تقريرٌ لا أثر ماليّ — والخلاصة تُعرض عند ثلاثة تقييمات حمايةً للهوية",
+    en: "A report — no pay effect",
+  },
+  kpiScore: { ar: "درجة المؤشرات", en: "KPI score" },
+  weightCovered: { ar: "الوزن المغطّى", en: "Weight covered" },
+  behaviorAvg: { ar: "متوسط السلوك", en: "Behaviour" },
+  noData: { ar: "لا بيانات بعد", en: "No data yet" },
+  close2: { ar: "إغلاق", en: "Close" },
   weightHint: {
     ar: "⚠️ مجموع أوزان الموظف لا يتجاوز ١٠٠",
     en: "Total weights per employee cannot exceed 100",
@@ -81,7 +92,10 @@ type KPI = {
   is_usable: boolean;
 };
 type Assign = {
-  id: number; employee: string; employee_no: string; kpi: string;
+  id: number; employee: string; employee_no: string;
+  // ق-191: **رقم الارتباط** — فبطاقة الأداء تُفتح به
+  employment_id: number; cycle_id: number;
+  kpi: string;
   kpi_id: number; scale: string; unit: string;
   target: string; weight: number; actual: string | null;
   score: number | null; state: string; state_label: string;
@@ -120,6 +134,8 @@ export default function PerformancePage() {
   const [dialog, setDialog] = useState<"kpi" | "cycle" | "assign" | null>(
     null);
   const [entering, setEntering] = useState<Assign | null>(null);
+  // ق-191: **بطاقة الأداء** — ⚠️ **تقريرٌ لا أثر ماليّ**
+  const [card, setCard] = useState<Assign | null>(null);
   const [acting, setActing] = useState(false);
 
   const load = useCallback(async () => {
@@ -376,6 +392,12 @@ export default function PerformancePage() {
                         </td>
                         <td>
                           <div className="row" style={{ gap: 5 }}>
+                            {/* ق-191: **بطاقة الأداء** — فالمسار
+                                كان يتيمًا */}
+                            <button className="btn btn-sm btn-ghost"
+                                    onClick={() => setCard(a)}>
+                              {L("scorecard")}
+                            </button>
                             {a.state !== "approved" && (
                               <button className="btn btn-sm"
                                       onClick={() => setEntering(a)}>
@@ -499,6 +521,11 @@ export default function PerformancePage() {
                         await load();
                       }} />
       )}
+      {card && (
+        <ScorecardDialog a={card} L={L}
+                         onClose={() => setCard(null)} />
+      )}
+
 
       {entering && (
         <ActualDialog a={entering} L={L}
@@ -934,6 +961,188 @@ function Actions({ busy, disabled, L, onClose, onSubmit }: {
       <button className="btn btn-primary" disabled={busy || disabled}
               onClick={onSubmit}>{busy ? "…" : L("save")}</button>
       <button className="btn" onClick={onClose}>{L("cancel")}</button>
+    </div>
+  );
+}
+
+
+/**
+ * بطاقة أداء موظفٍ في دورة (ق-191).
+ *
+ * ⚠️⚠️ **وتقريرٌ لا أثر ماليّ**: فالمسار كان **مبنيًّا بلا شاشة**
+ * — كشفه الجرد.
+ *
+ * ⚠️ **والخلاصة تُعرض عند ثلاثة تقييمات** حمايةً للهوية (ق-146).
+ */
+function ScorecardDialog({ a, L, onClose }: {
+  a: Assign; L: (k: string) => string; onClose: () => void;
+}) {
+  type Card = {
+    kpi_score: number | null;
+    weight_covered: number;
+    behavior_average: number | null;
+    affects_pay: boolean;
+    employee: string;
+    cycle: string;
+    self_review: { comment?: string } | null;
+    upward: { count: number; average: number | null;
+              comments: string[]; note?: string } | null;
+    details: { kpi: string; target: string; actual: string | null;
+               weight: number; score: number | null }[];
+  };
+
+  const [d, setD] = useState<Card | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    apiGet<Card>(
+      `/performance/scorecard/${a.employment_id}/${qs({
+        cycle_id: a.cycle_id })}`)
+      .then(setD)
+      .catch((e) => setErr(e instanceof ApiError ? e.message
+                                                 : String(e)))
+      .finally(() => setBusy(false));
+  }, [a]);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60,
+      background: "rgba(16,28,38,.45)", display: "grid",
+      placeItems: "center", padding: 16,
+    }}>
+      <div className="card" style={{
+        padding: 22, maxWidth: 560, width: "100%",
+        maxHeight: "88vh", overflowY: "auto",
+      }}>
+        <div className="spread" style={{ marginBottom: 4 }}>
+          <h3 style={{ margin: 0 }}>{L("scTitle")}</h3>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>
+            {L("close2")}
+          </button>
+        </div>
+
+        <div className="muted" style={{ fontSize: ".78rem",
+                                        lineHeight: 1.9,
+                                        marginBottom: 16 }}>
+          {L("scHint")}
+        </div>
+
+        {busy ? (
+          <div className="muted" style={{ padding: 20,
+                                          textAlign: "center" }}>…</div>
+        ) : err ? (
+          <div className="card" style={{ borderColor: "var(--danger)",
+                                         color: "var(--danger)" }}>
+            {err}
+          </div>
+        ) : d ? (
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <strong>{d.employee}</strong>
+              <div className="muted" style={{ fontSize: ".8rem" }}>
+                {d.cycle}
+              </div>
+            </div>
+
+            <div style={{
+              display: "grid", gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+            }}>
+              <Box label={L("kpiScore")}
+                   value={d.kpi_score == null ? "—"
+                                              : String(d.kpi_score)} />
+              <Box label={L("weightCovered")}
+                   value={`${d.weight_covered}`} />
+              <Box label={L("behaviorAvg")}
+                   value={d.behavior_average == null ? "—"
+                     : String(d.behavior_average)} />
+            </div>
+
+            {d.details?.length > 0 && (
+              <table className="table" style={{ marginTop: 16 }}>
+                <thead>
+                  <tr>
+                    <th>{L("kpi")}</th>
+                    <th style={{ width: 80 }}>{L("target")}</th>
+                    <th style={{ width: 80 }}>{L("actual")}</th>
+                    <th style={{ width: 70 }}>{L("weight")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.details.map((x, i) => (
+                    <tr key={i}>
+                      <td>{x.kpi}</td>
+                      <td><span className="num">{x.target}</span></td>
+                      <td>
+                        <span className="num">{x.actual ?? "—"}</span>
+                      </td>
+                      <td><span className="num">{x.weight}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* ⚠️ **وتقييم المرؤوسين مجهول** — والخلاصة تُحجب دون
+                ثلاثة (ق-146) */}
+            {d.upward && (
+              <div style={{ marginTop: 16, padding: "12px 14px",
+                            background: "var(--paper-2)",
+                            borderRadius: "var(--radius-sm)" }}>
+                <div className="spread">
+                  <strong style={{ fontSize: ".9rem" }}>
+                    {L("upward")}
+                  </strong>
+                  <span className="num">
+                    {d.upward.average ?? "—"}
+                    <span className="muted"
+                          style={{ fontSize: ".76rem",
+                                   marginInlineStart: 6 }}>
+                      ({d.upward.count})
+                    </span>
+                  </span>
+                </div>
+                {d.upward.note && (
+                  <div className="muted" style={{ fontSize: ".76rem",
+                                                  marginTop: 5 }}>
+                    {d.upward.note}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {d.self_review?.comment && (
+              <div style={{ marginTop: 12 }}>
+                <strong style={{ fontSize: ".88rem" }}>
+                  {L("selfReview")}
+                </strong>
+                <div className="muted" style={{ fontSize: ".84rem",
+                                                marginTop: 4,
+                                                lineHeight: 1.9 }}>
+                  {d.self_review.comment}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="muted">{L("noData")}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function Box({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: "10px 12px", background: "var(--paper-2)",
+                  borderRadius: "var(--radius-sm)" }}>
+      <div className="muted" style={{ fontSize: ".74rem",
+                                      marginBottom: 3 }}>
+        {label}
+      </div>
+      <div className="num" style={{ fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
