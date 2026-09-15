@@ -79,15 +79,19 @@ def build_wps_file(run, branch=None):
         emp = slip.employment
         person = emp.person
 
-        if not slip.include_in_wps:
-            reason = ("صافي صفري" if slip.net_pay == 0
-                      else "غير مُدرج في حماية الأجور")
-            wps.excluded.append({
-                "employee_no": emp.employee_no,
-                "name": person.display_name, "reason": reason})
-            continue
+        # ق-179: ⚠️⚠️ **ولا استبعادَ أحد** (قرار جواد): فعدمُ
+        # التسجيل في حماية الأجور **ليس سببًا لحجب الموظف** —
+        # والملفّ يُصدَّر بالجميع، والبنك يقرّر.
+        #
+        # ⚠️ **والآيبان وحده يمنع**: فصفٌّ بلا آيبان **لا يُنفَّذ**،
+        # ورفعُه يُظنّ إرسالًا.
+        #
+        # ⚠️⚠️ **ويُقرأ من الملفّ حيًّا لا من القسيمة** (قرار
+        # جواد): فالآيبان **بيانٌ ناقصٌ يُستكمَل** — لا مبلغٌ
+        # احتُسب. **والمبالغ وحدها مجمَّدة**: فما اعتُمد دُفع.
+        live_iban = (emp.iban or slip.iban or "")
 
-        ok, err = validate_saudi_iban(slip.iban)
+        ok, err = validate_saudi_iban(live_iban)
         if not ok:
             wps.errors.append({
                 "employee_no": emp.employee_no,
@@ -110,7 +114,7 @@ def build_wps_file(run, branch=None):
             id_number=person.id_number,
             name_ar=person.display_name,
             name_en=person.full_name_en or person.display_name,
-            iban=(slip.iban or "").replace(" ", "").upper(),
+            iban=live_iban.replace(" ", "").upper(),
             bank_code=emp.bank_code,
             basic_salary=basic,
             housing_allowance=housing,

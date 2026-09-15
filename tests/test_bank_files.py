@@ -183,7 +183,12 @@ def test_invalid_iban_is_error_not_silent_skip(env):
     """الآيبان الخاطئ خطأ يمنع الإرسال — لا استبعاد صامت."""
     with account_scope(env["account_id"]):
         run = _approved_run(env)
+        # ⚠️ **والآيبان يُقرأ من الملفّ حيًّا** (ق-179): فهو بيانٌ
+        # ناقصٌ يُستكمَل — **فالخطأ يوضع فيه لا في القسيمة**.
         for slip in run.payslips.all():
+            emp = slip.employment
+            emp.iban = "SA0000000000000000000000"
+            emp.save(update_fields=["iban"])
             slip.iban = "SA0000000000000000000000"
             slip.save()
         tpl = BankTemplate.objects.get(company=env["comp"], code="NCB")

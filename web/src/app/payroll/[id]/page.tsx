@@ -77,6 +77,7 @@ const T: Dict = {
   // التصدير
   exports: { ar: "التصدير", en: "Exports" },
   wpsFile: { ar: "ملف حماية الأجور", en: "WPS file" },
+  glEntry: { ar: "قيد محاسبيّ", en: "GL entry" },
   bankFile: { ar: "ملف البنك", en: "Bank file" },
   exportHint: {
     ar: "التصدير متاح بعد اعتماد المسير",
@@ -449,13 +450,17 @@ export default function RunDetailPage() {
                 {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
               </button>
             ))}
-            {/* ق-152: القيد المحاسبيّ — لكل قالبٍ زرّه */}
+            {/* ق-180: ⚠️ **والزرّ باسم غرضه لا باسم قالبه**
+                (بلاغ جواد): فـ«قالب عامّ» **أوهم أنه قالب تصدير
+                المسير** — وهو قيدٌ محاسبيّ لنظام ERP. */}
             {glTemplates.map((t) => (
               <button key={`gl-${t.id}`} className="btn btn-sm"
+                title={t.name_ar}
                 onClick={() => grab(
                   `/payroll/runs/${runId}/gl/${t.id}/download/`)}>
                 <IcDownload size={16} />
-                {t.name_ar}
+                {L("glEntry")}
+                {glTemplates.length > 1 ? ` — ${t.name_ar}` : ""}
               </button>
             ))}
           </div>

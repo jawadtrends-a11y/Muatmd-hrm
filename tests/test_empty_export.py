@@ -63,43 +63,46 @@ def env(db, client):
                "run": run, "user": u}
 
 
-def test_wps_excludes_leave_no_rows(env):
+def test_no_one_is_excluded(env):
     """
-    ⚠️ **ومستبعَدٌ بلا صفوف ملفٌّ فارغ**.
-
-    فمن استُبعد من حماية الأجور لا يظهر — والملفّ يصير عناوينَ
-    وحدها.
+    ⚠️⚠️ **ولا استبعادَ أحد** (قرار جواد ق-179): فعدمُ التسجيل في
+    حماية الأجور **ليس سببًا لحجب الموظف** — والملفّ يُصدَّر
+    بالجميع، **والبنك يقرّر**.
     """
     with account_scope(env["account_id"]):
         for slip in env["run"].payslips.all():
             slip.include_in_wps = False
-            slip.save(update_fields=["include_in_wps"])
+            slip.iban = "SA0380000000608010167519"
+            slip.save(update_fields=["include_in_wps", "iban"])
 
         wps = build_wps_file(env["run"])
-        assert wps.record_count == 0
-        assert len(wps.excluded) >= 1
-        assert not wps.errors, "استُبعدوا بخطأ لا بعلم الاستبعاد"
+        assert wps.record_count >= 1, "استُبعد موظفٌ بلا داعٍ"
+        assert not wps.excluded, "بقي الاستبعاد"
 
 
-def test_empty_wps_is_not_downloadable(env, client):
+def test_missing_iban_names_its_owners(env, client):
     """
-    ⚠️⚠️ الأهمّ: **الملفّ الفارغ يُمنع لا يُنزَّل**.
+    ⚠️⚠️ **والآيبان وحده يمنع** (قرار جواد ق-179): فصفٌّ بلا
+    آيبان **لا يُنفَّذ**.
 
-    فبلا هذا يُرفع للبنك ملفٌّ بعناوينه وحدها، ويُظنّ أن الرواتب
-    أُرسلت.
+    ⚠️ **والرسالة تُسمّي العدد والأسماء**: فـ«يحوي أخطاء» **لا
+    يقول لمن يعود**.
     """
     with account_scope(env["account_id"]):
+        env["emp"].iban = ""
+        env["emp"].save(update_fields=["iban"])
         for slip in env["run"].payslips.all():
-            slip.include_in_wps = False
-            slip.save(update_fields=["include_in_wps"])
+            slip.iban = ""
+            slip.save(update_fields=["iban"])
 
     client.force_login(env["user"])
     res = client.get(
         f"/api/payroll/runs/{env['run'].id}/wps/download/")
     assert res.status_code == 409, res.status_code
     body = res.json()
-    assert body.get("code") == "empty_file", body
-    assert body.get("excluded"), "لم يُبيَّن من استُبعد"
+    assert body.get("code") == "missing_iban", body
+    # ⚠️ **والاسم في الرسالة** — فمن يقرأ يعرف لمن يعود
+    assert "E-1" in body["detail"], body["detail"]
 
 
 def test_wps_with_rows_downloads(env, client):
@@ -131,3 +134,61 @@ def test_bad_iban_is_an_error_not_silence(env, client):
         wps = build_wps_file(env["run"])
         assert wps.errors, "مرّ آيبانٌ خاطئ بلا خطأ"
         assert wps.record_count == 0
+
+
+# ══════════ القراءة الحيّة (ق-179) ══════════
+
+def test_iban_is_read_live_not_frozen(env, client):
+    """
+    ⚠️⚠️ **والآيبان يُقرأ من الملفّ حيًّا** (قرار جواد): فهو
+    **بيانٌ ناقصٌ يُستكمَل** — لا مبلغٌ احتُسب.
+
+    **فمن أُضيف آيبانه بعد الاعتماد يُصدَّر به** — ولا يُعاد حساب
+    المسير.
+    """
+    from apps.payroll.services.outputs.wps import build_wps_file
+
+    with account_scope(env["account_id"]):
+        # القسيمة بلا آيبان، والملفّ به
+        for slip in env["run"].payslips.all():
+            slip.iban = ""
+            slip.include_in_wps = True
+            slip.save(update_fields=["iban", "include_in_wps"])
+        env["emp"].iban = "SA0380000000608010167519"
+        env["emp"].save(update_fields=["iban"])
+
+        wps = build_wps_file(env["run"])
+        assert not wps.errors, wps.errors
+        assert wps.record_count >= 1
+        assert wps.rows[0].iban.startswith("SA03")
+
+
+def test_amounts_stay_frozen(env):
+    """
+    ⚠️ **والمبالغ تبقى من القسيمة**: فما اعتُمد دُفع — **وتغييرُ
+    الراتب بعده لا يُغيّر ما صُرف**.
+
+    والفرق بأثرٍ رجعيّ **يدخل المسير التالي** (ق-١٥٨).
+    """
+    from decimal import Decimal
+
+    from apps.payroll.services.outputs.wps import build_wps_file
+
+    with account_scope(env["account_id"]):
+        for slip in env["run"].payslips.all():
+            slip.iban = "SA0380000000608010167519"
+            slip.include_in_wps = True
+            slip.save(update_fields=["iban", "include_in_wps"])
+
+        wps = build_wps_file(env["run"])
+        before = wps.total_net
+
+        # ⚠️ **نغيّر بنود الراتب على الملفّ** — والمسير لا يتأثّر
+        from apps.employees.models import SalaryLine
+
+        SalaryLine.objects.filter(
+            structure__employment=env["emp"]).update(
+            amount=Decimal("99999"))
+
+        after = build_wps_file(env["run"]).total_net
+        assert after == before, "تغيّر المبلغ بعد الاعتماد"

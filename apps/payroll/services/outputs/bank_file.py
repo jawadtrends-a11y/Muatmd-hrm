@@ -68,7 +68,10 @@ def _slip_values(slip):
         else:
             other += line.amount
 
-    iban = (slip.iban or "").replace(" ", "").upper()
+    # ق-179: ⚠️⚠️ **والآيبان من الملفّ حيًّا** (قرار جواد): فهو
+    # **بيانٌ ناقصٌ يُستكمَل** لا مبلغٌ احتُسب — **والمبالغ وحدها
+    # مجمَّدة**.
+    iban = (emp.iban or slip.iban or "").replace(" ", "").upper()
     swift = emp.bank_code or swift_from_iban(iban)
 
     dept = ""
@@ -162,7 +165,8 @@ def build_bank_file(run, template, branch=None):
                 "reason": f"طريقة الصرف: {emp.get_payment_method_display()}"})
             continue
 
-        ok, err = validate_saudi_iban(slip.iban)
+        # ⚠️ **ويُفحص الحيّ لا المجمَّد**
+        ok, err = validate_saudi_iban(emp.iban or slip.iban)
         if not ok:
             errors.append({
                 "employee_no": emp.employee_no,

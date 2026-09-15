@@ -165,7 +165,13 @@ def bank_file_download(request, run_id, template_id):
 
     if res.errors:
         return Response({
-            "detail": "الملف يحوي أخطاء تمنع الإرسال",
+            # ق-179: ⚠️ **والرسالة تُسمّي العدد والأسماء**
+            "detail": (
+                f"نقصٌ في البيانات لعدد ({len(res.errors)}) موظف: "
+                + "، ".join(f"{e['name']} ({e['employee_no']})"
+                            for e in res.errors[:10])
+                + ("" if len(res.errors) <= 10
+                   else f" و{len(res.errors) - 10} غيرهم")),
             "code": "validation_errors", "errors": res.errors}, status=409)
 
     # ⚠️⚠️ **وملفٌّ بلا صفوف لا يُنزَّل** (ق-145) — فيُرفع للبنك
@@ -211,8 +217,17 @@ def wps_download(request, run_id):
         return Response({"detail": str(e)}, status=409)
 
     if wps.errors:
-        return Response({"detail": "الملف يحوي أخطاء", "errors": wps.errors},
-                        status=409)
+        # ق-179: ⚠️ **والرسالة تُسمّي العدد والأسماء** (قرار جواد):
+        # فـ«يحوي أخطاء» **لا يقول لمن يعود**.
+        names = "، ".join(
+            f"{e['name']} ({e['employee_no']})" for e in wps.errors[:10])
+        more = ("" if len(wps.errors) <= 10
+                else f" و{len(wps.errors) - 10} غيرهم")
+        return Response({
+            "detail": (f"نقصٌ في بيانات الآيبان لعدد "
+                       f"({len(wps.errors)}) موظف: {names}{more}"),
+            "code": "missing_iban",
+            "errors": wps.errors}, status=409)
 
     # ⚠️⚠️ **وملفٌّ بلا صفوف لا يُنزَّل** (ق-145).
     #
@@ -739,8 +754,19 @@ def gl_download(request, run_id, template_id):
         return Response({"detail": str(ex)}, status=409)
 
     if not e.ready:
+        # ق-179: ⚠️ **والرسالة تُسمّي ما ينقص** (قرار جواد):
+        # فـ«غير جاهز» **لا يقول ماذا يُصلَح**.
+        if e.unmapped:
+            detail = (f"بنودٌ بلا ربطٍ محاسبيّ ({len(e.unmapped)}): "
+                      + "، ".join(e.unmapped[:10])
+                      + " — اربطها من إعدادات القيد المحاسبيّ")
+        elif e.errors:
+            detail = " · ".join(e.errors[:3])
+        else:
+            detail = (f"القيد غير متوازن: مدين {e.total_debit} "
+                      f"دائن {e.total_credit}")
         return Response({
-            "detail": ("القيد غير جاهز — راجع المعاينة"),
+            "detail": detail,
             "code": "not_ready",
             "unmapped": e.unmapped, "errors": e.errors,
             "is_balanced": e.is_balanced}, status=409)
