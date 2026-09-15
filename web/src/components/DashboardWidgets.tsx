@@ -8,6 +8,10 @@
 import Link from "next/link";
 
 type Row = { label: string; value: string | number; tone?: string;
+  // ق-189: حقولٌ اختيارية — تُغني بطاقة الوثائق المنتهية
+  employee_no?: string; document_type?: string;
+  document_number?: string; severity?: string;
+  days_remaining?: number;
              link?: string };
 export type Widget = {
   name: string;
@@ -100,10 +104,45 @@ export default function WidgetCard({
           </div>}
           <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
             {(w.rows || []).map((r, i) => (
-              <div key={i} className="spread" style={{ fontSize: ".84rem" }}>
-                <span className="truncate">{r.label}</span>
-                <span className="muted truncate"
-                      style={{ maxWidth: "50%" }}>{r.value}</span>
+              <div key={i} style={{ fontSize: ".84rem",
+                                    paddingBottom: 6,
+                                    borderBottom:
+                                      i < (w.rows!.length - 1)
+                                        ? "1px solid var(--line)"
+                                        : "none" }}>
+                <div className="spread">
+                  <span className="truncate">
+                    {/* ق-189: ⚠️ **والرقم الوظيفيّ مع الاسم** —
+                        فمن يرى التنبيه **يحتاج ما يتصرّف به** */}
+                    {r.employee_no && (
+                      <span className="num muted"
+                            style={{ fontSize: ".76rem",
+                                     marginInlineEnd: 6 }}>
+                        {r.employee_no}
+                      </span>
+                    )}
+                    {r.label}
+                  </span>
+                  <span className="muted num truncate"
+                        style={{ maxWidth: "45%" }}>{r.value}</span>
+                </div>
+                {(r.document_type || r.severity) && (
+                  <div className="spread" style={{ marginTop: 2 }}>
+                    <span className="muted"
+                          style={{ fontSize: ".74rem" }}>
+                      {r.document_type}
+                      {r.document_number
+                        ? ` · ${r.document_number}` : ""}
+                    </span>
+                    {r.severity && (
+                      <span className="badge"
+                            style={{ fontSize: ".68rem",
+                                     padding: "1px 6px" }}>
+                        {r.severity}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

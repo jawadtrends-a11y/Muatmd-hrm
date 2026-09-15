@@ -327,15 +327,37 @@ def _attendance_today(request):
 
 @widget("expiring_documents")
 def _expiring_documents(request):
+    # ق-189: ⚠️⚠️ **والبطاقة تحمل التفصيل** (قرار جواد): الرقم
+    # الوظيفيّ والاسم **ورقم الوثيقة ونوعها وتاريخ انتهائها**.
+    #
+    # ⚠️ **فاسمٌ وتاريخٌ لا يكفيان**: **وانتهاء إقامةٍ يوقف الموظف
+    # ويعرّض الشركة لغرامات** — ومن يرى التنبيه **يحتاج ما يتصرّف
+    # به**.
     from apps.employees.models import EmployeeDocument
     soon = date.today() + timedelta(days=60)
+    today = date.today()
     emps = _company_employments(request)
     qs = EmployeeDocument.objects.filter(
         employment__in=emps, expiry_date__isnull=False,
         expiry_date__lte=soon).select_related(
             "employment__person").order_by("expiry_date")
-    rows = [{"label": d.employment.person.display_name,
-             "value": str(d.expiry_date)} for d in qs[:5]]
+
+    rows = []
+    for d in qs[:20]:
+        days = (d.expiry_date - today).days
+        rows.append({
+            "employee_no": d.employment.employee_no,
+            "label": d.employment.person.display_name,
+            "document_type": d.get_document_type_display(),
+            "document_number": d.document_number or "",
+            "value": str(d.expiry_date),
+            "days_remaining": days,
+            # ⚠️ **ودرجة الخطورة تُرتّب التصرّف**
+            "severity": ("منتهية" if days < 0
+                         else "حرجة" if days <= 15
+                         else "قريبة" if days <= 30
+                         else "تنبيه"),
+        })
     return {"kind": "list_with_count", "count": qs.count(), "rows": rows,
             "hint": "خلال ٦٠ يومًا", "tone": "warn"}
 
