@@ -140,9 +140,14 @@ export async function apiUpload<T = unknown>(
   path: string,
   file: File,
   field = "file",
+  /** ق-172: حقولٌ تُرسل مع الملفّ — كنوع الإجازة وعلَم التنفيذ */
+  extra?: Record<string, string>,
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const form = new FormData();
+  for (const [k, v] of Object.entries(extra || {})) {
+    form.append(k, v);
+  }
   form.append(field, file);
 
   const h: Record<string, string> = {};

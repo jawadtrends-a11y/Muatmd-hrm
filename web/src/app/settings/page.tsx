@@ -121,6 +121,11 @@ const T: Dict = {
     ar: "اربط بنود الأجر بحساباتك وصدّر القيد",
     en: "Map components to accounts and export",
   },
+  importsLink: { ar: "الاستيراد من نظامٍ سابق", en: "Import" },
+  importsHint: {
+    ar: "الموظفون وأرصدة الإجازات والحضور",
+    en: "Employees, balances and attendance",
+  },
   usersHint: {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
@@ -617,6 +622,17 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("penaltyPolicyHint")}
+          </span>
+        </Link>
+        )}
+        {/* ق-172: الاستيراد من نظامٍ سابق */}
+        {perms.has("employees.create") && (
+        <Link href="/settings/imports" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("importsLink")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("importsHint")}
           </span>
         </Link>
         )}

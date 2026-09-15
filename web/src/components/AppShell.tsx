@@ -40,6 +40,7 @@ const T: Dict = {
   employees: { ar: "الموظفون", en: "Employees" },
   attendance: { ar: "الحضور والانصراف", en: "Attendance" },
   leaves: { ar: "الإجازات والطلبات", en: "Leaves & Requests" },
+  leaveBalances: { ar: "أرصدة الإجازات", en: "Leave balances" },
   team: { ar: "إدارة الفريق", en: "Team management" },
   teamMembers: { ar: "قائمة المرؤوسين", en: "Team members" },
   teamAttendance: { ar: "حضور المرؤوسين", en: "Team attendance" },
@@ -205,6 +206,10 @@ const NAV: NavItem[] = [
       { href: "/attendance", key: "attendance", icon: IcClock,
         perms: ["attendance.view"] },
       { href: "/leaves", key: "leaves", icon: IcLeave,
+        perms: ["leaves.view"] },
+      // ق-172: **أرصدة الإجازات** — لمتابعتها من المشرفين
+      // والمديرين والموارد (بلاغ جواد)
+      { href: "/leave-balances", key: "leaveBalances", icon: IcLeave,
         perms: ["leaves.view"] },
       { href: "/assets", key: "assets", icon: IcDoc,
         perms: ["employees.view"] },

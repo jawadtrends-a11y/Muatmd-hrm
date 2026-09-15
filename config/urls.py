@@ -387,6 +387,9 @@ urlpatterns = [
     path("api/leaves/types/new/", leaves_api.leave_type_create, name="leave-type-create"),
     path("api/leaves/types/<int:type_id>/", leaves_api.leave_type_detail, name="leave-type-detail"),
     path("api/leaves/balances/", leaves_api.leave_balances, name="leave-balances"),
+    # ق-172: أرصدة الموظفين — كلٌّ بنطاقه
+    path("api/leaves/balances/team/", leaves_api.team_leave_balances,
+         name="team-leave-balances"),
     path("api/leaves/requests/", leaves_api.leave_requests, name="leave-requests"),
     path("api/leaves/requests/<int:request_id>/", leaves_api.request_detail, name="request-detail"),
     path("api/leaves/requests/<int:request_id>/decide/", leaves_api.decide_request, name="request-decide"),

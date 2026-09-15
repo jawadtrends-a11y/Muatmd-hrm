@@ -1740,3 +1740,89 @@ def balance_import(request):
         return Response({"detail": str(e), "code": "rolled_back"},
                         status=400)
     return Response(res, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def team_leave_balances(request):
+    """
+    أرصدة إجازات الموظفين — **كلٌّ بنطاقه** (ق-172).
+
+    ⚠️⚠️ **بلاغ جواد:** «وين صفحة أرصدة الإجازة لمتابعتها من
+    المشرفين والمديرين والموارد؟» — **فالمسار القائم يُرجع رصيد
+    المستخدم نفسه وحده**.
+
+    ⚠️ **والنطاق يحسم**: فالمشرف يرى فريقه، والموارد الشركة —
+    **والبوّابة تفعلها، لا شرطٌ في الشاشة**.
+    """
+    from apps.employees.models import Employment, EmploymentStatus
+    from apps.leaves.models import LeaveBalance, LeaveType
+    from apps.leaves.services.balances import accrue
+
+    Gate.require(request.user, "leaves.view")
+    company_id = _company_id(request)
+    if company_id is None:
+        return Response({"detail": "لا شركة نشطة"}, status=400)
+
+    try:
+        year = int(request.GET.get("year") or date.today().year)
+    except (TypeError, ValueError):
+        year = date.today().year
+
+    emps = Gate.filter_queryset(
+        request.user, "leaves.view", Employment.objects.all()
+    ).filter(company_id=company_id,
+             status=EmploymentStatus.ACTIVE).select_related(
+        "person", "department")
+
+    # ق-167: **والبحث في الخادم** — فالعميل لا يملك إلا صفحته
+    if request.GET.get("q"):
+        from django.db.models import Q
+
+        q = request.GET["q"].strip()
+        emps = emps.filter(
+            Q(employee_no__icontains=q)
+            | Q(person__first_name_ar__icontains=q)
+            | Q(person__family_name_ar__icontains=q)
+            | Q(department__name_ar__icontains=q))
+
+    # ⚠️ **والأنواع التعاقدية وحدها** (ق-169): فالمرضية والخاصة
+    # **تُستحقّ بواقعتها لا برصيد**.
+    types = list(LeaveType.objects.filter(
+        company_id=company_id, is_active=True, is_contractual=True))
+    if not types:
+        return Response({"rows": [], "types": [],
+                         "meta": {"total": 0, "pages": 1, "page": 1}})
+
+    from apps.core.pagination import paginate
+
+    rows, meta = paginate(emps.order_by("employee_no"), request)
+
+    # ⚠️ **والاستحقاق يُحدَّث عند القراءة**: فرصيدٌ قديمٌ معروض
+    # **يُتَّخذ قرارٌ عليه**.
+    out = []
+    for e in rows:
+        cells = []
+        for t in types:
+            bal = accrue(e, t)
+            cells.append({
+                "leave_type_id": t.id,
+                "code": t.code,
+                "accrued": str(bal.accrued),
+                "consumed": str(bal.consumed),
+                "opening": str(bal.opening_balance),
+                "available": str(bal.available),
+            })
+        out.append({
+            "employment_id": e.id,
+            "employee_no": e.employee_no,
+            "name_ar": e.person.name_for(request_locale(request)),
+            "department": getattr(e.department, "name_ar", "") or "",
+            "balances": cells,
+        })
+
+    return Response({
+        "rows": out, "meta": meta, "year": year,
+        "types": [{"id": t.id, "code": t.code, "name_ar": t.name_ar}
+                  for t in types],
+    })
