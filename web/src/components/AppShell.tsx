@@ -51,6 +51,7 @@ const T: Dict = {
   payroll: { ar: "الرواتب", en: "Payroll" },
   penalties: { ar: "الجزاءات", en: "Penalties" },
   settlement: { ar: "نهاية الخدمة", en: "End of service" },
+  eosbCalc: { ar: "حاسبة المكافأة", en: "EOSB calculator" },
   policies: { ar: "السياسات", en: "Policies" },
   tasks: { ar: "المهامّ", en: "Tasks" },
   directory: { ar: "دليل الزملاء", en: "Directory" },
@@ -237,6 +238,9 @@ const NAV: NavItem[] = [
         perms: ["payroll.view"] },
       // ق-175: **تسوية نهاية الخدمة** — فالمسار كان بلا شاشة
       { href: "/settlement", key: "settlement", icon: IcWallet,
+        perms: ["payroll.view"] },
+      // ق-188: **حاسبة نهاية الخدمة** — للاطّلاع لا للقرار
+      { href: "/eosb-calculator", key: "eosbCalc", icon: IcChart,
         perms: ["payroll.view"] },
     ],
   },
