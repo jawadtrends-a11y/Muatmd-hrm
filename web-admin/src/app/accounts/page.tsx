@@ -67,6 +67,7 @@ const T: Dict = {
     en: "Every change is logged under your name",
   },
   sandbox: { ar: "تجريبي", en: "Sandbox" },
+  openDetail: { ar: "التفصيل", en: "Details" },
   noSub: { ar: "بلا اشتراك", en: "No subscription" },
 };
 
@@ -305,6 +306,8 @@ export default function AccountsPage() {
               <thead>
                 <tr>
                   <th>{L("account")}</th>
+                  {/* ق-183: عمود فتح التفصيل */}
+                  <th style={{ width: 90 }} />
                   <th style={{ textAlign: "end" }}>{L("companies")}</th>
                   <th style={{ textAlign: "end" }}>{L("employees")}</th>
                   <th>{L("plan")}</th>
@@ -331,6 +334,14 @@ export default function AccountsPage() {
                             </span>
                           )}
                         </div>
+                      </td>
+                      {/* ق-183: ⚠️ **وفتحُ التفصيل** — فشاشةٌ
+                          لا يصلها أحد **كالمسار اليتيم** */}
+                      <td style={{ textAlign: "end" }}>
+                        <a className="btn btn-sm btn-ghost"
+                           href={`/accounts/${r.account_id}`}>
+                          {L("openDetail")}
+                        </a>
                       </td>
                       <td style={{ textAlign: "end" }}>
                         <span className="num">{r.companies}</span>

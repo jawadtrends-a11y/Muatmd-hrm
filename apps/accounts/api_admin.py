@@ -120,6 +120,18 @@ def admin_dashboard(request):
 
 # ══════════════════ الحسابات ══════════════════
 
+def _account(account_id):
+    """
+    يقرأ حسابًا **من داخل سياقه** (ق-183).
+
+    ⚠️⚠️ **فسياسة العزل تحجب الحساب عمّن لا سياق له** (ق-107)،
+    **ولوحة المنصّة بطبيعتها بلا سياق** — فكانت المسارات تردّ
+    «الحساب غير موجود» **وهو موجود**.
+    """
+    with account_scope(account_id):
+        return Account.objects.filter(id=account_id).first()
+
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -195,7 +207,13 @@ def account_detail(request, account_id):
     from apps.employees.models import Employment, EmploymentStatus
     from apps.payroll.models import PayrollRun
 
-    acc = Account.objects.filter(id=account_id).first()
+    # ق-183: ⚠️⚠️ **وسياسة العزل تحجب الحساب عمّن لا سياق له**
+    # (ق-107): **ولوحة المنصّة بطبيعتها بلا سياق** — فكان المسار
+    # يردّ «الحساب غير موجود» **وهو موجود**.
+    #
+    # ⚠️ **والقائمة تلتفّ عليه بدالّة SECURITY DEFINER** — والتفصيل
+    # **يدخل السياق أوّلًا ثم يقرأ**.
+    acc = _account(account_id)
     if acc is None:
         return Response({"detail": "الحساب غير موجود"}, status=404)
 
@@ -216,9 +234,15 @@ def account_detail(request, account_id):
                 account=acc).order_by("-period_year", "-period_month")[:6]
         ]
         invoices = [
-            {"id": i.id, "invoice_no": i.invoice_no, "total": str(i.total),
-             "status": i.get_status_display(), "due": i.due_date,
-             "paid_at": i.paid_at}
+            {"id": i.id, "invoice_no": i.invoice_no,
+             "total": str(i.total),
+             "status": i.status,
+             "status_label": i.get_status_display(),
+             "due": i.due_date, "paid_at": i.paid_at,
+             # ق-182: **الفاتورة الزكاتية من «معتمد المحاسبيّ»** —
+             # فالسوبر أدمن يُسجّلها، **والمحاسبيّ مصدر الحقيقة**
+             "zatca_invoice_no": i.zatca_invoice_no or "",
+             "zatca_issued_at": i.zatca_issued_at}
             for i in Invoice.objects.filter(account=acc).order_by("-id")[:12]
         ]
         payments = list(Payment.objects.filter(account=acc).order_by("-id")[:10])
@@ -270,7 +294,7 @@ def admin_activate(request, account_id):
     للشركات التي تدفع بتحويل بنكي — تُصدر لها فاتورة ضريبية
     يدويًا من «معتمد المحاسبي».
     """
-    acc = Account.objects.filter(id=account_id).first()
+    acc = _account(account_id)
     if acc is None:
         return Response({"detail": "الحساب غير موجود"}, status=404)
     if not _confirmed(request):
@@ -321,7 +345,7 @@ def admin_activate(request, account_id):
 @requires("subscription.extend")
 def admin_extend(request, account_id):
     """تمديد يدوي بلا حد (ق-48)."""
-    acc = Account.objects.filter(id=account_id).first()
+    acc = _account(account_id)
     if acc is None:
         return Response({"detail": "الحساب غير موجود"}, status=404)
     if not _confirmed(request):
@@ -358,7 +382,7 @@ def admin_mark_invoice_paid(request, invoice_id):
     if inv is None:
         return Response({"detail": "الفاتورة غير موجودة"}, status=404)
 
-    acc = Account.objects.get(id=inv.account_id)
+    acc = _account(inv.account_id)
     if not _confirmed(request):
         return _need_confirm(acc)
 
@@ -660,7 +684,7 @@ def admin_record_zatca_invoice(request, invoice_id):
             "zatca_invoice_no", "zatca_issued_at",
             "zatca_recorded_by", "zatca_recorded_at"])
 
-    acc = Account.objects.get(id=inv.account_id)
+    acc = _account(inv.account_id)
     # ⚠️ **وحدثٌ مسجَّل لا مخترَع**: فحارس المعمار يمسك المفاتيح
     # غير المسجّلة — **ومفتاحٌ يتيمٌ لا يُصفّى ولا يُبحث عنه**.
     _log(request, "invoice.mark_paid", account=acc,
