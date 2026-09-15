@@ -58,6 +58,9 @@ const T: Dict = {
   },
   goSettings: { ar: "فتح الإعدادات", en: "Open settings" },
   needEmployee: { ar: "اختر الموظف والتاريخ أولًا", en: "Pick first" },
+  clearance: { ar: "إخلاء الطرف", en: "Clearance" },
+  advancesDue: { ar: "سلفٌ قائمة", en: "Outstanding advances" },
+  assetsHeld: { ar: "عُهدٌ لديه", en: "Assets held" },
 };
 
 type Line = {
@@ -88,6 +91,23 @@ export default function SettlementPage() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [basisMissing, setBasisMissing] = useState(false);
+
+  // ق-176: **إخلاء الطرف** — سلفٌ وعُهدٌ عليه.
+  //
+  // ⚠️ **وهو جزءٌ من المخالصة لا شاشةٌ مستقلّة**: فمن يُنهي خدمته
+  // **يرى ما عليه قبل الحساب**.
+  const [clearance, setClearance] = useState<{
+    advances: { count: number; total_outstanding: string };
+    assets: { count?: number; total_value?: string;
+              items?: { name?: string; status?: string }[] };
+  } | null>(null);
+
+  useEffect(() => {
+    if (!emp) { setClearance(null); return; }
+    apiGet<typeof clearance>(`/employees/${emp.id}/clearance/`)
+      .then(setClearance)
+      .catch(() => setClearance(null));
+  }, [emp]);
 
   useEffect(() => {
     apiGet<{ reasons: Reason[] } | Reason[]>("/settlement/reasons/")
@@ -219,6 +239,39 @@ export default function SettlementPage() {
                  onChange={(e) => setMonthSalary(e.target.checked)} />
           <span>{L("monthSalary")}</span>
         </label>
+
+        {/* ق-176: ⚠️ **وما عليه قبل الحساب** — فسلفٌ قائمةٌ
+            تُخصم، وعُهدةٌ لم تُسلَّم **تُحتسب قيمتها** */}
+        {clearance && (
+          <div style={{ marginTop: 16, padding: "12px 14px",
+                        background: "var(--paper-2)",
+                        borderRadius: "var(--radius-sm)" }}>
+            <strong style={{ fontSize: ".9rem" }}>
+              {L("clearance")}
+            </strong>
+            <div className="row" style={{ gap: 24, marginTop: 8,
+                                          flexWrap: "wrap" }}>
+              <div>
+                <div className="muted" style={{ fontSize: ".76rem" }}>
+                  {L("advancesDue")}
+                </div>
+                <div className="num">
+                  {clearance.advances?.count ?? 0} ·{" "}
+                  {clearance.advances?.total_outstanding ?? "0"}
+                </div>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: ".76rem" }}>
+                  {L("assetsHeld")}
+                </div>
+                <div className="num">
+                  {clearance.assets?.count ?? 0} ·{" "}
+                  {clearance.assets?.total_value ?? "0"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <button className="btn btn-primary" style={{ marginTop: 16 }}
                 disabled={busy || !emp || !endDate}
