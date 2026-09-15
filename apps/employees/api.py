@@ -1067,6 +1067,20 @@ def update_employee_profile(request, employment_id):
         "allow_mobile_punch",
     }
 
+    # ق-178: ⚠️⚠️ **والقراءة تُرجع أسماءً قصيرة والكتابة تقبل
+    # الطويلة** (بلاغ جواد): فالشاشة ترسل ما قرأته — `is_registered`
+    # — **والمسار يتجاهله صامتًا، فيعود الحقل لحاله**.
+    #
+    # ⚠️ **والتوحيد هنا لا في الشاشة**: فموضعٌ واحد أأمن من موضعين.
+    ALIASES = {
+        "is_registered": "is_gosi_registered",
+        "establishment_no": "gosi_establishment_no",
+        "declared_wage": "gosi_declared_wage",
+        "borne_by_company": "gosi_borne_by_company",
+    }
+    if section == "gosi":
+        d = {ALIASES.get(k, k): v for k, v in d.items()}
+
     changed = []
 
     for key, value in d.items():
