@@ -102,9 +102,12 @@ def test_registration_flags_drive_nitaqat(env):
     d = c.get(f"/api/employees/{emp_id}/").json()
     assert d["employment"]["counts_in_nitaqat"] is False
 
-    d = _put(c, f"/api/employees/{emp_id}/registration/",
-             {"is_mol_registered": True}).json()
-    assert d["counts_in_nitaqat"] is True
+    # ق-186: **والأعلام من تبويب التأمينات** — فمسار
+    # `registration/` حُذف، والقاعدة باقية
+    _put(c, f"/api/employees/{emp_id}/update/",
+         {"section": "gosi", "data": {"is_mol_registered": True}})
+    d = c.get(f"/api/employees/{emp_id}/").json()
+    assert d["employment"]["counts_in_nitaqat"] is True
 
 
 @pytest.mark.django_db(transaction=True)
@@ -112,8 +115,12 @@ def test_gosi_declared_wage_may_differ(env):
     """ق-15: الأجر المسجّل قد يخالف المدفوع — النظام يعكس الواقع."""
     c = _client(env, "hr_manager")
     emp_id = _hire(c).json()["employment_id"]
-    _put(c, f"/api/employees/{emp_id}/registration/",
-         {"is_gosi_registered": True, "gosi_declared_wage": "6000"})
+    # ق-186: **والأعلام من تبويب التأمينات** — فمسار
+    # `registration/` حُذف، والقاعدة باقية
+    _put(c, f"/api/employees/{emp_id}/update/",
+         {"section": "gosi",
+          "data": {"is_gosi_registered": True,
+                   "gosi_declared_wage": "6000"}})
     d = c.get(f"/api/employees/{emp_id}/").json()
     assert d["employment"]["gosi_declared_wage"] == "6000.00"
 

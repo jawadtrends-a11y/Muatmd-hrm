@@ -85,38 +85,10 @@ def components(request):
     return Response({"id": c.id, "code": c.code}, status=201)
 
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def component_flags(request, component_id):
-    """
-    تعديل الأعلام الأربعة — يُرجع تحذيرات الاستثناء (ق-23).
-    النظام ينبّه ولا يمنع.
-    """
-    Gate.require(request.user, "payroll.structures")
-    company_id = _company_id(request)
-    qs = Gate.filter_queryset(request.user, "payroll.structures",
-                              PayComponent.objects.all())
-    comp = qs.filter(id=component_id, company_id=company_id).first()
-    if comp is None:
-        return Response({"detail": "المكوّن غير موجود"}, status=404)
-
-    from apps.payroll.services.components import set_component_flags
-    warnings = set_component_flags(
-        comp,
-        is_gosi_subject=request.data.get("is_gosi_subject"),
-        is_eosb_subject=request.data.get("is_eosb_subject"),
-        is_overtime_base=request.data.get("is_overtime_base"),
-        is_wps_subject=request.data.get("is_wps_subject"),
-    )
-    comp.refresh_from_db()
-    return Response({
-        "id": comp.id, "code": comp.code,
-        "is_gosi_subject": comp.is_gosi_subject,
-        "is_eosb_subject": comp.is_eosb_subject,
-        "is_overtime_base": comp.is_overtime_base,
-        "is_wps_subject": comp.is_wps_subject,
-        "warnings": warnings,
-    })
+# ق-186: **حُذف `component_flags`** (قرار جواد).
+#
+# ⚠️ **فالأعلام تُعدَّل من شاشة البنود** بـ`PUT` عامّ — والخدمة
+# `set_component_flags` **محروسةٌ مباشرةً** في `test_components.py`.
 
 
 @api_view(["GET", "PUT"])

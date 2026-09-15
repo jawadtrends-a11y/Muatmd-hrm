@@ -146,15 +146,22 @@ def test_components_listed_with_flags(hr):
 @pytest.mark.django_db(transaction=True)
 def test_flag_exclusion_warns_not_blocks(hr):
     """ق-23: تحذير لا منع."""
+    # ق-186: **ومسار `flags/` حُذف** — فالأعلام تُعدَّل من شاشة
+    # البنود، **والقاعدة تُحرَس في خدمتها**.
+    from apps.payroll.models import PayComponent
+    from apps.payroll.services.components import set_component_flags
+
     comps = hr.get("/api/payroll/components/").json()
-    housing = [c for c in comps if c["code"] == "HOUSING"][0]
-    _put(hr, f"/api/payroll/components/{housing['id']}/flags/",
-         {"is_eosb_subject": True})
-    d = _put(hr, f"/api/payroll/components/{housing['id']}/flags/",
-             {"is_eosb_subject": False}).json()
-    assert d["is_eosb_subject"] is False, "مُنع الاستثناء"
-    assert len(d["warnings"]) == 1
-    assert "القضاء العمالي" in d["warnings"][0]
+    housing_id = [c for c in comps if c["code"] == "HOUSING"][0]["id"]
+    comp = PayComponent.objects.get(id=housing_id)
+
+    set_component_flags(comp, is_eosb_subject=True)
+    warnings = set_component_flags(comp, is_eosb_subject=False)
+
+    comp.refresh_from_db()
+    assert comp.is_eosb_subject is False, "مُنع الاستثناء"
+    assert len(warnings) == 1
+    assert "القضاء العمالي" in warnings[0]
 
 
 # ══════════ الصلاحيات والعزل ══════════

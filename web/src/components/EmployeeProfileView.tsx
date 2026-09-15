@@ -161,6 +161,18 @@ const T: Dict = {
   changedBy: { ar: "عدّله", en: "Changed by" },
   noChange: { ar: "بلا تغيير", en: "No change" },
   currentSalary: { ar: "الراتب الحالي", en: "Current" },
+  changeSalary: { ar: "تغيير الراتب", en: "Change salary" },
+  salaryFrom: { ar: "سريان من", en: "Effective from" },
+  salaryReason: { ar: "السبب", en: "Reason" },
+  salaryNote: { ar: "ملاحظة (اختيارية)", en: "Note (optional)" },
+  salaryHint: {
+    ar: "⚠️ لا تعديل في المكان — كل تغيير سجلٌّ جديد يُنسب لفاعله. والسريان بأثرٍ رجعيّ يدخل المسير التالي.",
+    en: "No in-place edit — each change is a new record",
+  },
+  amountFor: { ar: "المبلغ", en: "Amount" },
+  saveSalary: { ar: "حفظ التغيير", en: "Save" },
+  salarySaved: { ar: "حُفظ التغيير", en: "Saved" },
+  cancel2: { ar: "إلغاء", en: "Cancel" },
   effectiveFrom: { ar: "ساري من", en: "From" },
 
   // التأمينات
@@ -1222,6 +1234,13 @@ function ProfileInner({
   const [allTags, setAllTags] = useState<any[]>([]);
   // ق-138: مخالصة الإجازة
   const [cashout, setCashout] = useState(false);
+
+  // ق-187: **تغيير الراتب** — ⚠️⚠️ **فلا طريقَ له في الواجهة**
+  // (كشفه الجرد): والمسار مبنيٌّ بالكامل **ومعطَّل**.
+  //
+  // ⚠️ **ولا تعديل في المكان**: كل تغييرٍ **سجلٌّ جديد** بتاريخه
+  // وسببه وفاعله — فتعديل الراتب **أخطر تغيير في النظام** (ق-80).
+  const [salaryEdit, setSalaryEdit] = useState(false);
   const [sites, setSites] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
@@ -1743,6 +1762,15 @@ function ProfileInner({
                 <IcPayroll size={19} />
                 <h3 style={{ fontSize: "1rem" }}>{L("currentSalary")}</h3>
               </div>
+              {/* ق-187: **تغيير الراتب** — بصلاحية
+                  `payroll.structures` */}
+              {data.can_edit && (
+                <button className="btn btn-sm btn-primary"
+                        style={{ marginInlineEnd: 6 }}
+                        onClick={() => setSalaryEdit(true)}>
+                  {L("changeSalary")}
+                </button>
+              )}
               {/* ق-138: مخالصة الإجازة — والتنبيه في نافذتها */}
               {data.can_edit && (
                 <button className="btn btn-sm"
@@ -1968,6 +1996,22 @@ function ProfileInner({
       {cashout && data && (
         <CashoutDialog employmentId={data.employment_id} L={L}
                        onClose={() => setCashout(false)} />
+      )}
+
+      {/* ق-187: **تغيير الراتب** — فلا طريقَ له في الواجهة */}
+      {salaryEdit && data && (
+        <SalaryDialog
+          employmentId={data.employment_id}
+          currentLines={(data.salary?.earnings || []).map(
+            (l: { component: string; code?: string;
+                  amount: string }) => ({
+              code: String(l.code || ""),
+              name: l.component,
+              amount: String(l.amount || "0"),
+            }))}
+          L={L}
+          onClose={() => setSalaryEdit(false)}
+          onSaved={() => { setSalaryEdit(false); load(); }} />
       )}
     </div>
   );
@@ -2263,6 +2307,146 @@ function CashoutDialog({ employmentId, L, onClose }: {
             </button>
           )}
           <button className="btn" onClick={onClose}>{L("cancel")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * نافذة تغيير الراتب (ق-187).
+ *
+ * ⚠️⚠️ **ولا تعديل في المكان**: كل تغييرٍ **سجلٌّ جديد** بتاريخه
+ * وسببه — **وتعديل الراتب أخطر تغيير في النظام** (ق-80).
+ *
+ * ⚠️ **والفاعل يُنسب**: فتسجيله مجهولًا **يُفرغ سجلّ العمليات من
+ * معناه** — والخادم يكتبه من الجلسة.
+ */
+function SalaryDialog({
+  employmentId, currentLines, L, onClose, onSaved,
+}: {
+  employmentId: number;
+  currentLines: { code: string; name: string; amount: string }[];
+  L: (k: string) => string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const REASONS = [
+    ["annual_raise", "علاوة سنوية"],
+    ["promotion", "ترقية"],
+    ["adjustment", "تعديل"],
+    ["transfer", "نقل داخل المجموعة"],
+    ["contract_renewal", "تجديد عقد"],
+  ];
+
+  const [lines, setLines] = useState(currentLines);
+  const [from, setFrom] = useState("");
+  const [reason, setReason] = useState("adjustment");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const total = lines.reduce(
+    (a, l) => a + (parseFloat(l.amount) || 0), 0);
+
+  const save = async () => {
+    if (!from) { setErr(L("salaryFrom")); return; }
+    setBusy(true);
+    setErr("");
+    try {
+      await apiPost(`/employees/${employmentId}/salary/`, {
+        effective_from: from,
+        reason,
+        note: note.trim(),
+        lines: lines.map((l) => ({ code: l.code, amount: l.amount })),
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60,
+      background: "rgba(16,28,38,.45)", display: "grid",
+      placeItems: "center", padding: 16,
+    }}>
+      <div className="card" style={{
+        padding: 22, maxWidth: 520, width: "100%",
+        maxHeight: "88vh", overflowY: "auto",
+      }}>
+        <h3 style={{ margin: "0 0 4px" }}>{L("changeSalary")}</h3>
+        <div className="muted" style={{ fontSize: ".78rem",
+                                        lineHeight: 1.9,
+                                        marginBottom: 16 }}>
+          {L("salaryHint")}
+        </div>
+
+        {err && (
+          <div className="card" style={{ borderColor: "var(--danger)",
+                                         color: "var(--danger)",
+                                         marginBottom: 12 }}>
+            <IcAlert size={16} /> {err}
+          </div>
+        )}
+
+        <div className="stack" style={{ gap: 10 }}>
+          {lines.map((l, i) => (
+            <div key={l.code || i} className="row"
+                 style={{ gap: 10, alignItems: "center" }}>
+              <span style={{ flex: 1 }}>{l.name || l.code}</span>
+              <input className="input num" type="number" step="0.01"
+                     style={{ width: 130 }} value={l.amount}
+                     onChange={(e) => setLines(
+                       lines.map((x, j) => j === i
+                         ? { ...x, amount: e.target.value } : x))} />
+            </div>
+          ))}
+        </div>
+
+        <div className="spread" style={{ marginTop: 12,
+                                         paddingTop: 10,
+                                         borderTop: "1px solid var(--line)" }}>
+          <strong>{L("amountFor")}</strong>
+          <span className="num" style={{ fontWeight: 700 }}>
+            {total.toFixed(2)}
+          </span>
+        </div>
+
+        <div className="stack" style={{ gap: 12, marginTop: 16 }}>
+          <label className="field">
+            <span className="label">{L("salaryFrom")}</span>
+            <DateField value={from} onChange={setFrom} />
+          </label>
+
+          <label className="field">
+            <span className="label">{L("salaryReason")}</span>
+            <select className="select" value={reason}
+                    onChange={(e) => setReason(e.target.value)}>
+              {REASONS.map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span className="label">{L("salaryNote")}</span>
+            <input className="input" value={note}
+                   onChange={(e) => setNote(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="row" style={{ gap: 8, marginTop: 18,
+                                      justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost" onClick={onClose}>
+            {L("cancel2")}
+          </button>
+          <button className="btn btn-primary" disabled={busy || !from}
+                  onClick={save}>
+            {busy ? "…" : L("saveSalary")}
+          </button>
         </div>
       </div>
     </div>

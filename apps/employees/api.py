@@ -348,39 +348,13 @@ def salary_structures(request, employment_id):
                      "gross_monthly": str(s.gross_monthly)}, status=201)
 
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def registration_flags(request, employment_id):
-    """
-    أعلام التسجيل النظامي (ق-15) — التوظيف مستقل عن التسجيل.
-    النظام يعكس الواقع ولا يفرض التسجيل.
-    """
-    Gate.require(request.user, "employees.edit")
-    company_id = _company_id(request)
-    qs = Gate.filter_queryset(request.user, "employees.edit",
-                              Employment.objects.all())
-    emp = qs.filter(id=employment_id, company_id=company_id).first()
-    if emp is None:
-        return Response({"detail": "الموظف غير موجود"}, status=404)
-
-    for field in ("is_gosi_registered", "gosi_establishment_no",
-                  "gosi_declared_wage", "is_mol_registered",
-                  "mol_contract_no", "include_in_wps",
-                  "registration_note", "gosi_borne_by_company"):
-        if field in request.data:
-            setattr(emp, field, request.data[field])
-    emp.save()
-
-    return Response({
-        "id": emp.id,
-        "is_gosi_registered": emp.is_gosi_registered,
-        "is_mol_registered": emp.is_mol_registered,
-        "include_in_wps": emp.include_in_wps,
-        "counts_in_nitaqat": emp.counts_in_nitaqat,
-        "gosi_borne_by_company": emp.gosi_borne_by_company,
-        "note": ("نطاقات تحتسب المسجّلين في قوى فقط. حقوق نهاية الخدمة "
-                 "والإجازات تُحتسب للجميع بغض النظر عن التسجيل."),
-    })
+# ق-186: **حُذف `registration_flags`** (قرار جواد).
+#
+# ⚠️ **فأعلام التسجيل تُعدَّل من تبويب التأمينات** عبر
+# `/employees/<id>/update/` — **وحلّان لمسألةٍ واحدة يُربكان**.
+#
+# **والحقول باقية**: `is_mol_registered` و`counts_in_nitaqat` —
+# فنطاقات التزامٌ نظاميّ، **والمحذوف مسارٌ بديل لا ميزة**.
 
 
 # ══════════════════ الملف الشخصي للموظف (ق-54) ══════════════════

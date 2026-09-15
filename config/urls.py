@@ -91,7 +91,6 @@ urlpatterns = [
     path("api/billing/subscription/", billing_api.my_subscription, name="my-subscription"),
     path("api/billing/estimate/", billing_api.billing_estimate, name="billing-estimate"),
     path("api/payroll/components/", payroll_api.components, name="pay-components"),
-    path("api/payroll/components/<int:component_id>/flags/", payroll_api.component_flags, name="pay-component-flags"),
     path("api/payroll/components/<int:component_id>/", payroll_api.component_detail, name="pay-component-detail"),
     path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
     # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
@@ -186,7 +185,6 @@ urlpatterns = [
          name="task-detail"),
     path("api/employees/<int:employment_id>/", employees_api.employee_detail, name="employee-detail"),
     path("api/employees/<int:employment_id>/salary/", employees_api.salary_structures, name="salary-structures"),
-    path("api/employees/<int:employment_id>/registration/", employees_api.registration_flags, name="registration-flags"),
     # التغيير الوظيفي (ق-82)
     path("api/employees/<int:employment_id>/job-changes/", employees_api.job_changes, name="job-changes"),
     path("api/job-changes/<int:change_id>/decide/", employees_api.decide_job_change, name="job-change-decide"),
@@ -563,7 +561,6 @@ urlpatterns = [
     path("api/employees/<int:employment_id>/update/", employees_api.update_employee_profile, name="employee-update"),
     path("api/employees/<int:employment_id>/dependents/", employees_api.employee_dependents, name="employee-dependents"),
     path("api/employees/<int:employment_id>/contacts/", employees_api.employee_contacts, name="employee-contacts"),
-    path("api/me/editable-fields/", leaves_api.my_editable_fields, name="my-editable-fields"),
     # الإنابة أثناء الغياب (ق-75)
     path("api/me/deputies/", leaves_api.eligible_deputies_view, name="eligible-deputies"),
     path("api/me/delegations/", leaves_api.my_delegations, name="my-delegations"),
