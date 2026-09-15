@@ -509,7 +509,6 @@ urlpatterns = [
     path("api/me/custom-request-types/",
          custom_types_api.my_custom_types, name="my-custom-request-types"),
     path("api/requests/", leaves_api.submit_request, name="submit-request"),
-    path("api/me/profile/", employees_api.my_profile, name="my-profile"),
     path("api/me/attendance/", attendance_api.my_attendance, name="my-attendance"),
     path("api/me/leaves-detail/", leaves_api.my_leaves_detail, name="my-leaves-detail"),
     path("api/me/letters/", leaves_api.my_letters, name="my-letters"),
