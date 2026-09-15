@@ -539,6 +539,9 @@ urlpatterns = [
          name="letter-templates"),
     path("api/letters/templates/<int:template_id>/",
          letters_api.template_detail, name="letter-template-detail"),
+    # ق-192: ترويسة القالب وتذييله
+    path("api/letters/templates/<int:template_id>/image/",
+         letters_api.template_image, name="letter-template-image"),
     path("api/letters/templates/<int:template_id>/preview/",
          letters_api.preview_template, name="letter-template-preview"),
     path("api/letters/issue/", letters_api.issue_letter,

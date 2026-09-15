@@ -24,6 +24,11 @@ def _tpl_json(t):
         "body_ar": t.body_ar, "includes_salary": t.includes_salary,
         "valid_days": t.valid_days, "is_active": t.is_active,
         "issued_count": t.issued.count(),
+        # ق-192: **الترويسة والتذييل** — صورتان (قرار جواد)
+        "header_url": (f"/files/{t.header_image_id}/"
+                       if t.header_image_id else ""),
+        "footer_url": (f"/files/{t.footer_image_id}/"
+                       if t.footer_image_id else ""),
     }
 
 
@@ -110,6 +115,13 @@ def template_detail(request, template_id):
         t.includes_salary = bool(d["includes_salary"])
     if "is_active" in d:
         t.is_active = bool(d["is_active"])
+
+    # ⚠️ **وفراغٌ يعني: احذف الصورة** — فالقالب يُطبع على ورقٍ
+    # مُترَوَّس سلفًا (ق-192).
+    for fld, key in (("header_image", "header_file_id"),
+                     ("footer_image", "footer_file_id")):
+        if key in d:
+            setattr(t, f"{fld}_id", d[key] or None)
     if "valid_days" in d:
         t.valid_days = int(d["valid_days"] or 30)
     t.save()
@@ -229,3 +241,48 @@ def letter_detail(request, letter_id):
         "expired": bool(letter.valid_until
                         and letter.valid_until < _d.today()),
     })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def template_image(request, template_id):
+    """
+    رفع ترويسة القالب أو تذييله (ق-192).
+
+    ⚠️ **وشعار الشركة لا يكفي** (قرار جواد): **فللشركات ترويسةٌ
+    مطبوعة** فيها عنوانها وسجلّها وأرقام تواصلها — **والصورة
+    تحفظها كما هي**.
+    """
+    from apps.core.models_files import FileKind
+    from apps.core.services import files as files_svc
+
+    Gate.require(request.user, "employees.edit")
+    Features.require(_company_id(request), "letter_templates")
+
+    t = LetterTemplate.objects.filter(
+        id=template_id, company_id=_company_id(request)).first()
+    if t is None:
+        return Response({"detail": "القالب غير موجود"}, status=404)
+
+    slot = str(request.data.get("slot", "header")).strip()
+    if slot not in ("header", "footer"):
+        return Response({"detail": "الموضع: header أو footer"},
+                        status=400)
+
+    up = request.FILES.get("file")
+    if up is None:
+        return Response({"detail": "أرفق الصورة"}, status=400)
+
+    try:
+        stored, _dup = files_svc.store(
+            uploaded=up, kind=FileKind.LOGO, account=t.account,
+            company=t.company,
+            uploaded_by=getattr(request.user, "person", None))
+    except Exception as e:          # noqa: BLE001
+        return Response({"detail": str(e)}, status=400)
+
+    setattr(t, f"{slot}_image", stored)
+    t.save(update_fields=[f"{slot}_image"])
+    return Response({"slot": slot, "file_id": stored.id,
+                     "url": f"/files/{stored.id}/"},
+                    status=status.HTTP_201_CREATED)

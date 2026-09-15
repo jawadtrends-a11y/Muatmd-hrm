@@ -6,9 +6,16 @@
  * ببيانات موظفٍ حقيقيّ قبل الاعتماد.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, ApiError, apiUpload } from "@/lib/api";
+import AuthImage from "@/components/AuthImage";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcDoc } from "@/components/Icons";
+
+/** ق-192: أدوات التنسيق — النصّ يبقى نصًّا */
+const FMT_TOKENS: [string, string][] = [
+  ["**", "fmtBold"], ["*", "fmtItalic"],
+  ["\n\n", "fmtPara"], ["— ", "fmtBullet"],
+];
 
 const T: Dict = {
   title: { ar: "قوالب الخطابات", en: "Letter templates" },
@@ -41,6 +48,21 @@ const T: Dict = {
     en: "Leave empty for the requester to fill",
   },
   body: { ar: "نصّ الخطاب", en: "Body" },
+  fmtBold: { ar: "عريض", en: "Bold" },
+  fmtItalic: { ar: "مائل", en: "Italic" },
+  fmtPara: { ar: "فقرة", en: "Paragraph" },
+  fmtBullet: { ar: "نقطة", en: "Bullet" },
+  header: { ar: "الترويسة", en: "Header" },
+  footer: { ar: "التذييل", en: "Footer" },
+  uploadImg: { ar: "رفع صورة", en: "Upload" },
+  removeImg: { ar: "حذف", en: "Remove" },
+  noImg: { ar: "بلا صورة", en: "None" },
+  saveFirst: { ar: "احفظ القالب أولًا ثم ارفع الصور",
+               en: "Save the template first" },
+  imgHint: {
+    ar: "⚠️ تُطبع أعلى الخطاب وأسفله — واتركها فارغةً إن كان الورق مُترَوَّسًا",
+    en: "Printed at top and bottom",
+  },
   vars: { ar: "المتغيّرات", en: "Variables" },
   varsHint: {
     ar: "اضغط المتغيّر لإدراجه في موضع المؤشّر",
@@ -58,6 +80,7 @@ const T: Dict = {
 type Tpl = {
   id: number; code: string; name_ar: string; heading_ar: string;
   addressee_ar: string; body_ar: string; includes_salary: boolean;
+  header_url?: string; footer_url?: string;
   valid_days: number; is_active: boolean; issued_count: number;
 };
 type Variable = { key: string; label_ar: string; salary: boolean };
@@ -230,6 +253,54 @@ function TplDialog({ tpl, vars, L, onClose, onSaved }: {
   const [err, setErr] = useState("");
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
+  // ق-192: **ترويسة القالب وتذييله** — صورتان (قرار جواد).
+  //
+  // ⚠️ **وشعار الشركة لا يكفي**: **فللشركات ترويسةٌ مطبوعة**
+  // فيها عنوانها وسجلّها وأرقام تواصلها.
+  const [headerUrl, setHeaderUrl] = useState(tpl?.header_url || "");
+  const [footerUrl, setFooterUrl] = useState(tpl?.footer_url || "");
+  const [imgBusy, setImgBusy] = useState("");
+  const hRef = useRef<HTMLInputElement>(null);
+  const fRef = useRef<HTMLInputElement>(null);
+
+  const upImg = async (slot: "header" | "footer", file: File) => {
+    // ⚠️ **ولا رفعَ قبل الحفظ**: فالقالب الجديد **بلا رقمٍ بعد**
+    if (!tpl) { setErr(L("saveFirst")); return; }
+    setImgBusy(slot);
+    setErr("");
+    try {
+      const out = await apiUpload<{ url: string }>(
+        `/letters/templates/${tpl.id}/image/`, file, "file",
+        { slot });
+      if (slot === "header") setHeaderUrl(out.url);
+      else setFooterUrl(out.url);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setImgBusy(""); }
+  };
+
+  // ق-192: **تنسيقٌ بسيط** — والنصّ يبقى نصًّا، فالقالب
+  // يُصدَّر PDF **ولا يحتمل HTML كاملًا**.
+  const wrapSelection = (token: string) => {
+    const el = bodyRef.current;
+    if (!el) { setF((v) => ({ ...v, body_ar: v.body_ar + token }));
+               return; }
+    const a = el.selectionStart ?? 0;
+    const b = el.selectionEnd ?? a;
+    const body = f.body_ar;
+    const mid = body.slice(a, b);
+    const next = token === "\n\n" || token === "— "
+      ? body.slice(0, a) + token + body.slice(a)
+      : body.slice(0, a) + token + mid + token + body.slice(b);
+    setF({ ...f, body_ar: next });
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = a + token.length + mid.length
+        + (token === "\n\n" || token === "— " ? 0 : 0);
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
   const insert = (key: string) => {
     const el = bodyRef.current;
     const token = `{{${key}}}`;
@@ -344,11 +415,71 @@ function TplDialog({ tpl, vars, L, onClose, onSaved }: {
 
         <label className="field" style={{ marginTop: 14 }}>
           <span className="label">{L("body")}</span>
-          <textarea className="input" rows={9} ref={bodyRef}
+          {/* ق-192: ⚠️ **ومربّع المحتوى أكبر وبتنسيق** (بلاغ
+              جواد): فخطابٌ يُكتب في تسعة أسطر **يُكتب أعمى**. */}
+          <div className="row" style={{ gap: 4, marginBottom: 6,
+                                        flexWrap: "wrap" }}>
+            {FMT_TOKENS.map(([tok, key]) => (
+              <button key={key} type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: ".78rem" }}
+                      onClick={() => wrapSelection(tok)}>
+                {L(key)}
+              </button>
+            ))}
+          </div>
+          <textarea className="input" rows={20} ref={bodyRef}
+                    style={{ lineHeight: 2, fontSize: ".95rem",
+                             minHeight: 340, resize: "vertical" }}
                     value={f.body_ar}
                     onChange={(e) => setF({ ...f,
                       body_ar: e.target.value })} />
         </label>
+
+        {/* ق-192: **الترويسة والتذييل** — صورتان */}
+        <div style={{ marginTop: 16 }}>
+          <div className="muted" style={{ fontSize: ".78rem",
+                                          marginBottom: 8,
+                                          lineHeight: 1.9 }}>
+            {L("imgHint")}
+          </div>
+          <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
+            {([["header", headerUrl, hRef] as const,
+               ["footer", footerUrl, fRef] as const]).map(
+              ([slot, url, ref]) => (
+              <div key={slot} style={{ flex: "1 1 200px" }}>
+                <div className="label">{L(slot)}</div>
+                <div style={{
+                  height: 70, border: "1px dashed var(--line)",
+                  borderRadius: "var(--radius-sm)", display: "grid",
+                  placeItems: "center", overflow: "hidden",
+                  background: "var(--paper-2)", marginBottom: 6,
+                }}>
+                  {url ? (
+                    <AuthImage src={url} alt=""
+                               style={{ maxWidth: "100%",
+                                        maxHeight: "100%",
+                                        objectFit: "contain" }} />
+                  ) : (
+                    <span className="muted"
+                          style={{ fontSize: ".76rem" }}>
+                      {L("noImg")}
+                    </span>
+                  )}
+                </div>
+                <input ref={ref} type="file" accept="image/*"
+                       style={{ display: "none" }}
+                       onChange={(e) => e.target.files?.[0]
+                         && upImg(slot, e.target.files[0])} />
+                <button type="button" className="btn btn-sm"
+                        disabled={imgBusy === slot}
+                        onClick={() => ref.current?.click()}>
+                  {imgBusy === slot ? "…" : L("uploadImg")}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <label className="row" style={{ gap: 8, marginTop: 12,
                                         cursor: "pointer",

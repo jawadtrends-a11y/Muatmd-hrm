@@ -39,6 +39,22 @@ class LetterTemplate(CompanyScopedModel):
         _("يتضمّن الراتب"), default=False,
         help_text=_("الطالب يختار إظهاره — ولا يُظهر إلا بطلبه"))
 
+    # ق-192: **ترويسة الخطاب وتذييله** (قرار جواد) — صورتان.
+    #
+    # ⚠️ **وشعار الشركة لا يكفي**: **فللشركات ترويسةٌ مطبوعة**
+    # فيها عنوانها وسجلّها وأرقام تواصلها — والصورة تحفظها كما هي.
+    #
+    # ⚠️ **وفارغٌ يعني: بلا ترويسة** — فالقالب يُطبع على ورقٍ
+    # مُترَوَّس سلفًا.
+    header_image = models.ForeignKey(
+        "core.StoredFile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="letter_headers",
+        verbose_name=_("صورة الترويسة"))
+    footer_image = models.ForeignKey(
+        "core.StoredFile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="letter_footers",
+        verbose_name=_("صورة التذييل"))
+
     valid_days = models.PositiveSmallIntegerField(
         _("مدّة الصلاحية (يومًا)"), default=30)
     is_active = models.BooleanField(_("مفعّل"), default=True)
