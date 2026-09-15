@@ -202,6 +202,9 @@ urlpatterns = [
          name="day-import-template"),
     path("api/attendance/import/", attendance_api.day_import,
          name="day-import"),
+    # ق-184: الإضافيُّ المحتسب ليومٍ — تملؤه شاشة الطلب
+    path("api/me/overtime/", attendance_api.my_overtime_for_date,
+         name="my-overtime"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
     # أجهزة البصمة
@@ -215,7 +218,6 @@ urlpatterns = [
     path("api/attendance/<int:employment_id>/punches/", attendance_api.punches, name="punches"),
     path("api/attendance/<int:employment_id>/days/", attendance_api.attendance_days, name="attendance-days"),
     path("api/attendance/<int:employment_id>/summary/", attendance_api.monthly_summary, name="attendance-summary"),
-    path("api/attendance/days/<int:day_id>/overtime/", attendance_api.approve_day_overtime, name="approve-overtime"),
     path("api/attendance/days/<int:day_id>/adjust/", attendance_api.adjust_day, name="adjust-day"),
     path("api/payroll/runs/<int:run_id>/overview/", outputs_api.run_overview, name="run-overview"),
     path("api/payroll/runs/<int:run_id>/tab/<str:tab>/", outputs_api.run_tab, name="run-tab"),

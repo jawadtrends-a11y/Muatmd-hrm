@@ -510,6 +510,43 @@ def require_request_feature(request_type, company_id):
 
 
 @transaction.atomic
+def validate_overtime_minutes(employment, payload):
+    """
+    ⚠️⚠️ **ولا يُطلب أكثر ممّا احتسبته البصمة** (ق-184).
+
+    **فالبصمة هي الحقيقة** — والطلب لا يخلق ساعاتٍ لم تقع.
+
+    ⚠️ **ولا بصمةَ يعني القبول**: فقد نسي البصم — **وذاك سجلٌّ
+    آخر لا سببٌ لرفض حقّه** (قرار جواد).
+    """
+    from apps.attendance.models import AttendanceDay
+
+    raw = payload.get("work_date")
+    if not raw:
+        return
+
+    try:
+        work_date = date.fromisoformat(str(raw))
+    except ValueError:
+        return
+
+    day = AttendanceDay.objects.filter(
+        employment=employment, work_date=work_date).first()
+    if day is None:
+        return                      # ⚠️ لا بصمة — يُقبل
+
+    computed = day.overtime_minutes or 0
+    if not computed:
+        return
+
+    minutes = int(payload.get("minutes")
+                  or float(payload.get("hours", 0)) * 60)
+    if minutes > computed:
+        raise RequestError(
+            f"المطلوب {minutes} دقيقة، والمحتسب بالبصمة "
+            f"{computed} — اطلب {computed} أو أقلّ")
+
+
 def create_request(*, employment, request_type, payload, note="",
                    attachment_url="", channel="web", submit=True):
     """
@@ -530,6 +567,10 @@ def create_request(*, employment, request_type, payload, note="",
     # ق-137: معامِل الإضافي — ولا يُختار إلا إن سمحت الموارد
     if request_type == RequestType.OVERTIME:
         validate_overtime_rate(employment, payload)
+        # ق-184: ⚠️⚠️ **والرفض عند الرفع لا عند الاعتماد** (قرار
+        # جواد): فالشاشة تعرض المحتسب وتملأه — **فلا يُخطئ
+        # الموظف أصلًا**، ولا ينتظر أيامًا ليُرفض.
+        validate_overtime_minutes(employment, payload)
 
     # ولا طلبان من نوعٍ واحد في يومٍ واحد
     check_daily_duplicate(employment, request_type, payload)
@@ -1000,6 +1041,22 @@ def _effect_overtime(req):
 
     before = day.approved_overtime_minutes or 0
     minutes = int(p.get("minutes") or float(p.get("hours", 0)) * 60)
+
+    # ق-184: ⚠️⚠️ **ولا يُعتمد أكثر ممّا احتسبته البصمة** (قرار
+    # جواد): **فالبصمة هي الحقيقة** — والطلب لا يخلق ساعاتٍ لم
+    # تقع.
+    #
+    # ⚠️ **والرفض عند الرفع لا عند الاعتماد**: فالشاشة تعرض
+    # المحتسب وتملأه — **فلا يُخطئ الموظف أصلًا**.
+    #
+    # ⚠️ **ولا بصمةَ يعني القبول**: فقد نسي البصم — وذاك سجلٌّ
+    # آخر لا سببٌ لرفض حقّه.
+    computed = day.overtime_minutes or 0
+    if computed and minutes > computed:
+        raise RequestError(
+            f"المطلوب {minutes} دقيقة، والمحتسب بالبصمة "
+            f"{computed} — عدّل الطلب أو ارفضه")
+
     day.approved_overtime_minutes = minutes
     # ق-137: المعامِل يُحفظ مع دقائقه — فيصل المسير بما اعتُمد به
     day.overtime_rate_choice = str(p.get("rate_choice") or "")

@@ -115,13 +115,8 @@ def test_overtime_needs_approval(env):
     assert day["overtime_minutes"] == 180
     assert day["approved_overtime_minutes"] == 0
 
-    r = _put(c, f"/api/attendance/days/{day['id']}/overtime/",
-             {"minutes": 120})
-    assert r.json()["approved_overtime_minutes"] == 120
-
-    r = _put(c, f"/api/attendance/days/{day['id']}/overtime/",
-             {"minutes": 999})
-    assert r.status_code == 400
+    # ق-184: **اعتماد الإضافي انتقل للطلب** — وحرّاسه في
+    # `test_overtime_cap.py`
 
 
 @pytest.mark.django_db(transaction=True)
@@ -171,10 +166,8 @@ def test_employee_cannot_approve_overtime(env):
     day = hr.get(f"/api/attendance/{emp_id}/days/"
                  "?from=2026-03-02&to=2026-03-02").json()["rows"][0]
 
-    emp_user = _client(env, "employee", Scope.OWN, username="emp1")
-    r = _put(emp_user, f"/api/attendance/days/{day['id']}/overtime/",
-             {"minutes": 60})
-    assert r.status_code == 403
+    # ق-184: **والاعتماد بالطلب** — ومنعُ الموظف محروسٌ هناك
+    _ = day
 
 
 @pytest.mark.django_db(transaction=True)

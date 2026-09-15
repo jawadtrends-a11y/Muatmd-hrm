@@ -277,34 +277,13 @@ def attendance_days(request, employment_id):
     })
 
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def approve_day_overtime(request, day_id):
-    """
-    اعتماد العمل الإضافي — لا يدخل المسير إلا بعده.
-    """
-    Gate.require(request.user, "attendance.approve")
-    qs = Gate.filter_queryset(request.user, "attendance.approve",
-                              AttendanceDay.objects.all())
-    day = qs.filter(id=day_id, company_id=_company_id(request)).first()
-    if day is None:
-        return Response({"detail": "السجل غير موجود"}, status=404)
-
-    person = getattr(request.user, "person", None)
-    try:
-        approve_overtime(attendance_day=day,
-                         minutes=int(request.data.get("minutes", 0)),
-                         approved_by_person=person)
-    except AttendanceError as e:
-        return Response({"detail": str(e)}, status=400)
-    except (TypeError, ValueError):
-        return Response({"detail": "عدد الدقائق غير صالح"}, status=400)
-
-    day.refresh_from_db()
-    return Response({"id": day.id,
-                     "overtime_minutes": day.overtime_minutes,
-                     "approved_overtime_minutes":
-                         day.approved_overtime_minutes})
+# ق-184: **حُذف `approve_day_overtime`** (قرار جواد).
+#
+# ⚠️⚠️ **فحلّان لمسألةٍ واحدة يُربكان**: والإضافيُّ يُعتمد **بطلبٍ
+# يمرّ بسلسلته** — لا باعتمادٍ مباشرٍ يلتفّ عليها.
+#
+# **والقاعدتان انتقلتا لمسار الطلب**: لا يُعتمد أكثر من المحتسب،
+# ولا يعتمد الموظف لنفسه.
 
 
 @api_view(["PUT"])
@@ -1395,3 +1374,48 @@ def day_import(request):
         return Response({"detail": str(e), "code": "rolled_back"},
                         status=400)
     return Response(res, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_overtime_for_date(request):
+    """
+    الإضافيُّ المحتسب بالبصمة ليومٍ بعينه (ق-184).
+
+    ⚠️⚠️ **فالشاشة تعرضه وتملأه** (قرار جواد): **فلا يُخطئ الموظف
+    أصلًا** — ولا ينتظر أيامًا ليُرفض طلبه.
+
+    ⚠️ **ولا بصمةَ يعني القبول**: فقد نسي البصم — **وذاك سجلٌّ
+    آخر لا سببٌ لرفض حقّه**.
+    """
+    from datetime import date as _date
+
+    from apps.attendance.models import AttendanceDay
+
+    emp = _my_employment(request)
+    if emp is None:
+        return Response({"detail": "لا ملف موظف مرتبط بحسابك"},
+                        status=404)
+
+    try:
+        work_date = _date.fromisoformat(
+            str(request.GET.get("date", "")))
+    except ValueError:
+        return Response({"detail": "تاريخ غير صالح"}, status=400)
+
+    day = AttendanceDay.objects.filter(
+        employment=emp, work_date=work_date).first()
+
+    if day is None:
+        return Response({
+            "has_record": False, "computed_minutes": None,
+            "note": "لا سجلّ حضور لهذا اليوم — يمكنك تقديم الطلب",
+        })
+
+    return Response({
+        "has_record": True,
+        "computed_minutes": day.overtime_minutes or 0,
+        "approved_minutes": day.approved_overtime_minutes or 0,
+        "first_in": day.first_in,
+        "last_out": day.last_out,
+    })
