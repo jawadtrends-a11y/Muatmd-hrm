@@ -487,7 +487,14 @@ function EmployeeRecord({
                   {data!.rows.map((d) => (
                     <tr key={d.id}>
                       <td style={{ textAlign: "end" }}>
-                        <span className="num">{d.work_date}</span>
+                        {/* ق-185: ⚠️ **وفتحُ تفصيل اليوم** —
+                            بصماتُه الخام وتعديلُه اليدويّ */}
+                        <a className="num"
+                           style={{ color: "var(--teal)" }}
+                           href={`/attendance/day/${d.id}?emp=${
+                             employmentId}&date=${d.work_date}`}>
+                          {d.work_date}
+                        </a>
                       </td>
                       <td>
                         <span className={`badge ${TONE[d.status] || "badge"}`}>
