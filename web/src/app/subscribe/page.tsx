@@ -8,7 +8,7 @@
  * والمزايا تراكمية: الباقة الأعلى «تشمل ما قبلها بالإضافة إلى…».
  */
 import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPost, ApiError, openForView } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck } from "@/components/Icons";
 
@@ -52,6 +52,13 @@ const T: Dict = {
     ar: "بيانات بطاقتك تُرسل لبوابة الدفع مباشرةً — ولا تمرّ بخوادمنا",
     en: "Card details go straight to the payment gateway",
   },
+  invoices: { ar: "الفواتير", en: "Invoices" },
+  invoiceNo: { ar: "رقم الفاتورة", en: "Invoice no." },
+  period: { ar: "الفترة", en: "Period" },
+  status: { ar: "الحالة", en: "Status" },
+  view: { ar: "عرض", en: "View" },
+  cards: { ar: "البطاقات المحفوظة", en: "Saved cards" },
+  defaultCard: { ar: "الافتراضية", en: "Default" },
   preparing: { ar: "جارٍ التجهيز…", en: "Preparing…" },
   close: { ar: "إغلاق", en: "Close" },
 };
@@ -93,6 +100,33 @@ export default function SubscribePage() {
   const [msg, setMsg] = useState("");
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [paying, setPaying] = useState<number | null>(null);
+
+  // ق-181: **الفواتير والبطاقات** — كشفهما الجرد يتيمَين.
+  //
+  // ⚠️ **والعميل يرى ما يدفع**: فاشتراكٌ بلا سجلٍّ **يُدفع على
+  // الثقة وحدها**.
+  type Invoice = {
+    id: number; invoice_no: string; period: string;
+    total: string; status: string; status_label?: string;
+    issued_at?: string; paid_at?: string | null;
+    // ق-182: **الفاتورة الزكاتية** من «معتمد المحاسبيّ»
+    zatca_invoice_no?: string; zatca_issued_at?: string | null;
+  };
+  type Card = {
+    id: number; brand?: string; last4?: string;
+    exp_month?: number; exp_year?: number; is_default?: boolean;
+  };
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+
+  useEffect(() => {
+    apiGet<Invoice[] | { rows: Invoice[] }>("/account/invoices/")
+      .then((d) => setInvoices(Array.isArray(d) ? d : (d.rows || [])))
+      .catch(() => setInvoices([]));
+    apiGet<Card[] | { rows: Card[] }>("/account/cards/")
+      .then((d) => setCards(Array.isArray(d) ? d : (d.rows || [])))
+      .catch(() => setCards([]));
+  }, []);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -391,6 +425,90 @@ export default function SubscribePage() {
               {L("payHint")}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ق-181: **الفواتير** — فالعميل يرى ما يدفع */}
+      {invoices.length > 0 && (
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div style={{ padding: "14px 18px 0" }}>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>
+              {L("invoices")}
+            </h3>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{L("invoiceNo")}</th>
+                <th>{L("period")}</th>
+                <th style={{ width: 120 }}>{L("total")}</th>
+                <th style={{ width: 110 }}>{L("status")}</th>
+                <th style={{ width: 90 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td>
+                    {/* ⚠️ **والزكاتية أوّلًا** — فهي المعتمدة
+                        نظامًا، والداخليّ مرجعُ الدفع */}
+                    <span className="num">
+                      {inv.zatca_invoice_no || inv.invoice_no}
+                    </span>
+                    {inv.zatca_invoice_no && (
+                      <div className="muted num"
+                           style={{ fontSize: ".72rem" }}>
+                        {inv.invoice_no}
+                      </div>
+                    )}
+                  </td>
+                  <td className="muted" style={{ fontSize: ".84rem" }}>
+                    {inv.period}
+                  </td>
+                  <td><span className="num">{inv.total}</span></td>
+                  <td>
+                    <span className={`badge ${
+                      inv.status === "paid" ? "badge-ok" : "badge-warn"}`}>
+                      {inv.status_label || inv.status}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "end" }}>
+                    <button className="btn btn-sm btn-ghost"
+                      onClick={() => openForView(
+                        `/account/invoices/${inv.id}/`)}>
+                      {L("view")}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ق-181: **البطاقات المحفوظة** */}
+      {cards.length > 0 && (
+        <div className="card" style={{ padding: 18 }}>
+          <h3 style={{ margin: "0 0 10px", fontSize: "1rem" }}>
+            {L("cards")}
+          </h3>
+          {cards.map((c) => (
+            <div key={c.id} className="row"
+                 style={{ gap: 10, alignItems: "center",
+                          padding: "7px 0" }}>
+              <span className="num">
+                {(c.brand || "").toUpperCase()} ···· {c.last4 || "----"}
+              </span>
+              {c.exp_month && (
+                <span className="muted num" style={{ fontSize: ".8rem" }}>
+                  {String(c.exp_month).padStart(2, "0")}/{c.exp_year}
+                </span>
+              )}
+              {c.is_default && (
+                <span className="badge badge-ok">{L("defaultCard")}</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

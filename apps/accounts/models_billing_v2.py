@@ -105,6 +105,31 @@ class Invoice(AccountScopedModel):
 
     invoice_no = models.CharField(_("رقم الفاتورة"), max_length=30,
                                   unique=True)
+
+    # ── ق-182: الفاتورة الزكاتية من «معتمد المحاسبيّ» ──
+    #
+    # ⚠️⚠️ **والفوترة في موضعين تعني رقمين متضاربين** (قرار جواد):
+    # **فالمحاسبيّ مصدر الحقيقة** — يُصدرها ويرسلها، **والسوبر
+    # أدمن يُسجّلها هنا**.
+    #
+    # ⚠️ **والفاتورة الداخلية تبقى**: فهي **مرجع الدفع لميسر** —
+    # وبلاها لا تتمّ عملية.
+    #
+    # ⚠️ **والعميل يرى الزكاتية**: فهي المعتمدة نظامًا.
+    zatca_invoice_no = models.CharField(
+        _("رقم الفاتورة الزكاتية"), max_length=60, blank=True)
+    zatca_issued_at = models.DateField(
+        _("تاريخ إصدارها"), null=True, blank=True)
+    zatca_file = models.ForeignKey(
+        "core.StoredFile", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="zatca_invoices",
+        verbose_name=_("نسخة الفاتورة"))
+    zatca_recorded_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="recorded_zatca_invoices",
+        verbose_name=_("سجّلها"))
+    zatca_recorded_at = models.DateTimeField(
+        _("وقت التسجيل"), null=True, blank=True)
     period_start = models.DateField(_("بداية الفترة"))
     period_end = models.DateField(_("نهاية الفترة"))
     cycle = models.CharField(_("الدورة"), max_length=20,

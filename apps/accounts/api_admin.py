@@ -606,3 +606,68 @@ def support_ticket_detail(request, ticket_id):
                 "author": m.author_name, "at": m.created_at,
             } for m in t.messages.all()],
         })
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@requires("invoice.mark_paid")
+def admin_record_zatca_invoice(request, invoice_id):
+    """
+    تسجيل الفاتورة الزكاتية الصادرة من «معتمد المحاسبيّ» (ق-182).
+
+    ⚠️⚠️ **والفوترة في موضعين تعني رقمين متضاربين** (قرار جواد):
+    **فالمحاسبيّ مصدر الحقيقة** — يُصدرها ويرسلها، **وتُسجَّل هنا
+    للعميل**.
+
+    ⚠️ **والفاتورة الداخلية تبقى**: فهي **مرجع الدفع لميسر**.
+    """
+    from django.utils import timezone
+
+    inv = Invoice.objects.filter(id=invoice_id).first()
+    if inv is None:
+        return Response({"detail": "الفاتورة غير موجودة"}, status=404)
+
+    no = str(request.data.get("zatca_invoice_no", "")).strip()
+    if not no:
+        return Response({"detail": "رقم الفاتورة الزكاتية مطلوب"},
+                        status=400)
+
+    # ⚠️ **ولا يتكرّر رقمٌ زكاتيّ**: فرقمان متطابقان **يجعلان
+    # المطابقة مع المحاسبيّ مستحيلة**.
+    dup = Invoice.objects.filter(
+        zatca_invoice_no=no).exclude(id=inv.id).first()
+    if dup is not None:
+        return Response({
+            "detail": (f"الرقم {no} مسجَّلٌ على الفاتورة "
+                       f"{dup.invoice_no}"),
+            "code": "duplicate_zatca_no"}, status=409)
+
+    issued = request.data.get("zatca_issued_at") or None
+    if issued:
+        from datetime import date as _date
+        try:
+            issued = _date.fromisoformat(str(issued))
+        except ValueError:
+            return Response({"detail": "تاريخ غير صالح"}, status=400)
+
+    with account_scope(inv.account_id):
+        inv.zatca_invoice_no = no
+        inv.zatca_issued_at = issued
+        inv.zatca_recorded_by = request.user
+        inv.zatca_recorded_at = timezone.now()
+        inv.save(update_fields=[
+            "zatca_invoice_no", "zatca_issued_at",
+            "zatca_recorded_by", "zatca_recorded_at"])
+
+    acc = Account.objects.get(id=inv.account_id)
+    # ⚠️ **وحدثٌ مسجَّل لا مخترَع**: فحارس المعمار يمسك المفاتيح
+    # غير المسجّلة — **ومفتاحٌ يتيمٌ لا يُصفّى ولا يُبحث عنه**.
+    _log(request, "invoice.mark_paid", account=acc,
+         detail={"invoice_no": inv.invoice_no,
+                 "action": "zatca_recorded", "zatca_no": no})
+    return Response({
+        "invoice_no": inv.invoice_no,
+        "zatca_invoice_no": inv.zatca_invoice_no,
+        "zatca_issued_at": inv.zatca_issued_at,
+    })

@@ -92,7 +92,12 @@ def available_plans(request):
         sub.account, date.today(), date.today()) if sub else 0
 
     out = []
-    for plan in Plan.objects.filter(is_active=True).order_by("display_order"):
+    # ق-181: ⚠️⚠️ **حقلٌ لا وجود له** كشفه الجرد: `display_order`
+    # في الباقات **يرفع خطأ ٥٠٠** — والصحيح `tier_order`.
+    #
+    # **ولم يكشفه أحد لأن المسار بلا شاشة** — وذاك قيمةُ الجرد.
+    for plan in Plan.objects.filter(is_active=True).order_by(
+            "tier_order"):
         entry = {"code": plan.code, "name_ar": plan.name_ar,
                  "description_ar": getattr(plan, "description_ar", ""),
                  "prices": {}}
@@ -143,6 +148,9 @@ def invoices(request):
             "status": i.status, "status_label": i.get_status_display(),
             "due_date": i.due_date, "paid_at": i.paid_at,
             "is_overdue": i.is_overdue,
+            # ق-182: **والعميل يرى الزكاتية** — فهي المعتمدة نظامًا
+            "zatca_invoice_no": i.zatca_invoice_no or "",
+            "zatca_issued_at": i.zatca_issued_at,
         }
         for i in qs.order_by("-period_start")[:50]
     ])
@@ -192,6 +200,9 @@ def invoice_detail(request, invoice_id):
 
     return Response({
         "invoice_no": inv.invoice_no,
+        # ق-182: **والعميل يرى الزكاتية** — فهي المعتمدة نظامًا
+        "zatca_invoice_no": inv.zatca_invoice_no or "",
+        "zatca_issued_at": inv.zatca_issued_at,
         "period": f"{inv.period_start} — {inv.period_end}",
         "status": inv.status, "status_label": inv.get_status_display(),
         "lines": [

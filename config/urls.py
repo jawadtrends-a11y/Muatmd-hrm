@@ -344,6 +344,10 @@ urlpatterns = [
     path("platform/accounts/<int:account_id>/activate/", platform_admin_api.admin_activate, name="platform-activate"),
     path("platform/accounts/<int:account_id>/extend/", platform_admin_api.admin_extend, name="platform-extend"),
     path("platform/invoices/<int:invoice_id>/mark-paid/", platform_admin_api.admin_mark_invoice_paid, name="platform-mark-paid"),
+    # ق-182: تسجيل الفاتورة الزكاتية من «معتمد المحاسبيّ»
+    path("platform/invoices/<int:invoice_id>/zatca/",
+         platform_admin_api.admin_record_zatca_invoice,
+         name="platform-zatca-invoice"),
     path("platform/discounts/", platform_admin_api.admin_discounts, name="platform-discounts"),
     path("platform/discounts/<int:discount_id>/", platform_admin_api.admin_discount_detail, name="platform-discount"),
     # ق-108: الباقات — الأسماء والأسعار والمزايا يضبطها مالك المنصّة
