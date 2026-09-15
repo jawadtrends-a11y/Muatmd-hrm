@@ -274,6 +274,19 @@ export default function RunDetailPage() {
   const [tab, setTab] = useState<Tab>("summary");
   const [deferring, setDeferring] = useState<number | null>(null);
   // ق-152: قوالب القيد — وإخفاق الجلب قائمةٌ فارغة لا شاشة مكسورة
+  // ق-177: ⚠️⚠️ **والتنزيل يعرض سببه** (بلاغ جواد): فالمنع
+  // صحيحٌ — **لكنّ صمتَه خطأ**: «لا يعمل» أسوأ من «كل الموظفين
+  // مستبعَدون من حماية الأجور».
+  const [dlError, setDlError] = useState("");
+
+  const grab = (path: string) => {
+    setDlError("");
+    downloadFile(path).catch((e) => {
+      setDlError(e instanceof ApiError ? e.message : String(e));
+      setTimeout(() => setDlError(""), 8000);
+    });
+  };
+
   const [glTemplates, setGlTemplates] = useState<
     { id: number; name_ar: string }[]>([]);
   const [tabData, setTabData] = useState<Record<string, unknown>[]>([]);
@@ -401,7 +414,14 @@ export default function RunDetailPage() {
   return (
     <div className="stack">
       <div className="spread">
-        <div>
+        {/* ق-177: ⚠️ **وسبب المنع يُعرض** — فالصمت يُقرأ عطلًا */}
+      {dlError && (
+        <div className="card" style={{ borderColor: "var(--danger)",
+                                       color: "var(--danger)" }}>
+          <IcAlert size={17} /> {dlError}
+        </div>
+      )}
+      <div>
           <button className="btn btn-sm btn-ghost"
             onClick={() => router.push("/payroll")}>
             ← {L("back")}
@@ -417,13 +437,13 @@ export default function RunDetailPage() {
         {overview.can_export && (
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn-sm"
-              onClick={() => downloadFile(`/payroll/runs/${runId}/wps/download/`)}>
+              onClick={() => grab(`/payroll/runs/${runId}/wps/download/`)}>
               <IcDownload size={16} />
               {L("wpsFile")}
             </button>
             {templates.map((t) => (
               <button key={t.id} className="btn btn-sm"
-                onClick={() => downloadFile(
+                onClick={() => grab(
                   `/payroll/runs/${runId}/bank/${t.id}/download/`)}>
                 <IcDownload size={16} />
                 {(lang === "en" ? t.name_en : t.name_ar) || t.name_ar}
@@ -432,7 +452,7 @@ export default function RunDetailPage() {
             {/* ق-152: القيد المحاسبيّ — لكل قالبٍ زرّه */}
             {glTemplates.map((t) => (
               <button key={`gl-${t.id}`} className="btn btn-sm"
-                onClick={() => downloadFile(
+                onClick={() => grab(
                   `/payroll/runs/${runId}/gl/${t.id}/download/`)}>
                 <IcDownload size={16} />
                 {t.name_ar}
