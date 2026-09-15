@@ -9,7 +9,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { apiGet, apiPost, apiPut, apiDelete, API_BASE, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, API_BASE, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import DateField from "@/components/DateField";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -1941,11 +1941,16 @@ function ProfileInner({
                       <span className="num">{f.size}</span>
                     </td>
                     <td style={{ textAlign: "end" }}>
-                      <a className="btn btn-sm btn-ghost"
-                        href={`${API_BASE}${f.url}`} target="_blank"
-                        rel="noreferrer">
+                      {/* ق-174: ⚠️⚠️ **والفتح بالرمز لا برابطٍ
+                          مجرّد** (بلاغ جواد): فتبويبٌ جديد **لا
+                          يحمل رمز المصادقة** — فيردّ ٤٠١. */}
+                      <button className="btn btn-sm btn-ghost"
+                        onClick={() => openForView(String(f.url))
+                          .catch((e) => alert(
+                            e instanceof ApiError ? e.message
+                                                  : String(e)))}>
                         {L("view")}
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 ))}
