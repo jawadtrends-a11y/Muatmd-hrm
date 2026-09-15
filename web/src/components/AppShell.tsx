@@ -50,6 +50,7 @@ const T: Dict = {
   assets: { ar: "العهد", en: "Assets" },
   payroll: { ar: "الرواتب", en: "Payroll" },
   penalties: { ar: "الجزاءات", en: "Penalties" },
+  settlement: { ar: "نهاية الخدمة", en: "End of service" },
   policies: { ar: "السياسات", en: "Policies" },
   tasks: { ar: "المهامّ", en: "Tasks" },
   directory: { ar: "دليل الزملاء", en: "Directory" },
@@ -233,6 +234,9 @@ const NAV: NavItem[] = [
       { href: "/expenses", key: "expenses", icon: IcWallet,
         perms: ["payroll.view"] },
       { href: "/penalties", key: "penalties", icon: IcAlert,
+        perms: ["payroll.view"] },
+      // ق-175: **تسوية نهاية الخدمة** — فالمسار كان بلا شاشة
+      { href: "/settlement", key: "settlement", icon: IcWallet,
         perms: ["payroll.view"] },
     ],
   },
