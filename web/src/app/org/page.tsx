@@ -24,6 +24,15 @@ const T: Dict = {
   },
   branches: { ar: "الفروع", en: "Branches" },
   departments: { ar: "الأقسام", en: "Departments" },
+  treeView: { ar: "عرض الشجرة", en: "Tree view" },
+  listView: { ar: "عرض القائمة", en: "List view" },
+  dropRoot: { ar: "أفلت هنا لجعلها إدارةً رئيسية",
+              en: "Drop here to make it a root" },
+  dragHint: {
+    ar: "⚠️ اسحب إدارةً وأفلتها داخل أخرى لنقلها — والدورة تُرفض",
+    en: "Drag to move — cycles are refused",
+  },
+  emptyTree: { ar: "لا إدارات", en: "No departments" },
   jobTitles: { ar: "المسميات الوظيفية", en: "Job Titles" },
   fromDate: { ar: "من تاريخ", en: "From" },
   toDate: { ar: "إلى تاريخ", en: "To" },
@@ -71,6 +80,12 @@ const T: Dict = {
 const TABS = ["branches", "departments", "jobTitles",
               "costCenters"] as const;
 type Tab = (typeof TABS)[number];
+
+/** ق-190: عقدة الشجرة — `children` متداخلة */
+type TreeNode = {
+  id: number; code: string; name_ar: string; depth: number;
+  children: TreeNode[];
+};
 
 type Branch = {
   id: number; code: string; name_ar: string; name_en?: string; city: string;
@@ -282,6 +297,13 @@ export default function OrgPage() {
       ? (q as Tab) : "branches";
   });
 
+  // ق-190: **عرض الشجرة** — فالهيكل التنظيميّ **يُفهم بالشجرة
+  // لا بالقائمة** (قرار جواد)، **ونقلُ إدارةٍ عملٌ حقيقيّ**.
+  const [treeView, setTreeView] = useState(false);
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [moveBusy, setMoveBusy] = useState(false);
+
   const setTab = (t: Tab) => {
     setTabState(t);
     if (typeof window !== "undefined") {
@@ -290,6 +312,16 @@ export default function OrgPage() {
       window.history.replaceState(null, "", u.toString());
     }
   };
+
+  const loadTree = useCallback(async () => {
+    try {
+      setTree(await apiGet<TreeNode[]>("/org/departments/tree/"));
+    } catch { setTree([]); }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "departments" && treeView) loadTree();
+  }, [tab, treeView, loadTree]);
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [depts, setDepts] = useState<Department[]>([]);
@@ -331,6 +363,22 @@ export default function OrgPage() {
     setCenters(cc);
     setBusy(false);
   }, []);
+
+  const moveDept = async (id: number, parentId: number | null) => {
+    if (id === parentId) return;
+    setMoveBusy(true);
+    setError("");
+    try {
+      await apiPut(`/org/departments/${id}/move/`,
+                    parentId ? { parent_id: parentId } : {});
+      await loadTree();
+      await load();
+    } catch (e) {
+      // ⚠️ **والدورة تُرفض**: فإدارةٌ تُسحب داخل فرعها **تُنشئ
+      // حلقةً** — والخادم يمسكها.
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally { setMoveBusy(false); setDragId(null); }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -559,6 +607,15 @@ export default function OrgPage() {
             </span>
           </button>
         ))}
+
+        {/* ق-190: **تبديل العرض** — قائمة ⇄ شجرة */}
+        {tab === "departments" && (
+          <button className="btn btn-sm btn-ghost"
+                  style={{ marginInlineStart: "auto" }}
+                  onClick={() => setTreeView((v) => !v)}>
+            {treeView ? L("listView") : L("treeView")}
+          </button>
+        )}
       </div>
 
       {HINTS[tab] && (
@@ -594,12 +651,129 @@ export default function OrgPage() {
           {L("loading")}
         </div>
       ) : (
+        tab === "departments" && treeView ? (
+          <DeptTree nodes={tree} L={L} dragId={dragId} busy={moveBusy}
+                    canManage={canManage} onDrag={setDragId}
+                    onDrop={moveDept} />
+        ) : (
         <SimpleTable rows={DATA[tab]} cols={COLS[tab]} L={L}
           onEdit={canManage ? (r) => {
             setEditing(r); setAdding(false); setError("");
           } : undefined}
           onDelete={canManage ? remove : undefined} />
+        )
       )}
+    </div>
+  );
+}
+
+
+/**
+ * شجرة الإدارات بالسحب والإفلات (ق-190).
+ *
+ * ⚠️⚠️ **فالهيكل التنظيميّ يُفهم بالشجرة لا بالقائمة** (قرار
+ * جواد) — **ونقلُ إدارةٍ من أبٍ لآخر عملٌ حقيقيّ**.
+ *
+ * ⚠️ **والدورة تُرفض**: فإدارةٌ تُسحب داخل فرعها **تُنشئ حلقةً**
+ * — والخادم يمسكها، **فلا نكرّر الفحص هنا**.
+ */
+function DeptTree({
+  nodes, L, dragId, busy, canManage, onDrag, onDrop,
+}: {
+  nodes: TreeNode[];
+  L: (k: string) => string;
+  dragId: number | null;
+  busy: boolean;
+  canManage: boolean;
+  onDrag: (id: number | null) => void;
+  onDrop: (id: number, parentId: number | null) => void;
+}) {
+  const [over, setOver] = useState<number | "root" | null>(null);
+
+  if (nodes.length === 0) {
+    return (
+      <div className="card" style={{ padding: 40, textAlign: "center",
+                                     color: "var(--ink-3)" }}>
+        {L("emptyTree")}
+      </div>
+    );
+  }
+
+  const row = (n: TreeNode, depth: number): React.ReactNode => (
+    <div key={n.id}>
+      <div
+        draggable={canManage && !busy}
+        onDragStart={() => onDrag(n.id)}
+        onDragEnd={() => { onDrag(null); setOver(null); }}
+        onDragOver={(e) => {
+          if (!canManage || dragId === null || dragId === n.id) return;
+          e.preventDefault();
+          setOver(n.id);
+        }}
+        onDragLeave={() => setOver((v) => (v === n.id ? null : v))}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(null);
+          if (dragId !== null && dragId !== n.id) onDrop(dragId, n.id);
+        }}
+        className="spread"
+        style={{
+          padding: "9px 12px",
+          marginInlineStart: depth * 22,
+          marginBottom: 4,
+          borderRadius: "var(--radius-sm)",
+          border: "1px solid var(--line)",
+          background: over === n.id ? "var(--teal-soft)"
+            : dragId === n.id ? "var(--paper-2)" : "var(--paper)",
+          opacity: dragId === n.id ? 0.55 : 1,
+          cursor: canManage ? "grab" : "default",
+        }}
+      >
+        <span style={{ fontWeight: 500 }}>{n.name_ar}</span>
+        <span className="muted num" style={{ fontSize: ".76rem" }}>
+          {n.code}
+        </span>
+      </div>
+      {n.children?.map((c) => row(c, depth + 1))}
+    </div>
+  );
+
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      {canManage && (
+        <div className="muted" style={{ fontSize: ".8rem",
+                                        lineHeight: 1.9 }}>
+          {L("dragHint")}
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 14 }}>
+        {nodes.map((n) => row(n, 0))}
+
+        {/* ⚠️ **ومنطقةُ الجذر** — فبلا هذا **لا سبيل لإخراج
+            إدارةٍ من أبيها** */}
+        {canManage && dragId !== null && (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setOver("root"); }}
+            onDragLeave={() => setOver((v) => (v === "root" ? null : v))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(null);
+              if (dragId !== null) onDrop(dragId, null);
+            }}
+            style={{
+              marginTop: 10, padding: "14px 12px", textAlign: "center",
+              border: "1px dashed var(--line)",
+              borderRadius: "var(--radius-sm)",
+              background: over === "root" ? "var(--teal-soft)"
+                                          : "transparent",
+              fontSize: ".82rem", color: "var(--ink-3)",
+            }}
+          >
+            {L("dropRoot")}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
