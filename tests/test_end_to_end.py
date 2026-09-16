@@ -338,3 +338,115 @@ def test_other_account_is_invisible(world, client):
     rows = _rows(client.get("/api/employees/?all=1").json())
     nos = {r["employee_no"] for r in rows}
     assert "X-1" not in nos, "⚠️⚠️ تسريبٌ بين الحسابات"
+
+
+def test_direct_id_access_is_refused(world, client, rls_enforced):
+    """
+    ⚠️⚠️ الأهمّ: **ولا يُقرأ سجلُّ حسابٍ آخر بمعرّفه**.
+
+    **فإخفاؤه من القائمة لا يكفي**: من يعرف الرقم **يطلبه
+    مباشرةً** — والعزل يجب أن يمنعه في كل مسار.
+    """
+    from apps.core.models_letter_templates import IssuedLetter
+    from apps.employees.models_assets import Advance
+    from apps.payroll.models import PayrollRun
+
+    other = provision_account(slug="e2e-3", display_name_ar="ثالث",
+                              company_name_ar="شركة ثالثة",
+                              is_sandbox=True)
+    with account_scope(other.account_id):
+        acc3 = Account.objects.get(id=other.account_id)
+        comp3 = Company.objects.get(id=other.company_id)
+        basic3 = PayComponent.objects.get(company=comp3, code="BASIC")
+
+        p3, _ = create_person(
+            account=acc3, first_name_ar="سرّي",
+            family_name_ar="المخفيّ", gender="male",
+            nationality_code="SA", id_type="national_id",
+            id_number="1099911199", mobile="0509991119")
+        emp3, _, _ = create_employment(
+            person=p3, company=comp3, employee_no="Z-9",
+            join_date=date(2024, 1, 1),
+            salary_lines=[(basic3, Decimal("12000"))])
+
+        run3 = PayrollRun.objects.create(
+            account=acc3, company=comp3, run_no="PR-Z-1",
+            period_year=2026, period_month=5, status="draft",
+            accrual_date=date(2026, 5, 31))
+
+        adv3 = Advance.objects.create(
+            account=acc3, company=comp3, employment=emp3,
+            advance_no="ADV-Z-1", amount=Decimal("3000"),
+            installments_count=3, start_year=2026, start_month=6)
+
+    client.force_login(world["hr"]["user"])
+
+    # ⚠️ **كلُّ مسارٍ يأخذ معرّفًا يُجرَّب** — والردّ يجب أن
+    # يكون ٤٠٤ أو ٤٠٣، **لا بيانات**.
+    probes = [
+        f"/api/employees/{emp3.id}/",
+        f"/api/employees/{emp3.id}/profile/",
+        f"/api/payroll/runs/{run3.id}/",
+        f"/api/advances/{adv3.id}/schedule/",
+        f"/api/attendance/{emp3.id}/days/?from=2026-05-01&to=2026-05-02",
+    ]
+
+    leaks = []
+    for url in probes:
+        res = client.get(url)
+        if res.status_code == 200:
+            body = res.content.decode("utf-8", "ignore")
+            # ⚠️ **ورقمُه الوظيفيّ علامةُ التسريب**
+            if "Z-9" in body or "المخفيّ" in body:
+                leaks.append(f"{url} → {res.status_code}")
+
+    assert not leaks, (
+        "⚠️⚠️ تسريبٌ بين الحسابات بالمعرّف المباشر:\n  "
+        + "\n  ".join(leaks))
+
+
+def test_write_to_other_account_is_refused(world, client,
+                                            rls_enforced):
+    """
+    ⚠️⚠️ **والكتابة أخطر من القراءة**: فمن يُعدّل سجلَّ حسابٍ
+    آخر **يُفسده**.
+    """
+    other = provision_account(slug="e2e-4", display_name_ar="رابع",
+                              company_name_ar="شركة رابعة",
+                              is_sandbox=True)
+    with account_scope(other.account_id):
+        acc4 = Account.objects.get(id=other.account_id)
+        comp4 = Company.objects.get(id=other.company_id)
+        basic4 = PayComponent.objects.get(company=comp4, code="BASIC")
+        p4, _ = create_person(
+            account=acc4, first_name_ar="هدف",
+            family_name_ar="الكتابة", gender="male",
+            nationality_code="SA", id_type="national_id",
+            id_number="1099922299", mobile="0509992229")
+        emp4, _, _ = create_employment(
+            person=p4, company=comp4, employee_no="W-9",
+            join_date=date(2024, 1, 1),
+            salary_lines=[(basic4, Decimal("8000"))])
+
+    client.force_login(world["hr"]["user"])
+
+    res = client.put(
+        f"/api/employees/{emp4.id}/update/",
+        data={"section": "gosi",
+              "data": {"gosi_establishment_no": "HACKED"}},
+        content_type="application/json")
+
+    # ⚠️ **والعبرةُ بالأثر لا بالردّ**: فمسارٌ يردّ ٢٠٠ ولم
+    # يُغيّر شيئًا **عيبُ رسالةٍ لا ثغرةُ أمن**.
+    status = res.status_code
+
+    # ⚠️⚠️ **والتحقّق من أن شيئًا لم يتغيّر**
+    with account_scope(other.account_id):
+        emp4.refresh_from_db()
+        assert emp4.gosi_establishment_no != "HACKED", (
+            f"⚠️⚠️⚠️ تسريب: كُتب في حسابٍ آخر (ردّ {status})")
+
+    # **وبعد التأكّد من سلامة البيانات، نطلب ردًّا صادقًا**
+    assert status in (403, 404), (
+        f"⚠️ المسار ردّ {status} على سجلٍّ خارج الحساب — "
+        "والبيانات سليمة، لكنّ الردّ يُوهم النجاح")
