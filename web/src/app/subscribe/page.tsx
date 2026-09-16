@@ -53,6 +53,20 @@ const T: Dict = {
     en: "Card details go straight to the payment gateway",
   },
   invoices: { ar: "الفواتير", en: "Invoices" },
+  estimateTitle: { ar: "تقدير مستحقّ الفترة", en: "Period estimate" },
+  estEmployees: { ar: "الموظفون", en: "Employees" },
+  estUnit: { ar: "سعر الموظف", en: "Per employee" },
+  estSubtotal: { ar: "قبل الضريبة", en: "Subtotal" },
+  estVat: { ar: "الضريبة", en: "VAT" },
+  estTotal: { ar: "الإجمالي المتوقَّع", en: "Estimated total" },
+  payNow: { ar: "دفع", en: "Pay" },
+  autoRenew: { ar: "التجديد التلقائيّ", en: "Auto-renew" },
+  autoRenewOn: { ar: "مفعّل", en: "On" },
+  autoRenewOff: { ar: "موقوف", en: "Off" },
+  autoRenewHint: {
+    ar: "⚠️ يُجدَّد الاشتراك تلقائيًّا في نهاية الفترة — وإيقافه خيارك",
+    en: "Renews automatically at period end",
+  },
   invoiceNo: { ar: "رقم الفاتورة", en: "Invoice no." },
   period: { ar: "الفترة", en: "Period" },
   status: { ar: "الحالة", en: "Status" },
@@ -117,6 +131,39 @@ export default function SubscribePage() {
     exp_month?: number; exp_year?: number; is_default?: boolean;
   };
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+
+  // ق-206: **تقدير المستحقّ والتجديد التلقائيّ** — ⚠️ **شفافيةٌ
+  // تمنع النزاعات**: فالعميل يعرف **ما سيُحاسب به قبل الفاتورة**.
+  const [estimate, setEstimate] = useState<{
+    period: string; employees: number; plan: string;
+    unit_price: string; subtotal: string; vat: string;
+    total: string; note?: string } | null>(null);
+  const [autoRenew, setAutoRenew] = useState<boolean | null>(null);
+  const [renewBusy, setRenewBusy] = useState(false);
+
+  /** ⚠️ **والتجديد خيار العميل** (ق-48) — لا يُفرض */
+  const toggleRenew = async (on: boolean) => {
+    setRenewBusy(true);
+    setErr("");
+    try {
+      await apiPost("/account/auto-renew/", { auto_renew: on });
+      setAutoRenew(on);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setRenewBusy(false); }
+  };
+
+  /** دفعُ فاتورةٍ غير مدفوعة */
+  const payInvoice = async (invId: number) => {
+    setErr("");
+    try {
+      const out = await apiPost<{ redirect_url?: string }>(
+        `/account/invoices/${invId}/pay/`, {});
+      if (out?.redirect_url) window.location.href = out.redirect_url;
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    }
+  };
   const [cards, setCards] = useState<Card[]>([]);
 
   useEffect(() => {
@@ -126,6 +173,10 @@ export default function SubscribePage() {
     apiGet<Card[] | { rows: Card[] }>("/account/cards/")
       .then((d) => setCards(Array.isArray(d) ? d : (d.rows || [])))
       .catch(() => setCards([]));
+    // ⚠️ **و٤٠٤ تعني: لا اشتراكَ نشطًا** — لا خطأً
+    apiGet<typeof estimate>("/billing/estimate/")
+      .then(setEstimate)
+      .catch(() => setEstimate(null));
   }, []);
 
   const load = useCallback(async () => {
@@ -428,6 +479,77 @@ export default function SubscribePage() {
         </div>
       )}
 
+      {/* ق-206: **تقدير مستحقّ الفترة** — ⚠️ **شفافيةٌ تمنع
+          النزاعات**: فالعميل يعرف ما سيُحاسب به **قبل الفاتورة** */}
+      {estimate && (
+        <div className="card" style={{ padding: 18 }}>
+          <div className="spread" style={{ marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>
+              {L("estimateTitle")}
+            </h3>
+            <span className="muted num" style={{ fontSize: ".82rem" }}>
+              {estimate.period}
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gap: 12,
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(120px, 1fr))" }}>
+            {([[L("estEmployees"), String(estimate.employees)],
+               [L("estUnit"), estimate.unit_price],
+               [L("estSubtotal"), estimate.subtotal],
+               [L("estVat"), estimate.vat]] as const).map(
+              ([lbl, val]) => (
+              <div key={lbl}>
+                <div className="muted" style={{ fontSize: ".74rem",
+                                                marginBottom: 3 }}>
+                  {lbl}
+                </div>
+                <div className="num">{val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="spread" style={{ marginTop: 14,
+                paddingTop: 10,
+                borderTop: "1px solid var(--line)" }}>
+            <strong>{L("estTotal")}</strong>
+            <span className="num" style={{ fontSize: "1.15rem",
+                                           fontWeight: 700 }}>
+              {estimate.total}
+            </span>
+          </div>
+
+          {estimate.note && (
+            <div className="muted" style={{ fontSize: ".78rem",
+                                            marginTop: 8 }}>
+              {estimate.note}
+            </div>
+          )}
+
+          {/* ق-206: ⚠️ **والتجديد خيار العميل** (ق-48) */}
+          <div className="spread" style={{ marginTop: 14,
+                paddingTop: 10,
+                borderTop: "1px solid var(--line)" }}>
+            <div>
+              <strong style={{ fontSize: ".9rem" }}>
+                {L("autoRenew")}
+              </strong>
+              <div className="muted" style={{ fontSize: ".76rem",
+                                              marginTop: 2 }}>
+                {L("autoRenewHint")}
+              </div>
+            </div>
+            <button className="btn btn-sm"
+                    disabled={renewBusy}
+                    onClick={() => toggleRenew(!autoRenew)}>
+              {renewBusy ? "…"
+                : autoRenew ? L("autoRenewOn") : L("autoRenewOff")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ق-181: **الفواتير** — فالعميل يرى ما يدفع */}
       {invoices.length > 0 && (
         <div className="card" style={{ overflow: "hidden" }}>
@@ -473,11 +595,21 @@ export default function SubscribePage() {
                     </span>
                   </td>
                   <td style={{ textAlign: "end" }}>
-                    <button className="btn btn-sm btn-ghost"
-                      onClick={() => openForView(
-                        `/account/invoices/${inv.id}/`)}>
-                      {L("view")}
-                    </button>
+                    <div className="row" style={{ gap: 5,
+                           justifyContent: "flex-end" }}>
+                      {/* ق-206: **ودفعُ فاتورةٍ غير مدفوعة** */}
+                      {inv.status !== "paid" && (
+                        <button className="btn btn-sm btn-primary"
+                                onClick={() => payInvoice(inv.id)}>
+                          {L("payNow")}
+                        </button>
+                      )}
+                      <button className="btn btn-sm btn-ghost"
+                        onClick={() => openForView(
+                          `/account/invoices/${inv.id}/`)}>
+                        {L("view")}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
