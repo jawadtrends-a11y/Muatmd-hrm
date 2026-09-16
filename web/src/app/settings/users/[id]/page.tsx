@@ -17,6 +17,29 @@ import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 
 const T: Dict = {
+  // ق-205: إجراءاتٌ حسّاسة
+  dangerZone: { ar: "إجراءات حسّاسة", en: "Danger zone" },
+  dangerHint: {
+    ar: "⚠️ لا رجعةَ فيها بضغطة — راجعها قبل التنفيذ",
+    en: "Irreversible — review carefully",
+  },
+  transferOwner: { ar: "نقل ملكية الحساب إليه",
+                   en: "Transfer ownership" },
+  removeLogin: { ar: "حذف حساب الدخول", en: "Remove login" },
+  ownerWarn: {
+    ar: "⚠️⚠️ الملكية سيطرةٌ إدارية كاملة على النظام — وبنقلها تفقد صلاحيتك كمالك، ولا يعيدها إلا المالك الجديد أو المدير العام.",
+    en: "Ownership is full control of the account.",
+  },
+  loginWarn: {
+    ar: "⚠️ يُنزع وصوله للنظام — وملفّه وطلباته وسجلّ عملياته تبقى كما هي، فالسجلّ لا يُمحى.",
+    en: "Access is revoked; the record remains.",
+  },
+  typeToConfirm: { ar: "اكتب للتأكيد", en: "Type to confirm" },
+  confirmWord: { ar: "تأكيد", en: "CONFIRM" },
+  confirmDanger: { ar: "تنفيذ", en: "Execute" },
+  cancelDanger: { ar: "تراجع", en: "Back" },
+  ownerDone: { ar: "نُقلت الملكية", en: "Ownership transferred" },
+  loginDone: { ar: "حُذف حساب الدخول", en: "Login removed" },
   back: { ar: "← المستخدمون", en: "← Users" },
   account: { ar: "معلومات الحساب", en: "Account" },
   permissions: { ar: "الصلاحيات", en: "Permissions" },
@@ -492,6 +515,88 @@ export default function UserPage() {
           )}
         </div>
       </div>
+
+      {/* ق-205: ⚠️⚠️ **إجراءاتٌ حسّاسة** — والمساران كانا
+          مبنيَّين بلا شاشة */}
+      {canEdit && (
+        <div className="card" style={{ padding: 20,
+                                       borderColor: "var(--danger)" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: "1rem",
+                       color: "var(--danger)" }}>
+            {L("dangerZone")}
+          </h3>
+          <div className="muted" style={{ fontSize: ".8rem",
+                                          lineHeight: 1.9,
+                                          marginBottom: 14 }}>
+            {L("dangerHint")}
+          </div>
+
+          {dangerMsg && (
+            <div className="card" style={{ borderColor: "var(--ok)",
+                                           marginBottom: 12 }}>
+              {dangerMsg}
+            </div>
+          )}
+          {dangerErr && (
+            <div className="card" style={{ borderColor: "var(--danger)",
+                                           color: "var(--danger)",
+                                           marginBottom: 12 }}>
+              {dangerErr}
+            </div>
+          )}
+
+          {danger === null ? (
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className="btn btn-sm"
+                      onClick={() => { setDanger("owner");
+                                       setDangerErr(""); }}>
+                {L("transferOwner")}
+              </button>
+              <button className="btn btn-sm btn-ghost"
+                      style={{ color: "var(--danger)" }}
+                      onClick={() => { setDanger("login");
+                                       setDangerErr(""); }}>
+                {L("removeLogin")}
+              </button>
+            </div>
+          ) : (
+            <div className="stack" style={{ gap: 10 }}>
+              <div style={{ background: "var(--copper-soft)",
+                            color: "var(--copper)",
+                            padding: "10px 13px",
+                            borderRadius: "var(--radius-sm)",
+                            fontSize: ".83rem", lineHeight: 1.9 }}>
+                {danger === "owner" ? L("ownerWarn") : L("loginWarn")}
+              </div>
+
+              {/* ⚠️⚠️ **وتأكيدٌ مضاعف**: **فأخطر إجراءٍ لا يقع
+                  بضغطةٍ واحدة** — والكتابة تُثبت القصد. */}
+              <label className="field">
+                <span className="label">
+                  {L("typeToConfirm")} «{L("confirmWord")}»
+                </span>
+                <input className="input" value={confirmText}
+                       onChange={(e) =>
+                         setConfirmText(e.target.value)} />
+              </label>
+
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn-ghost"
+                        onClick={() => { setDanger(null);
+                                         setConfirmText(""); }}>
+                  {L("cancelDanger")}
+                </button>
+                <button className="btn btn-danger"
+                        disabled={dangerBusy
+                          || confirmText.trim() !== L("confirmWord")}
+                        onClick={runDanger}>
+                  {dangerBusy ? "…" : L("confirmDanger")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

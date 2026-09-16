@@ -6,9 +6,9 @@
  * ثلاثة أقسام لا غير: الصورة، واللغة، وكلمة المرور.
  * إعدادات الشركة شيء آخر تمامًا ولها شاشتها.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiGet, apiPost, apiPut, API_BASE, ApiError, getToken } from "@/lib/api";
+import { apiGet, apiPost, apiPut, API_BASE, ApiError, getToken, apiDelete } from "@/lib/api";
 import { useT, usePrefs, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 import AuthImage from "@/components/AuthImage";
