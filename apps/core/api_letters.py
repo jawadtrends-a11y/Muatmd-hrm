@@ -286,3 +286,42 @@ def template_image(request, template_id):
     return Response({"slot": slot, "file_id": stored.id,
                      "url": f"/files/{stored.id}/"},
                     status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def letter_pdf(request, letter_id):
+    """
+    الخطاب بصيغة PDF (ق-196).
+
+    ⚠️⚠️ **فخطاب تعريفٍ بالراتب يُحمَل للبنك ورقةً** — ونصٌّ في
+    الشاشة لا يُغني.
+
+    ⚠️ **وصاحبه يراه دائمًا**: خطابه هو، **ولو لم يملك صلاحية**.
+    """
+    from django.http import HttpResponse
+
+    from apps.core.services.letter_pdf import (
+        build_letter_pdf, letter_filename)
+
+    letter = IssuedLetter.objects.filter(
+        id=letter_id,
+        company_id=_company_id(request)).select_related(
+        "template", "employment__person", "company").first()
+    if letter is None:
+        return Response({"detail": "الخطاب غير موجود"}, status=404)
+
+    person = getattr(request.user, "person", None)
+    is_owner = person and letter.employment.person_id == person.id
+    if not is_owner:
+        Gate.require(request.user, "employees.view")
+
+    try:
+        pdf = build_letter_pdf(letter)
+    except FileNotFoundError as e:
+        return Response({"detail": str(e)}, status=500)
+
+    out = HttpResponse(pdf, content_type="application/pdf")
+    out["Content-Disposition"] = (
+        f'inline; filename="{letter_filename(letter)}"')
+    return out

@@ -4,11 +4,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { apiGet } from "@/lib/api";
+import { apiGet, openForView } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcDoc, IcDownload, IcPlus } from "@/components/Icons";
 
 const T: Dict = {
+  pdf: { ar: "تنزيل PDF", en: "PDF" },
   title: { ar: "خطاباتي", en: "My letters" },
   subtitle: {
     ar: "الشهادات والخطابات الصادرة لك — صالحة 30 يومًا من الإصدار",
@@ -177,11 +178,21 @@ export default function MyLettersPage() {
                   <td style={{ textAlign: "end" }}>
                     {r.downloadable && (
                       r.letter_id ? (
-                        <button className="btn btn-sm btn-ghost"
-                                onClick={() => open(r.letter_id!)}>
-                          <IcDownload size={15} />
-                          {L("view")}
-                        </button>
+                        <div className="row" style={{ gap: 5,
+                               justifyContent: "flex-end" }}>
+                          <button className="btn btn-sm btn-ghost"
+                                  onClick={() => open(r.letter_id!)}>
+                            {L("view")}
+                          </button>
+                          {/* ق-196: **وPDF بترويسته** — فخطابُ
+                              التعريف يُحمَل للبنك ورقةً */}
+                          <button className="btn btn-sm"
+                                  onClick={() => openForView(
+                                    `/letters/${r.letter_id}/pdf/`)}>
+                            <IcDownload size={15} />
+                            {L("pdf")}
+                          </button>
+                        </div>
                       ) : (
                         // ⚠️ لا خطابَ صادرًا: لا قالب مطابق —
                         // فتُصدر ورقيًّا، ولا نعِد بما لا يقع.

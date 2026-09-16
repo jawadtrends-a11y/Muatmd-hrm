@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from "react";
 
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPost, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import EmployeePicker, { type PickedEmployee }
   from "@/components/EmployeePicker";
@@ -41,6 +41,7 @@ const T: Dict = {
   issued: { ar: "صدر الخطاب برقم", en: "Issued as" },
   validUntil: { ar: "صالح حتى", en: "Valid until" },
   view: { ar: "عرض", en: "View" },
+  download: { ar: "تنزيل PDF", en: "PDF" },
   needed: { ar: "اختر القالب والموظف", en: "Pick both first" },
   noTemplates: {
     ar: "لا قوالب — أضفها من الإعدادات ← قوالب الخطابات",
@@ -165,12 +166,18 @@ export default function IssueLetterPage() {
                 </div>
               )}
             </div>
-            {/* ⚠️ **والنصّ يُقرأ من المسار** — فلا مسارَ PDF
-                للخطاب بعد */}
-            <button className="btn btn-sm"
-                    onClick={() => showIssued(issued.id)}>
-              {L("view")}
-            </button>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm btn-ghost"
+                      onClick={() => showIssued(issued.id)}>
+                {L("view")}
+              </button>
+              {/* ق-196: **وPDF بترويسته وتذييله** */}
+              <button className="btn btn-sm"
+                      onClick={() => openForView(
+                        `/letters/${issued.id}/pdf/`)}>
+                {L("download")}
+              </button>
+            </div>
           </div>
         </div>
       )}

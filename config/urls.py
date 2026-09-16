@@ -546,6 +546,9 @@ urlpatterns = [
          letters_api.preview_template, name="letter-template-preview"),
     path("api/letters/issue/", letters_api.issue_letter,
          name="issue-letter"),
+    # ق-196: الخطاب PDF — بترويسته وتذييله
+    path("api/letters/<int:letter_id>/pdf/", letters_api.letter_pdf,
+         name="letter-pdf"),
     path("api/letters/<int:letter_id>/", letters_api.letter_detail,
          name="letter-detail"),
     path("api/requests/preview/", leaves_api.preview_request, name="preview-request"),
