@@ -141,6 +141,14 @@ export default function SubscribePage() {
   const [autoRenew, setAutoRenew] = useState<boolean | null>(null);
   const [renewBusy, setRenewBusy] = useState(false);
 
+  // ق-208: **مزايا باقتك** — ⚠️ **والمقفلة تُعرض لا تُخفى**:
+  // **فإخفاؤها يُضيّع فرصة بيع** (ق-161).
+  const [feat, setFeat] = useState<{
+    key: string; name_ar: string; module: string;
+    is_core: boolean; enabled: boolean }[]>([]);
+  const [lockedCount, setLockedCount] = useState(0);
+  const [showLocked, setShowLocked] = useState(false);
+
   /** ⚠️ **والتجديد خيار العميل** (ق-48) — لا يُفرض */
   const toggleRenew = async (on: boolean) => {
     setRenewBusy(true);
@@ -177,6 +185,14 @@ export default function SubscribePage() {
     apiGet<typeof estimate>("/billing/estimate/")
       .then(setEstimate)
       .catch(() => setEstimate(null));
+
+    apiGet<{ features: typeof feat; locked_count: number }>(
+      "/billing/subscription/")
+      .then((d) => {
+        setFeat(d.features || []);
+        setLockedCount(d.locked_count || 0);
+      })
+      .catch(() => setFeat([]));
   }, []);
 
   const load = useCallback(async () => {
