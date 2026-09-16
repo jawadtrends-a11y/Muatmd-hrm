@@ -14,6 +14,16 @@ import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 import AuthImage from "@/components/AuthImage";
 
 const T: Dict = {
+  // ق-207: أجهزتي
+  devices: { ar: "أجهزتي", en: "My devices" },
+  devicesHint: {
+    ar: "⚠️ من فقد جهازه يُبطل رمزه من هنا — بلا تغيير كلمة المرور",
+    en: "Lost a device? Revoke its token here",
+  },
+  thisDevice: { ar: "هذا الجهاز", en: "This device" },
+  revoke: { ar: "إبطال", en: "Revoke" },
+  revokeAll: { ar: "إبطال الباقي", en: "Revoke others" },
+  noDevices: { ar: "لا أجهزة نشطة", en: "No active devices" },
   title: { ar: "حسابي", en: "My account" },
   subtitle: {
     ar: "صورتك ولغتك وكلمة مرورك",
@@ -395,6 +405,72 @@ export default function MyAccountPage() {
             <span className="num">{v || "—"}</span>
           </div>
         ))}
+      </div>
+
+      {/* ق-207: ⚠️⚠️ **أجهزتي** — **فمن فقد جهازه يُبطل رمزه بلا
+          تغيير كلمة المرور** */}
+      <div className="card" style={{ padding: 20 }}>
+        <div className="spread" style={{ marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: "1rem" }}>
+            {L("devices")}
+          </h3>
+          {sessions.length > 1 && (
+            <button className="btn btn-sm btn-ghost"
+                    style={{ color: "var(--danger)" }}
+                    disabled={sessBusy !== null}
+                    onClick={() => revoke("all")}>
+              {sessBusy === "all" ? "…" : L("revokeAll")}
+            </button>
+          )}
+        </div>
+        <div className="muted" style={{ fontSize: ".79rem",
+                                        lineHeight: 1.9,
+                                        marginBottom: 12 }}>
+          {L("devicesHint")}
+        </div>
+
+        {sessions.length === 0 ? (
+          <div className="muted" style={{ fontSize: ".85rem" }}>
+            {L("noDevices")}
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 8 }}>
+            {sessions.map((x) => (
+              <div key={x.id} className="spread"
+                   style={{ padding: "10px 12px",
+                            background: "var(--paper-2)",
+                            borderRadius: "var(--radius-sm)" }}>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: ".9rem" }}>
+                    {x.device_name || x.device_label || "—"}
+                    {x.is_current && (
+                      <span className="badge badge-ok"
+                            style={{ marginInlineStart: 6,
+                                     fontSize: ".68rem" }}>
+                        {L("thisDevice")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="muted num"
+                       style={{ fontSize: ".74rem", marginTop: 2 }}>
+                    {x.ip} · {String(x.last_used_at).slice(0, 10)}
+                  </div>
+                </div>
+
+                {/* ⚠️ **والجلسة الحالية لا تُبطَل** — فمن يُبطلها
+                    يخرج من نفسه */}
+                {!x.is_current && (
+                  <button className="btn btn-sm btn-ghost"
+                          style={{ color: "var(--danger)" }}
+                          disabled={sessBusy !== null}
+                          onClick={() => revoke(x.id)}>
+                    {sessBusy === x.id ? "…" : L("revoke")}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
