@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { apiGet, apiPut, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcUser } from "@/components/Icons";
 
@@ -106,6 +106,42 @@ export default function UserPage() {
   const [savingScopes, setSavingScopes] = useState(false);
   /** ق-76: المدير العام يرى ولا يعدّل — فالزر يختفي */
   const [canEdit, setCanEdit] = useState(false);
+
+  // ق-205: **إجراءاتٌ حسّاسة** — نقل الملكية وحذف حساب الدخول.
+  //
+  // ⚠️⚠️ **والمساران كانا مبنيَّين بلا شاشة** — كشفهما الجرد،
+  // **وهما أخطر إجراءين في النظام**.
+  const [danger, setDanger] = useState<"owner" | "login" | null>(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [dangerBusy, setDangerBusy] = useState(false);
+  const [dangerErr, setDangerErr] = useState("");
+  const [dangerMsg, setDangerMsg] = useState("");
+
+  /**
+   * ينقل ملكية الحساب — ⚠️⚠️ **أخطر إجراءٍ في النظام**.
+   *
+   * **فالملكية سيطرةٌ إدارية كاملة** (ق-76): وينقلها المالك
+   * الحالي، **أو ينتزعها المدير العام**.
+   */
+  const runDanger = async () => {
+    if (!danger) return;
+    setDangerBusy(true);
+    setDangerErr("");
+    setDangerMsg("");
+    try {
+      if (danger === "owner") {
+        await apiPost(`/access/members/${id}/ownership/`, {});
+        setDangerMsg(L("ownerDone"));
+      } else {
+        await apiDelete(`/access/members/${id}/login/`);
+        setDangerMsg(L("loginDone"));
+      }
+      setDanger(null);
+      setConfirmText("");
+    } catch (e) {
+      setDangerErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setDangerBusy(false); }
+  };
   /** نزع كل الصلاحيات قرار جسيم — يُؤكَّد صراحةً */
   const [askRevoke, setAskRevoke] = useState(false);
   const [data, setData] = useState<Data | null>(null);
