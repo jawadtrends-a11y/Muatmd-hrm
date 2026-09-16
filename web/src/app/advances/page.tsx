@@ -25,6 +25,8 @@ const T: Dict = {
   no: { ar: "الرقم", en: "No." },
   employee: { ar: "الموظف", en: "Employee" },
   amount: { ar: "المبلغ", en: "Amount" },
+  maxAllowed: { ar: "الحدّ الأقصى المسموح", en: "Max allowed" },
+  currentDebt: { ar: "عليه حاليًّا", en: "Outstanding" },
   method: { ar: "طريقة السداد", en: "Method" },
   installments: { ar: "الأقساط", en: "Instalments" },
   pauseDeduct: { ar: "إيقاف الخصم", en: "Pause deduction" },
@@ -106,6 +108,12 @@ export default function AdvancesPage() {
   const [askApprove, setAskApprove] = useState<number | null>(null);
   // ق-202: **جدول أقساط سلفة** — والمسار كان يتيمًا
   const [schedule, setSchedule] = useState<number | null>(null);
+
+  // ق-204: **أهليّة السلفة** — ⚠️ **فحصٌ قبل الطلب**: يعرض
+  // الحدّ الأقصى والموانع، **فيمنع طلبًا مرفوضًا سلفًا**.
+  const [elig, setElig] = useState<{
+    allowed: boolean; max_allowed: string;
+    reasons: string[]; current_outstanding: string } | null>(null);
   const [busyRow, setBusyRow] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -269,8 +277,42 @@ export default function AdvancesPage() {
                 onChange={(e) => {
                   setPicked(e);
                   set("employment_id", e ? String(e.id) : "");
+                  setElig(null);
+                  if (e) {
+                    apiGet<typeof elig>(
+                      `/employees/${e.id}/advance-eligibility/`)
+                      .then(setElig)
+                      .catch(() => setElig(null));
+                  }
                 }} />
             </div>
+
+            {/* ق-204: ⚠️ **وأهليّته قبل الطلب** — فيمنع طلبًا
+                مرفوضًا سلفًا */}
+            {elig && (
+              <div style={{ flexBasis: "100%", fontSize: ".82rem",
+                            lineHeight: 1.9, padding: "9px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            background: elig.allowed
+                              ? "var(--paper-2)" : "var(--copper-soft)",
+                            color: elig.allowed
+                              ? undefined : "var(--copper)" }}>
+                <strong>{L("maxAllowed")}:</strong>{" "}
+                <span className="num">{elig.max_allowed}</span>
+                {Number(elig.current_outstanding) > 0 && (
+                  <> · {L("currentDebt")}:{" "}
+                    <span className="num">
+                      {elig.current_outstanding}
+                    </span>
+                  </>
+                )}
+                {elig.reasons?.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    {elig.reasons.join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="field" style={{ minWidth: 140 }}>
               <label className="label">{L("amount")}</label>
