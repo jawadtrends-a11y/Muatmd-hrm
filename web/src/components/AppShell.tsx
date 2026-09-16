@@ -71,6 +71,7 @@ const T: Dict = {
   myAttendance: { ar: "حضوري", en: "My Attendance" },
   myLeaves: { ar: "إجازاتي", en: "My Leaves" },
   myServices: { ar: "خدماتي", en: "My Services" },
+  myTasks: { ar: "مهامّي", en: "My Tasks" },
   myTrack: { ar: "طلباتي", en: "My Requests" },
   myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
   myLetters: { ar: "خطاباتي", en: "My Letters" },
@@ -166,6 +167,9 @@ const NAV: NavItem[] = [
     children: [
       { href: "/me/requests", key: "myServices", icon: IcDoc,
         perms: ["requests.create"] },
+      // ق-209: **مهامّي** — ⚠️ **وشاشةٌ مبنيّةٌ بلا رابط** (كشفه
+      // جرد الشاشات): **تُسنَد وتُتابَع** لا رسالةً تضيع (ق-131).
+      { href: "/me/tasks", key: "myTasks", icon: IcDoc },
       { href: "/me/leaves", key: "myLeaves", icon: IcLeave,
         perms: ["leaves.view", "requests.create"] },
       { href: "/me/attendance", key: "myAttendance", icon: IcClock,

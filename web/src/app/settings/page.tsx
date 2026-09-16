@@ -130,6 +130,9 @@ const T: Dict = {
     ar: "حسابات الدخول وصلاحياتها",
     en: "Login accounts and permissions",
   },
+  roles: { ar: "الأدوار والصلاحيات", en: "Roles & permissions" },
+  rolesHint: { ar: "من يرى ماذا، ومن يعتمد ماذا",
+               en: "Who sees and approves what" },
   payroll: { ar: "الإعدادات العامة", en: "General settings" },
   subscription: { ar: "الاشتراك", en: "Subscription" },
   save: { ar: "حفظ", en: "Save" },
@@ -500,6 +503,21 @@ function PayrollPanel({
           <span style={{ fontWeight: 500 }}>{L("users")}</span>
           <span className="muted" style={{ fontSize: ".82rem" }}>
             {L("usersHint")}
+          </span>
+        </Link>
+        )}
+
+        {/* ق-209: ⚠️⚠️ **الأدوار والصلاحيات** — **وشاشةٌ محورية
+            بلا رابط**: فمن يُعدّل دورًا **لا يصلها** (كشفه جرد
+            الشاشات). */}
+        {perms.has("access.manage") && (
+        <Link href="/settings/access" className="spread" style={{
+          padding: "13px 20px", color: "var(--ink-2)",
+          borderBottom: "1px solid var(--line)",
+        }}>
+          <span style={{ fontWeight: 500 }}>{L("roles")}</span>
+          <span className="muted" style={{ fontSize: ".82rem" }}>
+            {L("rolesHint")}
           </span>
         </Link>
         )}
