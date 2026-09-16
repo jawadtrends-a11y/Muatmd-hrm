@@ -140,6 +140,51 @@ def create_employment(*, person, company, employee_no, join_date,
 
 
 @transaction.atomic
+def _record_retro_for_salary(employment, structure, previous, actor):
+    """
+    يسجّل فروق الأشهر المغلقة بين تاريخ السريان واليوم (ق-212).
+
+    ⚠️ **ولا شيءَ إن كان السريان مستقبلًا أو هذا الشهر** — فالمسير
+    القادم يحتسبه بنفسه.
+
+    ⚠️⚠️ **والقيمتان تُحفظان** — قبل وبعد لا الفرق وحده: **فمن
+    يراجع بعد سنة يحتاج معرفة كيف حُسب** (ق-80).
+    """
+    from datetime import date as _date
+
+    from apps.payroll.models_retro import RetroSource
+    from apps.payroll.services.retro import closed_run_for, record_adjustment
+
+    if previous is None:
+        return                      # تعيينٌ جديد — لا سابق
+
+    before = Decimal(str(previous.gross_monthly or 0))
+    after = Decimal(str(structure.gross_monthly or 0))
+    if before == after:
+        return                      # لا فرق
+
+    today = _date.today()
+    y, m = structure.effective_from.year, structure.effective_from.month
+
+    # ⚠️ **ولا نتجاوز أربعًا وعشرين شهرًا** — فسريانٌ قديمٌ جدًّا
+    # **خطأُ إدخالٍ على الأرجح**، ولا نُغرق المسير بتسوياتٍ.
+    guard = 0
+    while (y, m) <= (today.year, today.month) and guard < 24:
+        guard += 1
+        run = closed_run_for(company=employment.company, year=y, month=m)
+        if run is not None:
+            record_adjustment(
+                employment=employment, year=y, month=m,
+                source=RetroSource.SALARY,
+                amount_before=before, amount_after=after,
+                reason_ar=(f"تغيير راتب ساري من "
+                           f"{structure.effective_from}"),
+                actor=actor)
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+
+
 def set_salary_structure(*, employment, lines, effective_from,
                          reason=SalaryChangeReason.ADJUSTMENT, note="",
                          approved_by=None):
@@ -188,6 +233,15 @@ def set_salary_structure(*, employment, lines, effective_from,
             },
             "reason": {"from": None, "to": reason},
         })
+
+    # ق-212: ⚠️⚠️ **والفرقُ عن الأشهر المغلقة يُسجَّل** (قرار
+    # جواد): فمن رفع راتبًا **من يناير في مارس** — والمسيران
+    # مغلقان — **كان الفرق يضيع صامتًا**.
+    #
+    # ⚠️ **ويسلك مسلك الإضافيّ والإجازة** (ق-69): تسويةٌ معلَّقة
+    # **يلتقطها المسير التالي** — لا إعادةَ فتحٍ لمسيرٍ اعتُمد.
+    _record_retro_for_salary(employment, structure, previous,
+                             approved_by)
     return structure
 
 
