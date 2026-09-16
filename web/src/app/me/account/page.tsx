@@ -76,6 +76,36 @@ type Account = {
 };
 
 export default function MyAccountPage() {
+  // ق-207: **أجهزتي** — ⚠️⚠️ **مهمٌّ أمنيًّا**: **فمن فقد جهازه
+  // يُبطل رمزه بلا تغيير كلمة المرور**. والمسار كان يتيمًا.
+  type Session = {
+    id: number; prefix: string; device_label: string;
+    device_name?: string; ip: string;
+    created_at: string; last_used_at: string;
+    is_current: boolean;
+  };
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessBusy, setSessBusy] = useState<number | "all" | null>(null);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const d = await apiGet<Session[] | { sessions: Session[] }>(
+        "/auth/sessions/");
+      setSessions(Array.isArray(d) ? d : (d.sessions || []));
+    } catch { setSessions([]); }
+  }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  const revoke = async (id: number | "all") => {
+    setSessBusy(id);
+    try {
+      await apiDelete(`/auth/sessions/?id=${id}`);
+      await loadSessions();
+    } catch { /* يُتجاهل — والقائمة تُعاد */ }
+    finally { setSessBusy(null); }
+  };
+
   const { L } = useT(T);
   const fileRef = useRef<HTMLInputElement>(null);
 
