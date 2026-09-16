@@ -39,6 +39,17 @@ const T: Dict = {
   amount: { ar: "المبلغ", en: "Amount" },
   occurrence: { ar: "التكرار", en: "Occurrence" },
   status: { ar: "الحالة", en: "Status" },
+  cancelPenalty: { ar: "إلغاء", en: "Cancel" },
+  cancelTitle: { ar: "إلغاء الجزاء", en: "Cancel penalty" },
+  cancelHint: {
+    ar: "⚠️ الجزاء يُلغى ولا يُحذف — فالسجلّ يبقى، وأثره المالي يزول",
+    en: "Cancelled, not deleted",
+  },
+  cancelReason: { ar: "سبب الإلغاء", en: "Reason" },
+  reasonRequired: { ar: "اكتب سبب الإلغاء", en: "Reason required" },
+  confirmCancel: { ar: "تأكيد الإلغاء", en: "Confirm" },
+  cancelled2: { ar: "أُلغي الجزاء", en: "Cancelled" },
+  back2: { ar: "تراجع", en: "Back" },
   dlgTitle: { ar: "توقيع الجزاء", en: "Apply penalty" },
   dlgIntro: {
     ar: "الجزاء المقترح من لائحتكم — راجعه قبل التوقيع",
@@ -87,7 +98,7 @@ type RegRow = {
   id: number; name: string; employee_no: string; violation: string;
   occurred_on: string; occurrence: number; kind_label: string;
   days: string; amount: string; status_label: string;
-  applied: boolean; counted: boolean;
+  applied: boolean; counted: boolean; status: string;
 };
 
 const monthStart = () => {
@@ -113,6 +124,8 @@ export default function PenaltiesPage() {
   const canView = perms.includes("attendance.view")
     || perms.includes("employees.view");
   const canEdit = perms.includes("employees.edit");
+  // ق-203: **إلغاء جزاء** — ⚠️ **لا حذفه**: فالسجلّ يبقى
+  const [cancelling, setCancelling] = useState<RegRow | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -283,6 +296,8 @@ export default function PenaltiesPage() {
                     <th style={{ width: 80 }}>{L("days")}</th>
                     <th style={{ width: 110 }}>{L("amount")}</th>
                     <th style={{ width: 90 }}>{L("status")}</th>
+                    {/* ق-203: عمود الإلغاء */}
+                    <th style={{ width: 90 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -304,7 +319,21 @@ export default function PenaltiesPage() {
                         </span>
                       </td>
                       <td>
-                        <span className="badge">{p.status_label}</span>
+                        <span className={`badge ${
+                          p.status === "cancelled" ? "badge-warn" : ""}`}>
+                          {p.status_label}
+                        </span>
+                      </td>
+                      {/* ق-203: ⚠️⚠️ **وجزاءٌ صدر خطأً يُلغى لا
+                          يُحذف** — وبلا شاشةٍ يبقى ظالمًا. */}
+                      <td style={{ textAlign: "end" }}>
+                        {canEdit && p.status !== "cancelled" && (
+                          <button className="btn btn-sm btn-ghost"
+                                  style={{ color: "var(--danger)" }}
+                                  onClick={() => setCancelling(p)}>
+                            {L("cancelPenalty")}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -319,6 +348,13 @@ export default function PenaltiesPage() {
         <ApplyDialog row={dlg} vios={vios} L={L}
                      onClose={() => setDlg(null)}
                      onDone={async () => { setDlg(null); await load(); }} />
+      )}
+
+      {/* ق-203: **إلغاء الجزاء** — لا حذفه */}
+      {cancelling && (
+        <CancelPenaltyDialog row={cancelling} L={L}
+          onClose={() => setCancelling(null)}
+          onDone={async () => { setCancelling(null); await load(); }} />
       )}
     </div>
   );
@@ -493,6 +529,99 @@ function ApplyDialog({ row, vios, L, onClose, onDone }: {
             {busy ? "…" : L("go")}
           </button>
           <button className="btn" onClick={onClose}>{L("cancel")}</button>
+        </div>
+      </div>
+    </div>
+
+  );
+}
+
+
+/**
+ * إلغاء جزاء (ق-203).
+ *
+ * ⚠️⚠️ **وجزاءٌ صدر خطأً يُلغى لا يُحذف**: **فالسجلّ يبقى وأثره
+ * المالي يزول** — وبلا شاشةٍ كان يبقى ظالمًا.
+ *
+ * ⚠️ **ولا إلغاءَ بلا سبب**: فمن يراجع بعد سنة **يحتاج معرفة
+ * لماذا** (ق-80).
+ */
+function CancelPenaltyDialog({ row, L, onClose, onDone }: {
+  row: RegRow;
+  L: (k: string) => string;
+  onClose: () => void;
+  onDone: () => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async () => {
+    if (!reason.trim()) { setErr(L("reasonRequired")); return; }
+    setBusy(true);
+    setErr("");
+    try {
+      await apiPost(`/penalties/${row.id}/cancel/`,
+                    { reason: reason.trim() });
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div onMouseDown={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }} style={{
+      position: "fixed", inset: 0, zIndex: 60,
+      background: "rgba(16,28,38,.45)", display: "grid",
+      placeItems: "center", padding: 16,
+    }}>
+      <div className="card" style={{ padding: 22, maxWidth: 440,
+                                     width: "100%" }}>
+        <h3 style={{ margin: "0 0 4px" }}>{L("cancelTitle")}</h3>
+        <div className="muted" style={{ fontSize: ".8rem",
+                                        lineHeight: 1.9,
+                                        marginBottom: 14 }}>
+          {L("cancelHint")}
+        </div>
+
+        <div style={{ padding: "10px 12px",
+                      background: "var(--paper-2)",
+                      borderRadius: "var(--radius-sm)",
+                      marginBottom: 14, fontSize: ".86rem" }}>
+          <strong>{row.name}</strong>
+          <div className="muted" style={{ fontSize: ".78rem",
+                                          marginTop: 3 }}>
+            {row.violation} ·{" "}
+            <span className="num">{row.occurred_on}</span>
+          </div>
+        </div>
+
+        {err && (
+          <div className="card" style={{ borderColor: "var(--danger)",
+                                         color: "var(--danger)",
+                                         marginBottom: 12 }}>
+            {err}
+          </div>
+        )}
+
+        <label className="field">
+          <span className="label">{L("cancelReason")}</span>
+          <textarea className="input" rows={3} value={reason}
+                    onChange={(e) => setReason(e.target.value)} />
+        </label>
+
+        <div className="row" style={{ gap: 8, marginTop: 16,
+                                      justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost" onClick={onClose}>
+            {L("back2")}
+          </button>
+          <button className="btn btn-danger"
+                  disabled={busy || !reason.trim()}
+                  onClick={submit}>
+            {busy ? "…" : L("confirmCancel")}
+          </button>
         </div>
       </div>
     </div>
