@@ -85,8 +85,9 @@ export default function MyLettersPage() {
   }
 
   const open = async (id: number) => {
+    // ⚠️ **والعرض PDF** — فمصدرٌ واحد للخطاب (ق-198)
     try {
-      setShown(await apiGet<Record<string, unknown>>(`/letters/${id}/`));
+      await openForView(`/letters/${id}/pdf/`);
     } catch {
       /* الخطأ يظهر في الشاشة نفسها */
     }
@@ -210,9 +211,7 @@ export default function MyLettersPage() {
         )}
       </div>
 
-      {shown && (
-        <LetterView data={shown} L={L} onClose={() => setShown(null)} />
-      )}
+
     </div>
   );
 }
@@ -220,87 +219,10 @@ export default function MyLettersPage() {
 
 /* ══ عرض الخطاب وطباعته (ق-128) ══ */
 
-function LetterView({ data, L, onClose }: {
-  data: Record<string, unknown>;
-  L: (k: string, f?: string) => string;
-  onClose: () => void;
-}) {
-  const print = () => {
-    // ⚠️ نافذةٌ مستقلّة: طباعة الصفحة كلّها تطبع القائمة والقوائم
-    // الجانبية — والخطاب وثيقةٌ تخرج وحدها.
-    const w = window.open("", "_blank", "width=800,height=900");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
-      <meta charset="utf-8"><title>${String(data.letter_no || "")}</title>
-      <style>
-        body { font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
-               padding: 48px 56px; line-height: 2; color: #14202b; }
-        .no { text-align: end; font-size: 13px; color: #667; }
-        h1 { font-size: 20px; text-align: center; margin: 28px 0 8px; }
-        .to { margin: 18px 0; font-weight: 600; }
-        .body { white-space: pre-wrap; font-size: 15px; }
-        .foot { margin-top: 56px; font-size: 13px; color: #667;
-                border-top: 1px solid #dde; padding-top: 10px; }
-      </style></head><body>
-      <div class="no">${String(data.letter_no || "")} — ${String(data.issued_on || "")}</div>
-      <h1>${String(data.heading_ar || "")}</h1>
-      <div class="to">${String(data.addressee_ar || "")}</div>
-      <div class="body">${String(data.body_ar || "")}</div>
-      <div class="foot">${String(data.valid_until
-        ? "صالح حتى " + data.valid_until : "")}</div>
-      </body></html>`);
-    w.document.close();
-    w.focus();
-    w.print();
-  };
-
-  return (
-    <div onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }} style={{
-      position: "fixed", inset: 0, background: "rgba(16,28,38,.5)",
-      display: "grid", placeItems: "center", padding: 20, zIndex: 80,
-      overflowY: "auto",
-    }}>
-      <div className="card" style={{ padding: 28, maxWidth: 640,
-                                     width: "100%", maxHeight: "88vh",
-                                     overflowY: "auto" }}
-           onClick={(e) => e.stopPropagation()}>
-        <div className="spread">
-          <span className="muted num" style={{ fontSize: ".82rem" }}>
-            {String(data.letter_no || "")}
-          </span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {String(data.issued_on || "")}
-          </span>
-        </div>
-
-        <h2 style={{ textAlign: "center", margin: "18px 0 6px",
-                     fontSize: "1.15rem" }}>
-          {String(data.heading_ar || "")}
-        </h2>
-        <div style={{ fontWeight: 600, margin: "14px 0" }}>
-          {String(data.addressee_ar || "")}
-        </div>
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 2,
-                      fontSize: ".95rem" }}>
-          {String(data.body_ar || "")}
-        </div>
-
-        {data.valid_until ? (
-          <div className="muted" style={{ marginTop: 24,
-                                          fontSize: ".82rem" }}>
-            {L("validUntil")}: {String(data.valid_until)}
-          </div>
-        ) : null}
-
-        <div className="row" style={{ gap: 8, marginTop: 22 }}>
-          <button className="btn btn-primary" onClick={print}>
-            {L("print")}
-          </button>
-          <button className="btn" onClick={onClose}>{L("close")}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ق-198: **حُذف `LetterView`** (قرار جواد).
+//
+// ⚠️⚠️ **فمصدرٌ واحد للخطاب أأمن من اثنين يختلفان**: وكانت
+// الشاشة **تطبع بقالب HTML خاصّ** — والمتصفّح يفهم `align` ولا
+// يفهم `size`، **فيختلف المطبوع عن الـPDF**.
+//
+// **والعرض الآن PDF وحده** — بترويسته وتذييله (ق-١٩٦).

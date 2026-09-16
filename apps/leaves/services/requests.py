@@ -1131,12 +1131,12 @@ def _effect_certificate(req):
     tpl = (LetterTemplate.objects
            .filter(company_id=req.company_id, code=code, is_active=True)
            .first())
-    if tpl is None:
-        # قالبٌ عامّ إن وُجد — وإلا فبلا نصّ
-        tpl = (LetterTemplate.objects
-               .filter(company_id=req.company_id, is_active=True)
-               .order_by("sort_order", "id").first())
-
+    # ق-198: ⚠️⚠️ **ولا يُصدَر إلا بقالبٍ مطابق** (قرار جواد):
+    # **فخطابُ «إخلاء طرف» لمن طلب «تعريفًا بالراتب» أسوأ من لا
+    # شيء** — وكان يرجع لأول قالبٍ في القائمة.
+    #
+    # **ومن لا قالب مطابقًا لديه تبقى شهادته موثَّقة بلا نصّ**،
+    # فيُصدرها الموارد يدويًّا.
     if tpl is None:
         valid_until = date.today() + timedelta(days=30)
         req.payload = {**p, "issued_at": str(date.today()),

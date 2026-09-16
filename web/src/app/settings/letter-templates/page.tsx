@@ -12,10 +12,23 @@ import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcDoc } from "@/components/Icons";
 
 /** ق-192: أدوات التنسيق — النصّ يبقى نصًّا */
-const FMT_TOKENS: [string, string][] = [
-  ["**", "fmtBold"], ["*", "fmtItalic"],
-  ["\n\n", "fmtPara"], ["— ", "fmtBullet"],
+/** ق-197: وسومٌ داخلية — ⚠️ **وما يفهمه مولّد PDF وحده** */
+const INLINE_TAGS: [string, string][] = [
+  ["b", "fmtBold"], ["i", "fmtItalic"], ["u", "fmtUnderline"],
 ];
+
+/** محاذاةُ الفقرة */
+const ALIGNS: [string, string][] = [
+  ["right", "alignRight"], ["center", "alignCenter"],
+  ["left", "alignLeft"], ["justify", "alignJustify"],
+];
+
+/** ⚠️ **وأحجامٌ ثلاثة**: فخطابٌ بعشرين حجمًا **يفقد رسميّته** */
+const SIZES: [string, string][] = [
+  ["small", "sizeSmall"], ["normal", "sizeNormal"],
+  ["large", "sizeLarge"],
+];
+
 
 const T: Dict = {
   title: { ar: "قوالب الخطابات", en: "Letter templates" },
@@ -49,6 +62,15 @@ const T: Dict = {
   },
   body: { ar: "نصّ الخطاب", en: "Body" },
   fmtBold: { ar: "عريض", en: "Bold" },
+  fmtUnderline: { ar: "تحته خطّ", en: "Underline" },
+  alignRight: { ar: "يمين", en: "Right" },
+  alignCenter: { ar: "وسط", en: "Center" },
+  alignLeft: { ar: "يسار", en: "Left" },
+  alignJustify: { ar: "ضبط", en: "Justify" },
+  sizeSmall: { ar: "صغير", en: "Small" },
+  sizeNormal: { ar: "عاديّ", en: "Normal" },
+  sizeLarge: { ar: "كبير", en: "Large" },
+  sampleText: { ar: "نصّ", en: "text" },
   fmtItalic: { ar: "مائل", en: "Italic" },
   fmtPara: { ar: "فقرة", en: "Paragraph" },
   fmtBullet: { ar: "نقطة", en: "Bullet" },
@@ -60,8 +82,8 @@ const T: Dict = {
   saveFirst: { ar: "احفظ القالب أولًا ثم ارفع الصور",
                en: "Save the template first" },
   imgHint: {
-    ar: "⚠️ تُطبع أعلى الخطاب وأسفله — واتركها فارغةً إن كان الورق مُترَوَّسًا",
-    en: "Printed at top and bottom",
+    ar: "⚠️ تُطبع أعلى الخطاب وأسفله — واتركها فارغةً إن كان الورق مُترَوَّسًا. والمقاس الأمثل: عرضٌ ٢٠٠٠ بكسل وارتفاعٌ نحو ٣٠٠ للترويسة و٢٢٠ للتذييل — والفراغ الأبيض حولها يُقصّ آليًّا.",
+    en: "Optimal: 2000px wide, ~300px tall (header). White padding is trimmed.",
   },
   vars: { ar: "المتغيّرات", en: "Variables" },
   varsHint: {
@@ -281,6 +303,57 @@ function TplDialog({ tpl, vars, L, onClose, onSaved }: {
 
   // ق-192: **تنسيقٌ بسيط** — والنصّ يبقى نصًّا، فالقالب
   // يُصدَّر PDF **ولا يحتمل HTML كاملًا**.
+  /** يلفّ التحديد بوسمٍ داخليّ — عريض/مائل/تحته خطّ */
+  const wrapTag = (tag: string) => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const a = el.selectionStart ?? 0;
+    const b = el.selectionEnd ?? a;
+    const body = f.body_ar;
+    const mid = body.slice(a, b) || L("sampleText");
+    const next = `${body.slice(0, a)}<${tag}>${mid}</${tag}>`
+      + body.slice(b);
+    setF({ ...f, body_ar: next });
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = a + tag.length + 2 + mid.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  /**
+   * يضبط محاذاة الفقرة أو حجمها.
+   *
+   * ⚠️ **والفقرة هي السطر الذي فيه المؤشّر**: فإن لم تكن موسومة
+   * **تُلَفّ بـ`<p>`**، وإلا **تُعدَّل سمتها**.
+   */
+  const setParaAttr = (attr: "align" | "size", val: string) => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const body = f.body_ar;
+    const pos = el.selectionStart ?? 0;
+
+    const start = body.lastIndexOf("\n", Math.max(pos - 1, 0)) + 1;
+    let end = body.indexOf("\n", pos);
+    if (end === -1) end = body.length;
+
+    let line = body.slice(start, end).trim();
+    if (!line) return;
+
+    const m = line.match(/^<p([^>]*)>([\s\S]*?)<\/p>$/);
+    let attrs = m ? (m[1] || "") : "";
+    const inner = m ? m[2] : line;
+
+    const re = new RegExp(`\\s*${attr}="[^"]*"`);
+    attrs = attrs.replace(re, "");
+    attrs += ` ${attr}="${val}"`;
+
+    const next = body.slice(0, start)
+      + `<p${attrs}>${inner}</p>` + body.slice(end);
+    setF({ ...f, body_ar: next });
+    requestAnimationFrame(() => el.focus());
+  };
+
   const wrapSelection = (token: string) => {
     const el = bodyRef.current;
     if (!el) { setF((v) => ({ ...v, body_ar: v.body_ar + token }));
@@ -419,13 +492,40 @@ function TplDialog({ tpl, vars, L, onClose, onSaved }: {
           <span className="label">{L("body")}</span>
           {/* ق-192: ⚠️ **ومربّع المحتوى أكبر وبتنسيق** (بلاغ
               جواد): فخطابٌ يُكتب في تسعة أسطر **يُكتب أعمى**. */}
+          {/* ق-197: ⚠️⚠️ **تنسيقٌ لكل فقرة** (قرار جواد):
+              محاذاةٌ وحجم — **ويُخزَّن HTML مبسَّطًا يفهمه
+              مولّد PDF**، فوسمٌ لا يقرؤه **يظهر نصًّا**. */}
           <div className="row" style={{ gap: 4, marginBottom: 6,
                                         flexWrap: "wrap" }}>
-            {FMT_TOKENS.map(([tok, key]) => (
+            {INLINE_TAGS.map(([tag, key]) => (
+              <button key={key} type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: ".78rem", minWidth: 34 }}
+                      onClick={() => wrapTag(tag)}>
+                {L(key)}
+              </button>
+            ))}
+
+            <span style={{ width: 1, background: "var(--line)",
+                           margin: "0 4px" }} />
+
+            {ALIGNS.map(([val, key]) => (
               <button key={key} type="button"
                       className="btn btn-sm btn-ghost"
                       style={{ fontSize: ".78rem" }}
-                      onClick={() => wrapSelection(tok)}>
+                      onClick={() => setParaAttr("align", val)}>
+                {L(key)}
+              </button>
+            ))}
+
+            <span style={{ width: 1, background: "var(--line)",
+                           margin: "0 4px" }} />
+
+            {SIZES.map(([val, key]) => (
+              <button key={key} type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: ".78rem" }}
+                      onClick={() => setParaAttr("size", val)}>
                 {L(key)}
               </button>
             ))}

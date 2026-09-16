@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 
 import { apiGet, apiPost, openForView, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
+import LetterBody from "@/components/LetterBody";
 import EmployeePicker, { type PickedEmployee }
   from "@/components/EmployeePicker";
 import { IcAlert, IcCheck, IcDoc } from "@/components/Icons";
@@ -267,10 +268,8 @@ export default function IssueLetterPage() {
             <h3 style={{ margin: "0 0 18px", textAlign: "center" }}>
               {(preview || shown)!.heading_ar}
             </h3>
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: 2.2,
-                          fontSize: ".95rem" }}>
-              {(preview || shown)!.body_ar}
-            </div>
+            {/* ق-197: **ويُعرض بتنسيقه** — فالوسم كان يظهر نصًّا */}
+            <LetterBody body={(preview || shown)!.body_ar} />
           </div>
         </>
       )}
