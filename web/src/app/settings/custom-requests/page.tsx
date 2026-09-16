@@ -260,7 +260,9 @@ function TypeDialog({ t, L, onClose, onSaved }: {
   };
 
   return (
-    <div onClick={onClose} style={{
+    <div onMouseDown={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }} style={{
       position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
       display: "grid", placeItems: "center", padding: 20, zIndex: 80,
     }}>
@@ -374,7 +376,9 @@ function FieldsDialog({ t, kinds, L, onClose, onChanged }: {
   };
 
   return (
-    <div onClick={onClose} style={{
+    <div onMouseDown={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }} style={{
       position: "fixed", inset: 0, background: "rgba(16,28,38,.45)",
       display: "grid", placeItems: "center", padding: 20, zIndex: 80,
       overflowY: "auto",

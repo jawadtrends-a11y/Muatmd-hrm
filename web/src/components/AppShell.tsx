@@ -75,6 +75,7 @@ const T: Dict = {
   myPayslips: { ar: "قسائم راتبي", en: "My Payslips" },
   myLetters: { ar: "خطاباتي", en: "My Letters" },
   announcements: { ar: "الإعلانات", en: "Announcements" },
+  issueLetter: { ar: "إصدار خطاب", en: "Issue a letter" },
   myNotifications: { ar: "إشعاراتي", en: "My notifications" },
   myProfile: { ar: "ملفي", en: "My profile" },
   plansLink: { ar: "الباقات", en: "Plans" },
@@ -215,6 +216,9 @@ const NAV: NavItem[] = [
         perms: ["leaves.view"] },
       { href: "/assets", key: "assets", icon: IcDoc,
         perms: ["employees.view"] },
+      // ق-193: **إصدار خطاب** — فالمساران كانا يتيمَين
+      { href: "/letters", key: "issueLetter", icon: IcDoc,
+        perms: ["employees.edit"] },
       { href: "/announcements", key: "announcements", icon: IcDoc,
         perms: ["announcements.send_company",
                 "announcements.send_department"] },
