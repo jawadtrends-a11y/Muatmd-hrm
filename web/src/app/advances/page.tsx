@@ -25,8 +25,6 @@ const T: Dict = {
   no: { ar: "الرقم", en: "No." },
   employee: { ar: "الموظف", en: "Employee" },
   amount: { ar: "المبلغ", en: "Amount" },
-  repaid: { ar: "المسدَّد", en: "Repaid" },
-  outstanding: { ar: "المتبقّي", en: "Outstanding" },
   method: { ar: "طريقة السداد", en: "Method" },
   installments: { ar: "الأقساط", en: "Instalments" },
   pauseDeduct: { ar: "إيقاف الخصم", en: "Pause deduction" },
@@ -40,6 +38,16 @@ const T: Dict = {
   start: { ar: "يبدأ من", en: "Starts" },
   status: { ar: "الحالة", en: "Status" },
   approve: { ar: "اعتماد", en: "Approve" },
+  schedule: { ar: "الأقساط", en: "Schedule" },
+  scheduleTitle: { ar: "جدول الأقساط", en: "Installments" },
+  amount2: { ar: "المبلغ", en: "Amount" },
+  repaid: { ar: "المسدَّد", en: "Repaid" },
+  outstanding: { ar: "المتبقّي", en: "Outstanding" },
+  period: { ar: "الفترة", en: "Period" },
+  deducted: { ar: "خُصم", en: "Deducted" },
+  notYet: { ar: "لم يُخصم", en: "Pending" },
+  noInstallments: { ar: "لا أقساط بعد", en: "No installments" },
+  close3: { ar: "إغلاق", en: "Close" },
   save: { ar: "حفظ", en: "Save" },
   cancel: { ar: "إلغاء", en: "Cancel" },
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
@@ -96,6 +104,8 @@ export default function AdvancesPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [askApprove, setAskApprove] = useState<number | null>(null);
+  // ق-202: **جدول أقساط سلفة** — والمسار كان يتيمًا
+  const [schedule, setSchedule] = useState<number | null>(null);
   const [busyRow, setBusyRow] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -204,6 +214,11 @@ export default function AdvancesPage() {
 
   return (
     <div className="stack">
+      {schedule !== null && (
+        <ScheduleDialog advanceId={schedule} L={L}
+                        onClose={() => setSchedule(null)} />
+      )}
+
       <ConfirmDialog
         open={askApprove !== null}
         confirmLabel={L("approve")}
@@ -380,6 +395,13 @@ export default function AdvancesPage() {
                       )}
                     </td>
                     <td>
+                      {/* ق-202: **جدول الأقساط** — فمن عليه
+                          سلفة **يحتاج معرفة المسدَّد والمتبقّي** */}
+                      <button className="btn btn-sm btn-ghost"
+                        style={{ marginInlineEnd: 4 }}
+                        onClick={() => setSchedule(a.id)}>
+                        {L("schedule")}
+                      </button>
                       {canEdit && a.status === "pending" && (
                         <button className="btn btn-sm btn-primary"
                           onClick={() => setAskApprove(a.id)}>
@@ -410,6 +432,129 @@ export default function AdvancesPage() {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * جدول أقساط سلفة (ق-202).
+ *
+ * ⚠️ **والمسار كان مبنيًّا بلا شاشة** — كشفه الجرد: **فمن عليه
+ * سلفة يحتاج معرفة المسدَّد والمتبقّي**.
+ */
+function ScheduleDialog({ advanceId, L, onClose }: {
+  advanceId: number; L: (k: string) => string; onClose: () => void;
+}) {
+  type Row = {
+    period: string; amount: string; deducted: boolean;
+    payslip_id?: number | null;
+  };
+  type Data = {
+    advance_no: string; amount: string; repaid: string;
+    outstanding: string; status: string; installments: Row[];
+  };
+
+  const [d, setD] = useState<Data | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    apiGet<Data>(`/advances/${advanceId}/schedule/`)
+      .then(setD)
+      .catch((e) => setErr(e instanceof ApiError ? e.message
+                                                 : String(e)))
+      .finally(() => setBusy(false));
+  }, [advanceId]);
+
+  return (
+    <div onMouseDown={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }} style={{
+      position: "fixed", inset: 0, zIndex: 60,
+      background: "rgba(16,28,38,.45)", display: "grid",
+      placeItems: "center", padding: 16,
+    }}>
+      <div className="card" style={{
+        padding: 22, maxWidth: 520, width: "100%",
+        maxHeight: "86vh", overflowY: "auto",
+      }}>
+        <div className="spread" style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: 0 }}>{L("scheduleTitle")}</h3>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>
+            {L("close3")}
+          </button>
+        </div>
+
+        {busy ? (
+          <div className="muted" style={{ padding: 20,
+                                          textAlign: "center" }}>…</div>
+        ) : err ? (
+          <div className="card" style={{ borderColor: "var(--danger)",
+                                         color: "var(--danger)" }}>
+            {err}
+          </div>
+        ) : d ? (
+          <>
+            <div className="muted num" style={{ fontSize: ".82rem",
+                                                marginBottom: 12 }}>
+              {d.advance_no} · {d.status}
+            </div>
+
+            <div style={{ display: "grid", gap: 12,
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(110px, 1fr))" }}>
+              {([[L("amount2"), d.amount],
+                 [L("repaid"), d.repaid],
+                 [L("outstanding"), d.outstanding]] as const).map(
+                ([lbl, val]) => (
+                <div key={lbl} style={{ padding: "10px 12px",
+                       background: "var(--paper-2)",
+                       borderRadius: "var(--radius-sm)" }}>
+                  <div className="muted" style={{ fontSize: ".74rem",
+                                                  marginBottom: 3 }}>
+                    {lbl}
+                  </div>
+                  <div className="num" style={{ fontWeight: 600 }}>
+                    {val}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {d.installments?.length ? (
+              <table className="table" style={{ marginTop: 16 }}>
+                <thead>
+                  <tr>
+                    <th>{L("period")}</th>
+                    <th style={{ width: 110 }}>{L("amount2")}</th>
+                    <th style={{ width: 100 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.installments.map((r, i) => (
+                    <tr key={i}>
+                      <td><span className="num">{r.period}</span></td>
+                      <td><span className="num">{r.amount}</span></td>
+                      <td>
+                        <span className={`badge ${
+                          r.deducted ? "badge-ok" : "badge-warn"}`}>
+                          {r.deducted ? L("deducted") : L("notYet")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="muted" style={{ marginTop: 16,
+                                              fontSize: ".85rem" }}>
+                {L("noInstallments")}
+              </div>
+            )}
+          </>
+        ) : null}
       </div>
     </div>
   );
