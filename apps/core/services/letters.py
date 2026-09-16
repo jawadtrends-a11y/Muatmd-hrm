@@ -39,6 +39,11 @@ VARIABLES = [
     # ⚠️ الراتب لا يظهر إلا بطلب صاحبه — نصٌّ في نموذج الخطاب
     ("basic_salary", "الراتب الأساسي", True),
     ("total_salary", "إجمالي الراتب", True),
+    # ق-195: **بدلات العقد** (قرار جواد) — ⚠️ **لا الإضافيّ ولا
+    # المخصّصات**: فتلك مبالغُ شهرٍ بعينه، **وهذه بنودُ عقده**.
+    ("housing_allowance", "بدل السكن", True),
+    ("transport_allowance", "بدل المواصلات", True),
+    ("other_allowances", "إجمالي البدلات الأخرى", True),
     ("salary_words", "الراتب كتابةً", True),
 ]
 
@@ -174,15 +179,29 @@ def build_context(employment, *, letter_no="", addressee="",
               .filter(employment=employment, effective_to__isnull=True)
               .order_by("-effective_from").first())
         basic = total = Decimal("0")
+        housing = transport = other = Decimal("0")
         if st:
             for c, amount in st.as_lines():
                 if c.component_type != ComponentType.EARNING:
                     continue
-                total += Decimal(amount)
+                amt = Decimal(amount)
+                total += amt
                 if c.code == "BASIC":
-                    basic = Decimal(amount)
+                    basic = amt
+                elif c.code == "HOUSING":
+                    housing = amt
+                elif c.code == "TRANSPORT":
+                    transport = amt
+                else:
+                    # ⚠️ **وما عدا الثلاثة بدلٌ آخر** — اتّصالٌ
+                    # وغيره، **يُجمَع ولا يُفصَّل**.
+                    other += amt
+
         ctx["basic_salary"] = f"{basic:,.2f}"
         ctx["total_salary"] = f"{total:,.2f}"
+        ctx["housing_allowance"] = f"{housing:,.2f}"
+        ctx["transport_allowance"] = f"{transport:,.2f}"
+        ctx["other_allowances"] = f"{other:,.2f}"
         ctx["salary_words"] = _num_to_words_ar(total) + " ريالًا سعوديًّا"
     else:
         # ⚠️ الفراغ لا الحذف: متغيّرٌ مفقود يبقى ظاهرًا في النصّ
