@@ -121,3 +121,32 @@ class TokenAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         return self.keyword
+
+
+def issue_for_impersonation(*, user, device_kind=DeviceKind.WEB, ip=None):
+    """
+    يُصدر رمزًا بلا كلمة مرور — **لجلسة دعمٍ فنيّ معتمدة** (ق-220).
+
+    ⚠️⚠️ **ولا يُستدعى إلا بعد التحقّق من جلسة الانتحال**: فمن
+    استدعاه بلا تحقّق **فتح بابًا بلا قفل**.
+
+    ⚠️ **وعمرُه ساعة**: فجلسة الدعم مؤقّتة، **ورمزٌ يبقى يومًا
+    بعد انتهائها ثغرة**.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    if not user.is_active:
+        raise LoginError("الحساب معطّل")
+
+    raw, digest, prefix = generate_token()
+    token = AuthToken.objects.create(
+        user=user, token_hash=digest, prefix=prefix,
+        device_kind=device_kind, device_name="جلسة دعم فني",
+        ip_address=ip,
+        expires_at=timezone.now() + timedelta(hours=1))
+
+    logger.info("impersonation_token_issued",
+                extra={"user_id": user.id, "ip": ip})
+    return raw, token

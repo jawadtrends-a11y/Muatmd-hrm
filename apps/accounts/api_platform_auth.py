@@ -180,7 +180,11 @@ def impersonate_start(request, account_id):
         return Response({"detail": str(e), "code": "impersonation_denied"},
                         status=403)
 
-    response = Response(imp.banner_for(session))
+    # ق-220: ⚠️⚠️ **والرمز يُرجع للوحة**: فالكوكي على نطاقها
+    # **لا يصل نطاق العميل** — فاللوحة تفتح شاشته به، ونظامه
+    # يُبدّله رمزَ دخول.
+    response = Response({**imp.banner_for(session),
+                         "token": session.token})
     response.set_cookie(
         imp.COOKIE_NAME, session.token,
         max_age=imp.IMPERSONATION_HOURS * 3600,
@@ -216,3 +220,60 @@ def impersonation_status(request):
     if session is None:
         return Response({"active": False})
     return Response(imp.banner_for(session))
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@csrf_exempt
+def impersonate_claim(request):
+    """
+    يُبدّل رمزَ جلسةِ الدعم برمزِ دخولٍ في نظام العميل (ق-220).
+
+    ⚠️⚠️ **وكوكي اللوحة لا يصل نطاق العميل**: فالجلسة كانت
+    تُسجَّل **والشريط يظهر**، **والدخول لا يقع** — فاللوحة تُحدّث
+    نفسها ولا تنقل أحدًا.
+
+    **فاللوحة تفتح نطاق العميل برمزٍ في الرابط، والنظام يُبدّله
+    هنا** — ولا يعتمد على نطاقٍ مشترك.
+
+    ⚠️ **والرمز يُستهلك مرّةً**: فرابطٌ يُعاد استعماله **بابٌ بلا
+    قفل**.
+    """
+    from apps.accounts.models_access import AccountMembership
+    from apps.accounts.services import auth_tokens as auth
+    from apps.accounts.services.platform import impersonation as imp
+
+    token = (request.data.get("token") or "").strip()
+    session = imp.resolve_impersonation(token)
+    if session is None:
+        return Response({"detail": "جلسة الدعم منتهية أو غير صحيحة",
+                         "code": "invalid_session"}, status=403)
+
+    # ⚠️ **ويُدخل بحساب مالك الحساب**: فهو **أوسع صلاحيةً**،
+    # والدور المطلوب يُقيّده في الجلسة.
+    # ⚠️⚠️ **وسياسة العزل تحجب العضوية عمّن لا سياق له** (ق-107):
+    # **والعلّة نفسها للمرّة السابعة** — فكلُّ قراءةٍ في خدمات
+    # اللوحة **تحتاج سياقها**.
+    from apps.core.tenancy.context import account_scope
+
+    with account_scope(session.account_id):
+        m = (AccountMembership.objects
+             .filter(account_id=session.account_id,
+                     is_account_owner=True)
+             .select_related("user").first())
+        if m is None:
+            m = (AccountMembership.objects
+                 .filter(account_id=session.account_id)
+                 .select_related("user").first())
+    if m is None:
+        return Response({"detail": "لا مستخدمَ في هذا الحساب"},
+                        status=404)
+
+    raw, _tok = auth.issue_for_impersonation(
+        user=m.user, ip=_client_ip(request))
+
+    return Response({
+        "token": raw,
+        "banner": imp.banner_for(session),
+    })

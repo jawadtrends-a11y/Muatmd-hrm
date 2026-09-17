@@ -1,7 +1,7 @@
 "use client";
 
 /** شاشة الدخول — تُعرض بلا هيكل (PUBLIC_PATHS في AppShell). */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -34,6 +34,33 @@ const T: Dict = {
 
 export default function LoginPage() {
   const router = useRouter();
+
+  // ق-220: ⚠️⚠️ **جلسة الدعم الفنيّ** — فكوكي اللوحة **لا يصل
+  // هذا النطاق**: واللوحة تفتح الشاشة برمزٍ في الرابط، **ونحن
+  // نُبدّله رمزَ دخول**.
+  //
+  // ⚠️ **والرمز يُمسح من الرابط فورًا**: فرابطٌ يُنسخ أو يبقى
+  // في السجلّ **بابٌ بلا قفل**.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const imp = new URLSearchParams(window.location.search).get("imp");
+    if (!imp) return;
+
+    (async () => {
+      try {
+        const out = await apiPost<{ token: string }>(
+          "/auth/impersonate/claim/", { token: imp });
+        setToken(out.token);
+        window.history.replaceState(null, "", "/login");
+        router.replace("/");
+      } catch (e) {
+        setError(e instanceof ApiError
+          ? e.message
+          : "تعذّر بدء جلسة الدعم");
+        window.history.replaceState(null, "", "/login");
+      }
+    })();
+  }, [router]);
   const { lang, theme, toggleLang, setTheme } = usePrefs();
   const { L } = useT(T);
 

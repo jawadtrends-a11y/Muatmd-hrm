@@ -338,6 +338,10 @@ urlpatterns = [
     path("platform/accounts/", platform_admin_api.accounts_list, name="platform-accounts"),
     path("platform/accounts/<int:account_id>/", platform_admin_api.account_detail, name="platform-account"),
     path("platform/accounts/<int:account_id>/impersonate/", platform_auth_api.impersonate_start, name="impersonate-start"),
+    # ق-220: ⚠️ **ويُبدَّل الرمز في نظام العميل** — فكوكي اللوحة
+    # **لا يصل نطاقه**.
+    path("api/auth/impersonate/claim/",
+         platform_auth_api.impersonate_claim, name="impersonate-claim"),
     path("platform/impersonate/end/", platform_auth_api.impersonate_end, name="impersonate-end"),
     path("platform/impersonate/status/", platform_auth_api.impersonation_status, name="impersonate-status"),
     path("platform/accounts/<int:account_id>/activate/", platform_admin_api.admin_activate, name="platform-activate"),

@@ -12,6 +12,15 @@ import { pGet, pPost, can, AdminError, type PlatformUser } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcSearch, IcUser } from "@/components/Icons";
 
+/**
+ * ق-220: نطاق نظام العميل.
+ *
+ * ⚠️ **ويُقرأ من البيئة**: فالنطاق يتغيّر بين التجربة والإنتاج،
+ * **وتثبيتُه في الكود يكسر أحدهما**.
+ */
+const CLIENT_BASE =
+  process.env.NEXT_PUBLIC_CLIENT_BASE || "https://hr.muatmd.sa";
+
 const T: Dict = {
   title: { ar: "الحسابات", en: "Accounts" },
   subtitle: {
@@ -203,11 +212,25 @@ export default function AccountsPage() {
     if (!dialog) return;
     setActing(true);
     try {
-      await pPost(`/platform/accounts/${dialog.account_id}/impersonate`, {
-        reason, as_role: asRole,
-      });
+      // ق-220: ⚠️⚠️ **وكوكي اللوحة لا يصل نطاق العميل**: فكانت
+      // الجلسة تُسجَّل **والشريط يظهر**، **والدخول لا يقع** —
+      // فاللوحة تُحدّث نفسها ولا تنقل أحدًا.
+      //
+      // **فتُفتح شاشة العميل برمزٍ في الرابط**، ونظامه يُبدّله
+      // رمزَ دخولٍ — ولا يعتمد على نطاقٍ مشترك.
+      const out = await pPost<{ token?: string }>(
+        `/platform/accounts/${dialog.account_id}/impersonate`,
+        { reason, as_role: asRole });
+
       setDialog(null);
-      location.reload();
+
+      const t = out?.token;
+      if (t) {
+        window.location.href =
+          `${CLIENT_BASE}/login?imp=${encodeURIComponent(t)}`;
+      } else {
+        location.reload();
+      }
     } catch (e) {
       setError((e as AdminError).message);
     } finally {

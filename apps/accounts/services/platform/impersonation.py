@@ -40,7 +40,16 @@ def start_impersonation(*, platform_user, account_id, reason="",
             f"دورك ({platform_user.get_role_display()}) لا يسمح بالدخول "
             "لحسابات العملاء")
 
-    account = Account.objects.filter(id=account_id).first()
+    # ق-220: ⚠️⚠️ **وسياسة العزل تحجب الحساب عمّن لا سياق له**
+    # (ق-107): **ولوحة المنصّة بطبيعتها بلا سياق** — فكان الدخول
+    # للدعم يردّ «الحساب غير موجود» **وهو موجود**.
+    #
+    # **والعلّة نفسها أُصلحت في خمسة مسارات** (ق-183) — وهذا
+    # سادسها: **فالجرد لم يشمل خدمات اللوحة**.
+    from apps.core.tenancy.context import account_scope
+
+    with account_scope(account_id):
+        account = Account.objects.filter(id=account_id).first()
     if account is None:
         raise ImpersonationError("الحساب غير موجود")
 
