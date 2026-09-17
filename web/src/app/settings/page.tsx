@@ -6,7 +6,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiGet, apiPost, apiPut, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -44,6 +43,11 @@ const GROUPS: {
         hint: "rolesHint", perm: "access.manage" },
       { href: "/settings/api-keys", label: "apiKeys",
         hint: "apiKeysHint", perm: "account.manage" },
+      // ق-219: **الاشتراك** — ⚠️⚠️ **وتبويبه كان مكرَّرًا
+      // بالكامل** مع شاشة الباقات: الباقة والحالة والأيام
+      // والتجديد والفواتير والبطاقات — **كلّها فيها**.
+      { href: "/subscribe", label: "subscriptionLink",
+        hint: "subscriptionLinkHint", perm: "account.manage" },
     ],
   },
   {
@@ -133,6 +137,10 @@ const T: Dict = {
   attPolicy: { ar: "البصمة والتواجد", en: "Punch & presence" },
   attPolicyHint: { ar: "بصمة الجوال وتتبّع الموقع وأنشطة العمل",
                    en: "Mobile punch, presence, activities" },
+  subscriptionLink: { ar: "الاشتراك والفواتير",
+                      en: "Subscription & invoices" },
+  subscriptionLinkHint: { ar: "باقتك وحالتها وفواتيرك وبطاقاتك",
+                          en: "Your plan, invoices and cards" },
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
@@ -394,8 +402,6 @@ const T: Dict = {
 // ق-218: ⚠️ **وتبويب «الرواتب» حُذف** — فحقوله انتقلت لأربع
 // شاشاتٍ موضوعية: **نهاية الخدمة · قواعد الرواتب · السلف ·
 // البصمة والتواجد**.
-const SECTIONS = ["subscription"] as const;
-type Section = (typeof SECTIONS)[number];
 
 type PayrollSettings = {
   eosb_wage_basis: string;
@@ -495,194 +501,6 @@ function Row({
 
 /* ══ لوحة الاشتراك ══ */
 
-function SubscriptionPanel({
-  L,
-}: {
-  L: (k: string, f?: string) => string;
-}) {
-  const [sub, setSub] = useState<Subscription | null>(null);
-  const [mine, setMine] = useState<MySub | null>(null);
-  const [payments, setPayments] = useState<PaymentRow[]>([]);
-  const [busy, setBusy] = useState(true);
-  const [paying, setPaying] = useState(false);
-  const [checkout, setCheckout] = useState<Record<string, unknown> | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      apiGet<Subscription>("/account/subscription/").catch(() => null),
-      apiGet<MySub>("/account/my-subscription/").catch(() => null),
-      apiGet<PaymentRow[]>("/account/payments/").catch(() => []),
-    ]).then(([s, m, inv]) => {
-      setSub(s);
-      setMine(m);
-      setPayments(inv);
-      setBusy(false);
-    });
-  }, []);
-
-  if (busy) {
-    return (
-      <div className="card" style={{
-        padding: 36, textAlign: "center", color: "var(--ink-3)",
-      }}>
-        {L("loading")}
-      </div>
-    );
-  }
-
-  if (!sub) {
-    // «لا اشتراك» ليست «لا صلاحية»: من لا اشتراك لحسابه سيظنّ
-    // أنه ممنوع فيراجع مديره بلا سبب.
-    return (
-      <div className="card" style={{
-        padding: 36, textAlign: "center", color: "var(--ink-3)",
-      }}>
-        <div style={{ fontWeight: 500 }}>{L("noSub")}</div>
-        <div style={{ fontSize: ".86rem", marginTop: 6 }}>
-          {L("noSubHint")}
-        </div>
-        <Link href="/subscribe" className="btn btn-primary"
-              style={{ marginTop: 16 }}>
-          {L("browsePlans")}
-        </Link>
-      </div>
-    );
-  }
-
-  const over = mine?.overage;
-
-  const payOverage = async () => {
-    setPaying(true);
-    try {
-      setCheckout(await apiPost<Record<string, unknown>>(
-        "/account/pay-overage/", {}));
-    } catch {
-      /* الرسالة تظهر بالشريط نفسه */
-    } finally { setPaying(false); }
-  };
-
-  return (
-    <div className="stack">
-      {over && Number(over.amount) > 0 && (
-        <div className="card" style={{
-          padding: 18, borderColor: "var(--copper)",
-          background: "var(--copper-soft)",
-        }}>
-          <div style={{ fontWeight: 600 }}>{L("overTitle")}</div>
-          <div style={{ fontSize: ".88rem", marginTop: 6 }}>
-            {L("overBody")
-              .replace("{n}", String(over.added))
-              .replace("{a}", over.amount)
-              .replace("{d}", String(over.days_remaining))}
-          </div>
-          <button className="btn btn-primary" style={{ marginTop: 12 }}
-                  disabled={paying} onClick={payOverage}>
-            {paying ? L("overPaying") : L("overPay")}
-          </button>
-        </div>
-      )}
-
-      {checkout != null && (
-        <OveragePay data={checkout} L={L}
-                    onClose={() => setCheckout(null)} />
-      )}
-
-      <div className="card" style={{ padding: 20 }}>
-        <Row label={L("plan")}>
-          <strong>{sub.plan || L("none")}</strong>
-        </Row>
-        <Row label={L("state")}>
-          <span className={
-            sub.state === "active" ? "badge badge-ok"
-              : sub.state === "trial" ? "badge badge-teal"
-              : "badge badge-warn"
-          }>
-            {sub.state_label}
-          </span>
-        </Row>
-        <Row label={L("cycle")}>{sub.cycle_label}</Row>
-        <Row label={L("periodEnd")}>
-          {sub.period_end
-            ? <span className="num">{sub.period_end}</span> : "—"}
-        </Row>
-        {sub.days_left != null && (
-          <Row label={L("daysLeft")}>
-            <span className="num" style={{
-              color: sub.days_left <= 5 ? "var(--copper)" : undefined,
-              fontWeight: 600,
-            }}>
-              {sub.days_left}
-            </span>{" "}
-            {L("days")}
-          </Row>
-        )}
-        <Row label={L("autoRenew")}>
-          <span className={sub.auto_renew ? "badge badge-ok" : "badge"}>
-            {sub.auto_renew ? L("yes") : L("no")}
-          </span>
-        </Row>
-        <Row label={L("savedCard")}>
-          {sub.saved_card
-            ? <span className="num">
-                {sub.saved_card.brand} •••• {sub.saved_card.last_four}
-              </span>
-            : L("none")}
-        </Row>
-      </div>
-
-      <div className="card" style={{ overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
-          <div>
-            <h3 style={{ fontSize: "1rem", margin: 0 }}>{L("invoices")}</h3>
-            <div className="muted" style={{ fontSize: ".8rem", marginTop: 2 }}>
-              {L("invoiceNote")}
-            </div>
-          </div>
-        </div>
-        {payments.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", color: "var(--ink-3)" }}>
-            {L("empty")}
-          </div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ textAlign: "end" }}>{L("payDate")}</th>
-                <th style={{ textAlign: "end" }}>{L("amount")}</th>
-                <th style={{ textAlign: "end" }}>{L("payPeriod")}</th>
-                <th>{L("payMethod")}</th>
-                <th>{L("status")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.id}>
-                  <td style={{ textAlign: "end" }}>
-                    <span className="num">{p.date}</span>
-                  </td>
-                  <td style={{ textAlign: "end", fontWeight: 600 }}>
-                    <span className="num">{money(p.amount)}</span>
-                  </td>
-                  <td style={{ textAlign: "end" }} className="muted">
-                    <span className="num">{p.period || "—"}</span>
-                  </td>
-                  <td className="muted">
-                    {p.method ? `${p.method} ••${p.last4}` : "—"}
-                  </td>
-                  <td>
-                    <span className={p.paid ? "badge badge-ok" : "badge"}>
-                      {p.status_label}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ══ الشاشة ══ */
 
@@ -697,29 +515,8 @@ export default function SettingsPage() {
       .then((d) => setPerms(new Set(d.permissions || [])))
       .catch(() => setPerms(new Set()));
   }, []);
-  // التبويب في الرابط لا في الحالة: يبقى عند التحديث، ويُفتح
-  // مباشرةً من قائمة الحساب (?tab=subscription).
-  const params = useSearchParams();
-  const router = useRouter();
-  const fromUrl = params.get("tab") as Section | null;
-  const [section, setSectionState] = useState<Section>(
-    fromUrl && SECTIONS.includes(fromUrl) ? fromUrl : "subscription");
-
-  const setSection = (s: Section) => {
-    setSectionState(s);
-    router.replace(`/settings?tab=${s}`,
-                   { scroll: false });
-  };
-
-  useEffect(() => {
-    if (fromUrl && SECTIONS.includes(fromUrl) && fromUrl !== section) {
-      setSectionState(fromUrl);
-    }
-  }, [fromUrl, section]);
-
-  const ICONS: Record<Section, React.ComponentType<{ size?: number }>> = {
-    subscription: IcWallet,
-  };
+  // ق-219: ⚠️ **ولا تبويبات** — فالإعدادات **بطاقاتٌ خالصة**،
+  // والاشتراك صار شاشةً مستقلّة.
 
   return (
     <div className="stack">
@@ -765,21 +562,6 @@ export default function SettingsPage() {
         })}
       </div>
 
-      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-        {SECTIONS.map((s) => {
-          const Icon = ICONS[s];
-          return (
-            <button key={s}
-              className={`btn btn-sm ${section === s ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setSection(s)}>
-              <Icon size={16} />
-              {L(s)}
-            </button>
-          );
-        })}
-      </div>
-
-      {section === "subscription" && <SubscriptionPanel L={L} />}
     </div>
   );
 }
