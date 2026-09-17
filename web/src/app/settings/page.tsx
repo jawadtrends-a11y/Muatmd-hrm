@@ -12,7 +12,106 @@ import { apiGet, apiPost, apiPut, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcPayroll, IcUsers, IcWallet } from "@/components/Icons";
 
+/**
+ * ق-217: **مجموعات الإعدادات** — ⚠️⚠️ **بطاقاتٌ لا قائمةٌ
+ * طويلة** (بلاغ جواد): فأربعةٌ وعشرون بندًا في عمودٍ واحد
+ * **تُقرأ سطرًا سطرًا والعين تتوه**.
+ *
+ * ⚠️ **والتجميع يُقلّل زمن البحث**: فمن يريد «أنواع الإجازات»
+ * **يذهب لمجموعة الطلبات مباشرةً**.
+ */
+const GROUPS: {
+  key: string;
+  items: { href: string; label: string; hint: string; perm: string }[];
+}[] = [
+  {
+    key: "grpOrg",
+    items: [
+      { href: "/settings/company", label: "company",
+        hint: "companyHint", perm: "company.view" },
+      { href: "/settings/holidays", label: "holidays",
+        hint: "holidaysHint", perm: "org.view" },
+      { href: "/settings/tags", label: "tagsLink",
+        hint: "tagsHint", perm: "employees.view" },
+    ],
+  },
+  {
+    key: "grpAccess",
+    items: [
+      { href: "/settings/users", label: "users",
+        hint: "usersHint", perm: "access.view" },
+      { href: "/settings/access", label: "roles",
+        hint: "rolesHint", perm: "access.manage" },
+      { href: "/settings/api-keys", label: "apiKeys",
+        hint: "apiKeysHint", perm: "account.manage" },
+    ],
+  },
+  {
+    key: "grpPayroll",
+    items: [
+      { href: "/settings/pay-components", label: "payComponents",
+        hint: "payComponentsHint", perm: "payroll.view" },
+      { href: "/settings/job-grades", label: "grades",
+        hint: "gradesHint", perm: "employees.view" },
+      { href: "/settings/allowances", label: "allowancesLink",
+        hint: "allowancesHint", perm: "payroll.view" },
+      { href: "/settings/expense-categories", label: "expenseCats",
+        hint: "expenseCatsHint", perm: "payroll.view" },
+      { href: "/settings/bank-templates", label: "bankTpl",
+        hint: "bankTplHint", perm: "payroll.view" },
+      { href: "/settings/gl", label: "glLink",
+        hint: "glHint", perm: "payroll.view" },
+      { href: "/settings/payroll-approval", label: "payrollChain",
+        hint: "payrollChainHint", perm: "payroll.view" },
+    ],
+  },
+  {
+    key: "grpAttendance",
+    items: [
+      { href: "/settings/shifts", label: "shifts",
+        hint: "shiftsHint", perm: "attendance.view" },
+      { href: "/settings/devices", label: "devices",
+        hint: "devicesHint", perm: "sites.view" },
+      { href: "/settings/exemptions", label: "exemptions",
+        hint: "exemptionsHint", perm: "attendance.view" },
+    ],
+  },
+  {
+    key: "grpRequests",
+    items: [
+      { href: "/settings/leave-types", label: "leaveTypes",
+        hint: "leaveTypesHint", perm: "leaves.view" },
+      { href: "/settings/approval-chains", label: "chains",
+        hint: "chainsHint", perm: "leaves.view" },
+      { href: "/settings/custom-requests", label: "customReqs",
+        hint: "customReqsHint", perm: "requests.view" },
+      { href: "/settings/penalty-policy", label: "penaltyPolicy",
+        hint: "penaltyPolicyHint", perm: "employees.view" },
+      { href: "/settings/policies", label: "policiesLink",
+        hint: "policiesHint", perm: "employees.view" },
+    ],
+  },
+  {
+    key: "grpOther",
+    items: [
+      { href: "/settings/letter-templates", label: "letterTemplates",
+        hint: "letterTemplatesHint", perm: "employees.view" },
+      { href: "/settings/notification-templates", label: "notifTpl",
+        hint: "notifTplHint", perm: "company.view" },
+      { href: "/settings/imports", label: "importsLink",
+        hint: "importsHint", perm: "employees.create" },
+    ],
+  },
+];
+
 const T: Dict = {
+  // ق-217: عناوين المجموعات
+  grpOrg: { ar: "المنشأة", en: "Organization" },
+  grpAccess: { ar: "المستخدمون والصلاحيات", en: "Users & access" },
+  grpPayroll: { ar: "الرواتب", en: "Payroll" },
+  grpAttendance: { ar: "الحضور", en: "Attendance" },
+  grpRequests: { ar: "الطلبات واللوائح", en: "Requests & policies" },
+  grpOther: { ar: "القوالب والبيانات", en: "Templates & data" },
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
@@ -455,282 +554,44 @@ function PayrollPanel({
       {/* ══ إعدادات عامة ══
           بطاقات مجمّعة لا تبويبات: البنود تكثر مع نمو النظام،
           والتبويب يضيق بها. */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <h3 style={{
-          fontSize: "1rem", padding: "14px 20px",
-          borderBottom: "1px solid var(--line)", color: "var(--teal)",
-        }}>
-          {L("general")}
-        </h3>
-        {perms.has("company.view") && (
-        <Link href="/settings/company" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("company")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("companyHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("attendance.view") && (
-        <Link href="/settings/exemptions" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("exemptions")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("exemptionsHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("org.view") && (
-        <Link href="/settings/holidays" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("holidays")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("holidaysHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("access.view") && (
-        <Link href="/settings/users" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("users")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("usersHint")}
-          </span>
-        </Link>
-        )}
-
-        {/* ق-209: ⚠️⚠️ **الأدوار والصلاحيات** — **وشاشةٌ محورية
-            بلا رابط**: فمن يُعدّل دورًا **لا يصلها** (كشفه جرد
-            الشاشات). */}
-        {perms.has("access.manage") && (
-        <Link href="/settings/access" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("roles")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("rolesHint")}
-          </span>
-        </Link>
-        )}
-        {/* البنود تظهر لمن يقرأ — والوجود ثابت، والقدرة
-            على التعديل هي المتغيّرة (ق-76) */}
-        {perms.has("company.view") && (
-        <Link href="/settings/notification-templates" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("notifTpl")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("notifTplHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/bank-templates" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("bankTpl")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("bankTplHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("employees.view") && (
-        <Link href="/settings/job-grades" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("grades")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("gradesHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/pay-components" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("payComponents")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("payComponentsHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("sites.view") && (
-        <Link href="/settings/devices" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("devices")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("devicesHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("attendance.view") && (
-        <Link href="/settings/shifts" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("shifts")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("shiftsHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("leaves.view") && (
-        <Link href="/settings/approval-chains" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-          borderBottom: "1px solid var(--line)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("chains")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("chainsHint")}
-          </span>
-        </Link>
-        )}
-        {perms.has("leaves.view") && (
-        <Link href="/settings/leave-types" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("leaveTypes")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("leaveTypesHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-128: قوالب الخطابات — تكتبها الشركة بمتغيّراتها */}
-        {perms.has("employees.view") && (
-        <Link href="/settings/letter-templates" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("letterTemplates")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("letterTemplatesHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-129: السياسات — تُنشر ويُقرّ بها */}
-        {perms.has("employees.view") && (
-        <Link href="/settings/policies" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("policiesLink")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("policiesHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-119 وق-130: لائحة الجزاءات ونسخها */}
-        {perms.has("employees.view") && (
-        <Link href="/settings/penalty-policy" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("penaltyPolicy")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("penaltyPolicyHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-172: الاستيراد من نظامٍ سابق */}
-        {perms.has("employees.create") && (
-        <Link href="/settings/imports" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("importsLink")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("importsHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-152: القيد المحاسبيّ */}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/gl" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("glLink")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("glHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-151: مفاتيح API */}
-        {perms.has("account.manage") && (
-        <Link href="/settings/api-keys" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("apiKeys")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("apiKeysHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-142: أنواع الطلبات المخصّصة */}
-        {perms.has("requests.view") && (
-        <Link href="/settings/custom-requests" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("customReqs")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("customReqsHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-140: سلسلة اعتماد المسير */}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/payroll-approval" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("payrollChain")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("payrollChainHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-139: فئات المصروفات */}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/expense-categories" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("expenseCats")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("expenseCatsHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-134: المخصّصات المصروفة */}
-        {perms.has("payroll.view") && (
-        <Link href="/settings/allowances" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("allowancesLink")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("allowancesHint")}
-          </span>
-        </Link>
-        )}
-        {/* ق-131: وسوم الموظفين */}
-        {perms.has("employees.view") && (
-        <Link href="/settings/tags" className="spread" style={{
-          padding: "13px 20px", color: "var(--ink-2)",
-        }}>
-          <span style={{ fontWeight: 500 }}>{L("tagsLink")}</span>
-          <span className="muted" style={{ fontSize: ".82rem" }}>
-            {L("tagsHint")}
-          </span>
-        </Link>
-        )}
+      {/* ق-217: **بطاقاتٌ مجمَّعة لا قائمةٌ طويلة** */}
+      <div style={{ display: "grid", gap: 16,
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(290px, 1fr))" }}>
+        {GROUPS.map((g) => {
+          const items = g.items.filter((it) => perms.has(it.perm));
+          // ⚠️ **ومجموعةٌ بلا بندٍ مسموح لا تُعرض** — فبطاقةٌ
+          // فارغة **تُوهم بنقصٍ في النظام**.
+          if (items.length === 0) return null;
+          return (
+            <div key={g.key} className="card"
+                 style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px",
+                            borderBottom: "1px solid var(--line)",
+                            fontWeight: 600, fontSize: ".92rem",
+                            color: "var(--teal)" }}>
+                {L(g.key)}
+              </div>
+              {items.map((it, i) => (
+                <Link key={it.href} href={it.href}
+                      style={{
+                        display: "block", padding: "11px 16px",
+                        color: "var(--ink-2)",
+                        borderBottom: i < items.length - 1
+                          ? "1px solid var(--line)" : "none",
+                      }}>
+                  <div style={{ fontWeight: 500, fontSize: ".88rem" }}>
+                    {L(it.label)}
+                  </div>
+                  <div className="muted" style={{ fontSize: ".76rem",
+                                                  marginTop: 2 }}>
+                    {L(it.hint)}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
       <div className="card" style={{ padding: 20 }}>

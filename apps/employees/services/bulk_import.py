@@ -47,6 +47,75 @@ COLUMNS = [
     ("housing_allowance", "بدل السكن", False, "2000"),
     ("transport_allowance", "بدل النقل", False, "800"),
     ("iban", "الآيبان", False, "SA0380000000608010167519"),
+
+    # ق-216: ── حقولٌ كان الملفّ يفتقدها (بلاغ جواد) ──
+    #
+    # ⚠️⚠️ **فمن استورد ثلاثين موظفًا يُكملهم واحدًا واحدًا** —
+    # والاستيراد يفقد معناه.
+    #
+    # ⚠️ **وما تُركَ عمدًا**: الهجريّ (**يُحتسب آليًّا**)، وحالةُ
+    # الخدمة وانتهاؤها (**أحداثٌ لا بياناتُ تعيين**)، وتواريخُ
+    # إصدار الهوية والجواز (**فالنظام يستعمل الانتهاء وحده**)،
+    # والإجماليُّ والصافي والتأمينات (**محسوبةٌ، وإدخالها يخلق
+    # تناقضًا**).
+
+    # ── الأسماء الكاملة ──
+    ("father_name_ar", "اسم الأب", False, "عبدالله"),
+    ("grandfather_name_ar", "اسم الجد", False, "سعد"),
+    ("full_name_en", "الاسم بالإنجليزية", False, "Mohammed Alotaibi"),
+
+    # ── بيانات شخصية ──
+    ("birth_date", "تاريخ الميلاد", False, "1990-05-20"),
+    ("marital_status", "الحالة الاجتماعية", False,
+     "single · married · divorced · widowed"),
+
+    # ── الهوية والجواز ──
+    ("id_expiry_date", "انتهاء الهوية", False, "2028-06-30"),
+    ("passport_number", "رقم الجواز", False, "A12345678"),
+    ("passport_expiry_date", "انتهاء الجواز", False, "2030-01-15"),
+
+    # ── التنظيم ──
+    #
+    # ⚠️ **والمدير بالرقم الوظيفيّ لا بالاسم** (قرار جواد):
+    # **فالأسماء تتكرّر والأرقام لا**.
+    ("direct_manager_no", "الرقم الوظيفي للمدير المباشر", False,
+     "1011 — في الملفّ أو في النظام"),
+    ("branch", "الفرع", False, "الفرع الرئيسي — باسمه"),
+    ("primary_site", "موقع العمل", False, "المقرّ — باسمه"),
+    ("cost_center", "مركز التكلفة", False, "اختياريّ"),
+    ("job_grade", "الدرجة الوظيفية", False, "اختياريّة"),
+    ("job_step", "المرتبة الوظيفية", False, "اختياريّة"),
+
+    # ── العقد والدوام ──
+    ("employment_type", "نوع التوظيف", False,
+     "full_time كامل · part_time جزئيّ"),
+    ("contract_type", "نوع العقد", False,
+     "fixed_term محدّد · unlimited غير محدّد"),
+    ("contract_end_date", "انتهاء العقد", False,
+     "للمحدّد المدّة فقط"),
+    ("probation_days", "أيام التجربة", False, "90"),
+    ("service_start_date", "بداية الخدمة المحتسبة", False,
+     "اتركه فارغًا ليساوي تاريخ المباشرة"),
+
+    # ── البصمة ──
+    ("allow_mobile_punch", "بصمة الجوال", False, "نعم · لا"),
+
+    # ── التأمينات وقوى ──
+    ("is_gosi_registered", "مسجَّل بالتأمينات", False, "نعم · لا"),
+    ("gosi_declared_wage", "الأجر المسجَّل بالتأمينات", False,
+     "اتركه فارغًا ليساوي الأساسيّ + السكن"),
+    ("gosi_establishment_no", "رقم منشأة التأمينات", False, ""),
+    ("gosi_borne_by_company", "الشركة تتحمّل حصّة الموظف", False,
+     "نعم · لا"),
+    ("is_mol_registered", "مسجَّل في قوى", False, "نعم · لا"),
+    ("mol_contract_no", "رقم عقد قوى", False, ""),
+
+    # ── الصرف ──
+    ("bank_code", "رمز البنك", False,
+     "اتركه فارغًا ليُستخرج من الآيبان"),
+    ("payment_method", "طريقة الصرف", False,
+     "bank بنكيّ · cash نقدًا"),
+    ("include_in_wps", "يدخل حماية الأجور", False, "نعم · لا"),
 ]
 
 #: قوائمُ منسدلة في القالب — ⚠️ **فالعميل قد لا يعرف الصيغة**
@@ -353,6 +422,16 @@ def parse_file(content, company):
 
         try:
             rec["join_date"] = _parse_date(rec.get("join_date"))
+
+            # ق-216: ⚠️ **وبقيّة التواريخ تُحوَّل كذلك**: فالمعاينة
+            # تقرأ كل عمودٍ **نصًّا**، والنماذج تريد تاريخًا —
+            # **ونصٌّ في موضع تاريخ يُسقط الاستيراد**.
+            for _dk in ("birth_date", "id_expiry_date",
+                        "passport_expiry_date", "contract_end_date",
+                        "service_start_date"):
+                _raw = rec.get(_dk)
+                if _raw:
+                    rec[_dk] = _parse_date(_raw)
         except ValueError as e:
             row_errors.append(str(e))
 
@@ -400,6 +479,45 @@ def parse_file(content, company):
     }
 
 
+#: حقولُ الشخص الاختيارية — تُمرَّر إن وُجدت
+_PERSON_KEYS = (
+    "father_name_ar", "grandfather_name_ar", "full_name_en",
+    "birth_date", "marital_status", "id_expiry_date",
+    "passport_number", "passport_expiry_date",
+)
+
+#: حقولُ الارتباط النصّية والتاريخية
+_EMP_KEYS = (
+    "employment_type", "contract_type", "contract_end_date",
+    "service_start_date", "gosi_establishment_no", "mol_contract_no",
+    "payment_method", "bank_code",
+)
+
+#: حقولٌ نعم/لا — ⚠️ **والعميل يكتب «نعم» لا `true`**
+_EMP_BOOLS = (
+    "allow_mobile_punch", "is_gosi_registered", "is_mol_registered",
+    "include_in_wps", "gosi_borne_by_company",
+)
+
+
+def _yes(v):
+    """«نعم» و«true» و«1» — ⚠️ **والفراغ ليس «لا» بل «لم يُذكر»**."""
+    s = (v or "").strip().lower()
+    if not s:
+        return None
+    return s in ("نعم", "yes", "true", "1", "y", "✓")
+
+
+def _person_extra(rec):
+    """ما يُمرَّر لـ`create_person` من الحقول الاختيارية."""
+    out = {}
+    for k in _PERSON_KEYS:
+        v = rec.get(k)
+        if v not in (None, ""):
+            out[k] = v
+    return out
+
+
 @transaction.atomic
 def execute(*, company, parsed_rows, by_person_id=None):
     """
@@ -423,7 +541,15 @@ def execute(*, company, parsed_rows, by_person_id=None):
     titles = {t.name_ar.strip(): t for t in
               JobTitle.objects.filter(company=company)}
 
+    from apps.organization.models import Branch, CostCenter
+
+    branches = {b.name_ar.strip(): b for b in
+                Branch.objects.filter(company=company)}
+    centers = {c.name_ar.strip(): c for c in
+               CostCenter.objects.filter(company=company)}
+
     created = []
+    pending_managers = []
     for rec in parsed_rows:
         try:
             person, _ = create_person(
@@ -435,6 +561,9 @@ def execute(*, company, parsed_rows, by_person_id=None):
                 id_type=rec["id_type"], id_number=rec["id_number"],
                 mobile=rec.get("mobile", ""),
                 email=rec.get("email", ""),
+                # ق-216: **وبقيّة بيانات الشخص** — فالقالب
+                # يحملها، **وإهمالُها يعد بما لا يقع**.
+                **_person_extra(rec),
                 # ⚠️ تحذير التشابه يُتجاوز في الاستيراد الجماعيّ:
                 # فمئة موظفٍ فيهم متشابهو الأسماء بالضرورة.
                 force=True)
@@ -467,6 +596,52 @@ def execute(*, company, parsed_rows, by_person_id=None):
                         name_ar=t)
                 extra["job_title"] = titles[t]
 
+            # ق-216: **بقيّة بيانات الارتباط**
+            for k in _EMP_KEYS:
+                v = rec.get(k)
+                if v not in (None, ""):
+                    extra[k] = v
+
+            for k in _EMP_BOOLS:
+                b = _yes(rec.get(k))
+                if b is not None:
+                    extra[k] = b
+
+            # ⚠️⚠️ **والأرقام تُحوَّل**: فالمعاينة تقرأ كل عمودٍ
+            # **نصًّا**، و`probation_days` نصًّا **يكسر حساب
+            # timedelta**.
+            v = rec.get("probation_days")
+            if v not in (None, ""):
+                try:
+                    extra["probation_days"] = int(float(str(v).strip()))
+                except (TypeError, ValueError):
+                    pass
+
+            v = rec.get("gosi_declared_wage")
+            if v not in (None, ""):
+                try:
+                    extra["gosi_declared_wage"] = Decimal(
+                        str(v).replace(",", "").strip())
+                except (TypeError, ValueError, InvalidOperation):
+                    pass
+
+            # ── المراجع النصّية: تُنشأ إن لم توجد ──
+            br = rec.get("branch")
+            if br:
+                if br not in branches:
+                    branches[br] = Branch.objects.create(
+                        account=company.account, company=company,
+                        name_ar=br, code=_ref_code("BR", br, branches))
+                extra["branch"] = branches[br]
+
+            cc = rec.get("cost_center")
+            if cc:
+                if cc not in centers:
+                    centers[cc] = CostCenter.objects.create(
+                        account=company.account, company=company,
+                        name_ar=cc, code=_ref_code("CC", cc, centers))
+                extra["cost_center"] = centers[cc]
+
             emp, _, _ = create_employment(
                 person=person, company=company,
                 employee_no=rec["employee_no"],
@@ -474,11 +649,34 @@ def execute(*, company, parsed_rows, by_person_id=None):
                 salary_lines=lines or None,
                 iban=rec.get("iban", ""), **extra)
             created.append(emp.employee_no)
+
+            # ⚠️⚠️ **والمدير يُربط بعد إنشاء الجميع**: فمديرٌ
+            # **في الملفّ نفسه قد يأتي بعد مرؤوسه**.
+            mgr = rec.get("direct_manager_no")
+            if mgr:
+                pending_managers.append((emp, mgr))
         except Exception as e:          # noqa: BLE001
             # ⚠️ **والمعاملة تُرجع الجميع** — فالرسالة تُسمّي السطر
             raise ImportError_(
                 f"توقّف الاستيراد عند السطر {rec['_row']} "
                 f"({rec.get('employee_no')}): {e}")
+
+    # ق-216: ⚠️⚠️ **والمدير يُربط بعد إنشاء الجميع** (قرار جواد:
+    # بالرقم الوظيفيّ): **فمديرٌ في الملفّ نفسه قد يأتي بعد
+    # مرؤوسه** — والربط في حينه يُخفق.
+    #
+    # ⚠️ **ورقمٌ لا وجود له يُتجاوز**: فالموظف أُنشئ، **وربطُ
+    # مديرٍ مفقودٍ لا يستحقّ إسقاط الاستيراد كلّه**.
+    if pending_managers:
+        from apps.employees.models import Employment as _Emp
+
+        by_no = {e.employee_no: e
+                 for e in _Emp.objects.filter(company=company)}
+        for emp, mgr_no in pending_managers:
+            mgr = by_no.get(str(mgr_no).strip())
+            if mgr is not None and mgr.id != emp.id:
+                emp.direct_manager = mgr
+                emp.save(update_fields=["direct_manager", "updated_at"])
 
     logger.info("استُورد %s موظفًا للشركة %s", len(created), company.id)
     return {"created": len(created), "employee_nos": created}
