@@ -76,6 +76,39 @@ def create_signup(*, company_name, full_name, email, mobile, password,
     if User.objects.filter(email__iexact=email).exists():
         raise SignupError("لهذا البريد حساب — سجّل الدخول أو استعد كلمتك")
 
+    # ق-213: ⚠️⚠️ **وجوالٌ واحد لحسابٍ واحد** (قرار جواد): فرقمٌ
+    # على حسابين **يجعل الدخول به ملتبسًا** — فيُردّ صاحبه
+    # برسالة «يخصّ أكثر من حساب» **وهو لم يُخطئ**.
+    #
+    # ⚠️ **ويُفحص في العضويات وفي ملفّات الأشخاص**: فمن دخل
+    # موظفًا **لا يُسجّل منشأةً بالرقم نفسه**.
+    mob_e164 = _norm_mobile(mobile)
+    if mob_e164:
+        from apps.accounts.models_access import AccountMembership
+        from apps.employees.models import Person
+
+        taken = AccountMembership.objects.filter(
+            login_mobile=mob_e164).exists()
+        if not taken:
+            taken = Person.objects.filter(
+                mobile_e164=mob_e164,
+                user__isnull=False).exists()
+        # ⚠️⚠️ **والطلبُ المعلَّق يُفحص كذلك**: فرجلان يُسجّلان
+        # بالرقم نفسه **قبل التفعيل** — فيقع الازدواج بعده.
+        # ⚠️ **وجوال الطلب خامٌّ كما كُتب** — فالمقارنة تُطبَّع
+        # لا تُحرَّف: من كتب `05` و`+966` **رقمٌ واحد**.
+        if not taken:
+            taken = any(
+                _norm_mobile(x) == mob_e164
+                for x in SignupRequest.objects.filter(
+                    status=SignupStatus.PENDING
+                ).values_list("mobile", flat=True))
+
+        if taken:
+            raise SignupError(
+                "هذا الجوال مسجَّلٌ سلفًا — سجّل الدخول به "
+                "أو استعمل رقمًا آخر")
+
     now = timezone.now()
     pending = SignupRequest.objects.filter(
         email__iexact=email, status=SignupStatus.PENDING,

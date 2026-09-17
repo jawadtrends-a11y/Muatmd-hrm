@@ -151,7 +151,6 @@ urlpatterns = [
     path("api/employees/import/execute/",
          employees_api.import_execute, name="import-execute"),
     # ق-159: فريقي — ⚠️ مرؤوسيّ وموظفو إدارتي وحدهم
-    path("api/me/team/", employees_api.my_team, name="my-team"),
     # ق-159: فريقي — ⚠️ مرؤوسيّ وموظفو إدارتي وحدهم
     path("api/me/team/", employees_api.my_team, name="my-team"),
     path("api/employees/", employees_api.employees, name="employees"),
