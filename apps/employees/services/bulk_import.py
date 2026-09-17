@@ -81,6 +81,26 @@ SALARY_MAP = {
 }
 
 
+def _ref_code(prefix, name, existing):
+    """
+    رمزٌ لمرجعٍ يُنشأ ضمنًا (ق-215).
+
+    ⚠️ **ولا يتكرّر**: فرمزان متطابقان **يكسران قيد التفرّد** —
+    والعدّاد يمضي حتى يجد فراغًا.
+    """
+    import re as _re
+
+    base = _re.sub(r"[^A-Za-z0-9]+", "", (name or "").upper())[:6]
+    if not base:
+        base = prefix
+    taken = {getattr(v, "code", "") for v in existing.values()}
+    code, i = base, 1
+    while code in taken:
+        i += 1
+        code = f"{base}{i}"
+    return code[:20]
+
+
 def template_xlsx():
     """
     قالبٌ بصيغة Excel — **لا CSV**.
@@ -287,6 +307,9 @@ def parse_file(content, company):
     parsed, errors = [], []
     seen_nos, seen_ids = set(), set()
 
+    # ق-215: **ما سيُنشأ** — يُعرَض في المعاينة لا يُنشأ فيها
+    will_create_depts, will_create_titles = set(), set()
+
     for n, raw in enumerate(rows[1:], start=2):
         def cell(key):
             i = mapping.get(key)
@@ -339,15 +362,19 @@ def parse_file(content, company):
             except ValueError as e:
                 row_errors.append(str(e))
 
-        # ── المراجع: تُطابق بالاسم، وغير الموجود خطأ ──
+        # ق-215: ── المراجع: **تُطابق بالاسم، وما لا يوجد يُنشأ** ──
         #
-        # ⚠️ **فإنشاؤها ضمنًا يملأ الشركة بإداراتٍ بأخطاءٍ إملائية**
+        # **قرار جواد:** «المفترض يتم اختراع وقت الإنشاء — بدون
+        # تكرار».
+        #
+        # ⚠️⚠️ **والخطأ الإملائيّ يصير إدارةً جديدة** — فالمعاينة
+        # **تُنبّه بما سيُنشأ قبل أن يُنشأ**، والعميل يراجع.
         d = rec.get("department")
         if d and d not in depts:
-            row_errors.append(f"الإدارة «{d}» غير معرَّفة")
+            will_create_depts.add(d)
         t = rec.get("job_title")
         if t and t not in titles:
-            row_errors.append(f"المسمى «{t}» غير معرَّف")
+            will_create_titles.add(t)
 
         if row_errors:
             errors.append({"row": n,
@@ -364,6 +391,12 @@ def parse_file(content, company):
         "invalid": len(errors),
         # ⚠️ **ولا استيراد بخطأ واحد** (قرار جواد)
         "can_import": not errors and bool(parsed),
+
+        # ق-215: ⚠️⚠️ **وما سيُنشأ يُعرَض قبل أن يُنشأ**: فالخطأ
+        # الإملائيّ **يصير إدارةً جديدة** — والعميل يراجع القائمة
+        # قبل التنفيذ.
+        "new_departments": sorted(will_create_depts),
+        "new_job_titles": sorted(will_create_titles),
     }
 
 
@@ -413,10 +446,26 @@ def execute(*, company, parsed_rows, by_person_id=None):
                     lines.append((comps[code], amt))
 
             extra = {}
-            if rec.get("department"):
-                extra["department"] = depts[rec["department"]]
-            if rec.get("job_title"):
-                extra["job_title"] = titles[rec["job_title"]]
+
+            # ق-215: ⚠️⚠️ **وما لا يوجد يُنشأ** (قرار جواد) —
+            # **بلا تكرار**: فالقاموس يُحدَّث فورًا، **فإدارةٌ
+            # على عشرين صفًّا تُنشأ مرّةً واحدة**.
+            d = rec.get("department")
+            if d:
+                if d not in depts:
+                    depts[d] = Department.objects.create(
+                        account=company.account, company=company,
+                        name_ar=d, code=_ref_code("DEP", d, depts))
+                extra["department"] = depts[d]
+
+            t = rec.get("job_title")
+            if t:
+                if t not in titles:
+                    # ⚠️ **والمسمّى بلا رمز** — اسمه يكفي
+                    titles[t] = JobTitle.objects.create(
+                        account=company.account, company=company,
+                        name_ar=t)
+                extra["job_title"] = titles[t]
 
             emp, _, _ = create_employment(
                 person=person, company=company,

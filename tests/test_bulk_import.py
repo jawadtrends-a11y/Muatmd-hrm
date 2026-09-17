@@ -111,17 +111,49 @@ def test_duplicate_with_existing_is_caught(env):
         assert "مستعمل" in joined or "مسجَّل" in joined
 
 
-def test_unknown_department_is_an_error(env):
+def test_unknown_department_is_created(env):
     """
-    ⚠️ **وإدارةٌ غير معرَّفة خطأ**: فإنشاؤها ضمنًا يملأ الشركة
-    بإداراتٍ بأخطاءٍ إملائية.
+    ق-215: ⚠️⚠️ **وإدارةٌ غير معرَّفة تُنشأ** (قرار جواد) — ولا
+    تُعدّ خطأً.
+
+    ⚠️ **والمعاينة تُنبّه بما سيُنشأ**: فالخطأ الإملائيّ **يصير
+    إدارةً جديدة**، والعميل يراجع القائمة قبل التنفيذ.
     """
     with account_scope(env["account_id"]):
         row = ("5006,فهد,العمري,male,SA,national_id,1011009988,"
-               "2026-01-15,,,إدارةٌ لا وجود لها,,7000,,,")
+               "2026-01-15,,,إدارةٌ جديدة,مسمّى جديد,7000,,,")
         out = _parse(env, [row])
-        assert out["invalid"] == 1
-        assert "غير معرَّفة" in out["errors"][0]["errors"][0]
+        assert out["invalid"] == 0, out["errors"]
+        assert "إدارةٌ جديدة" in out["new_departments"]
+        assert "مسمّى جديد" in out["new_job_titles"]
+
+
+def test_new_reference_is_created_once(env):
+    """
+    ⚠️⚠️ الأهمّ: **وبلا تكرار** (قرار جواد): **فإدارةٌ على ثلاثة
+    صفوفٍ تُنشأ مرّةً واحدة**.
+    """
+    from apps.employees.services.bulk_import import execute
+    from apps.organization.models import Department, JobTitle
+
+    with account_scope(env["account_id"]):
+        rows = [
+            (f"520{i},موظف{i},التجربة,male,SA,national_id,"
+             f"10770088{i}{i},2026-01-15,,,إدارة مشتركة,"
+             f"مسمّى مشترك,7000,,,")
+            for i in (1, 2, 3)
+        ]
+        out = _parse(env, rows)
+        assert out["invalid"] == 0, out["errors"]
+        # ⚠️ **وتُعرَض مرّةً لا ثلاثًا**
+        assert out["new_departments"].count("إدارة مشتركة") == 1
+
+        execute(company=env["comp"], parsed_rows=out["rows"])
+
+        assert Department.objects.filter(
+            company=env["comp"], name_ar="إدارة مشتركة").count() == 1
+        assert JobTitle.objects.filter(
+            company=env["comp"], name_ar="مسمّى مشترك").count() == 1
 
 
 def test_execute_creates_employees(env):

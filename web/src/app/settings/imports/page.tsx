@@ -190,7 +190,10 @@ export default function ImportsPage() {
           </label>
         )}
 
-        <input ref={fileRef} type="file" accept=".xlsx,.csv"
+        <input ref={fileRef} type="file" /* ق-214: ⚠️⚠️ **ولا `accept`**: فنافذة الاختيار
+                   **كانت تُخفي ملفّات إكسل** مهما ذُكرت
+                   امتداداتها وأنواعها — والخادم يفحص الصيغة
+                   بنفسه، **فالتقييد هنا يمنع ولا يحمي**. */
                style={{ display: "none" }}
                onChange={(e) => {
                  const f = e.target.files?.[0];
