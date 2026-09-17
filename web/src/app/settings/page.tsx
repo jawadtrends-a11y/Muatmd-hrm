@@ -63,6 +63,13 @@ const GROUPS: {
         hint: "glHint", perm: "payroll.view" },
       { href: "/settings/payroll-approval", label: "payrollChain",
         hint: "payrollChainHint", perm: "payroll.view" },
+      // ق-218: **شاشاتٌ موضوعية** — حقولُ النموذج الطويل
+      { href: "/settings/eosb", label: "eosbLink",
+        hint: "eosbLinkHint", perm: "payroll.view" },
+      { href: "/settings/payroll-rules", label: "payrollRules",
+        hint: "payrollRulesHint", perm: "payroll.view" },
+      { href: "/settings/advances", label: "advancesPolicy",
+        hint: "advancesPolicyHint", perm: "payroll.view" },
     ],
   },
   {
@@ -74,6 +81,8 @@ const GROUPS: {
         hint: "devicesHint", perm: "sites.view" },
       { href: "/settings/exemptions", label: "exemptions",
         hint: "exemptionsHint", perm: "attendance.view" },
+      { href: "/settings/attendance-policy", label: "attPolicy",
+        hint: "attPolicyHint", perm: "attendance.view" },
     ],
   },
   {
@@ -112,6 +121,18 @@ const T: Dict = {
   grpAttendance: { ar: "الحضور", en: "Attendance" },
   grpRequests: { ar: "الطلبات واللوائح", en: "Requests & policies" },
   grpOther: { ar: "القوالب والبيانات", en: "Templates & data" },
+  eosbLink: { ar: "مكافأة نهاية الخدمة", en: "End-of-service" },
+  eosbLinkHint: { ar: "الأجر الذي تُحتسب عليه المكافأة",
+                  en: "The wage the award is computed on" },
+  payrollRules: { ar: "قواعد احتساب الرواتب", en: "Payroll rules" },
+  payrollRulesHint: { ar: "الإضافيّ وأساس اليوم وتاريخ الاقتطاع",
+                      en: "Overtime, day basis, cutoff" },
+  advancesPolicy: { ar: "سياسة السلف", en: "Advances policy" },
+  advancesPolicyHint: { ar: "الحدود والأقساط وشروط المنح",
+                        en: "Limits and conditions" },
+  attPolicy: { ar: "البصمة والتواجد", en: "Punch & presence" },
+  attPolicyHint: { ar: "بصمة الجوال وتتبّع الموقع وأنشطة العمل",
+                   en: "Mobile punch, presence, activities" },
   title: { ar: "الإعدادات", en: "Settings" },
   general: { ar: "إعدادات عامة", en: "General" },
   users: { ar: "المستخدمون", en: "Users" },
@@ -370,7 +391,10 @@ const T: Dict = {
   empty: { ar: "لا سجلات", en: "No records" },
 };
 
-const SECTIONS = ["payroll", "subscription"] as const;
+// ق-218: ⚠️ **وتبويب «الرواتب» حُذف** — فحقوله انتقلت لأربع
+// شاشاتٍ موضوعية: **نهاية الخدمة · قواعد الرواتب · السلف ·
+// البصمة والتواجد**.
+const SECTIONS = ["subscription"] as const;
 type Section = (typeof SECTIONS)[number];
 
 type PayrollSettings = {
@@ -467,342 +491,6 @@ function Row({
 
 /* ══ إعدادات الرواتب ══ */
 
-function PayrollPanel({
-  L,
-}: {
-  L: (k: string, f?: string) => string;
-}) {
-  const [data, setData] = useState<PayrollSettings | null>(null);
-  /**
-   * البند الذي يظهر ثم يُمنع عند الدخول يوهم بقدرة لا يملكها
-   * المستخدم — فما لا يملكه لا يراه.
-   */
-  const [perms, setPerms] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [denied, setDenied] = useState(false);
-
-
-  useEffect(() => {
-    apiGet<{ permissions: string[] }>("/me/workspace/")
-      .then((d) => setPerms(new Set(d.permissions || [])))
-      .catch(() => setPerms(new Set()));
-  }, []);
-  useEffect(() => {
-    apiGet<PayrollSettings>("/payroll/settings/")
-      .then((d) => { setData(d); setBusy(false); })
-      .catch((e: ApiError) => {
-        setDenied(e.isForbidden);
-        setBusy(false);
-      });
-  }, []);
-
-  const set = (k: string, v: unknown) =>
-    setData((s) => (s ? { ...s, [k]: v } : s));
-
-  async function save() {
-    if (!data) return;
-    setSaving(true);
-    setMsg("");
-    try {
-      await apiPut("/payroll/settings/", data);
-      setMsg(L("saved"));
-      setTimeout(() => setMsg(""), 3000);
-    } catch (e) {
-      setMsg((e as ApiError).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (busy) {
-    return (
-      <div className="card" style={{
-        padding: 36, textAlign: "center", color: "var(--ink-3)",
-      }}>
-        {L("loading")}
-      </div>
-    );
-  }
-
-  if (denied || !data) {
-    return (
-      <div className="card" style={{
-        padding: 36, textAlign: "center", color: "var(--ink-3)",
-      }}>
-        {L("noAccess")}
-      </div>
-    );
-  }
-
-  const basisNotSet = data.eosb_wage_basis === "not_set";
-
-  return (
-    <div className="stack">
-      {basisNotSet && (
-        <div style={{
-          background: "var(--copper-soft)", color: "var(--copper)",
-          padding: "11px 15px", borderRadius: "var(--radius-sm)",
-          fontWeight: 500, display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <IcAlert size={18} />
-          {L("eosbHint")}
-        </div>
-      )}
-
-      {/* ══ إعدادات عامة ══
-          بطاقات مجمّعة لا تبويبات: البنود تكثر مع نمو النظام،
-          والتبويب يضيق بها. */}
-      {/* ق-217: **بطاقاتٌ مجمَّعة لا قائمةٌ طويلة** */}
-      <div style={{ display: "grid", gap: 16,
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(290px, 1fr))" }}>
-        {GROUPS.map((g) => {
-          const items = g.items.filter((it) => perms.has(it.perm));
-          // ⚠️ **ومجموعةٌ بلا بندٍ مسموح لا تُعرض** — فبطاقةٌ
-          // فارغة **تُوهم بنقصٍ في النظام**.
-          if (items.length === 0) return null;
-          return (
-            <div key={g.key} className="card"
-                 style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "12px 16px",
-                            borderBottom: "1px solid var(--line)",
-                            fontWeight: 600, fontSize: ".92rem",
-                            color: "var(--teal)" }}>
-                {L(g.key)}
-              </div>
-              {items.map((it, i) => (
-                <Link key={it.href} href={it.href}
-                      style={{
-                        display: "block", padding: "11px 16px",
-                        color: "var(--ink-2)",
-                        borderBottom: i < items.length - 1
-                          ? "1px solid var(--line)" : "none",
-                      }}>
-                  <div style={{ fontWeight: 500, fontSize: ".88rem" }}>
-                    {L(it.label)}
-                  </div>
-                  <div className="muted" style={{ fontSize: ".76rem",
-                                                  marginTop: 2 }}>
-                    {L(it.hint)}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontSize: "1rem", marginBottom: 6 }}>{L("payroll")}</h3>
-
-        <Row label={L("eosbBasis")} hint={L("eosbHint")}>
-          <select className="select" value={data.eosb_wage_basis}
-            onChange={(e) => set("eosb_wage_basis", e.target.value)}>
-            {data.eosb_wage_basis === "not_set" && (
-              <option value="not_set">{L("notSet")}</option>
-            )}
-            <option value="basic_only">{L("basicOnly")}</option>
-            <option value="basic_housing">{L("basicHousing")}</option>
-            <option value="basic_housing_transport">
-              {L("basicHousingTransport")}
-            </option>
-            <option value="basic_all">{L("basicAll")}</option>
-            {data.eosb_wage_basis === "flagged" && (
-              <option value="flagged">{L("flagged")}</option>
-            )}
-          </select>
-        </Row>
-
-        {/* ق-137: أساس الإضافي — والخيار في الطلب */}
-        {/* ق-144: تتبّع التواجد — بعلم الموظف ولا يُحفظ موقعه */}
-        <Row label={L("presenceOn")} hint={L("presenceHint")}>
-          <select className="select"
-            value={data.presence_tracking_enabled ? "1" : "0"}
-            onChange={(e) =>
-              set("presence_tracking_enabled", e.target.value === "1")}>
-            <option value="1">{L("enabled")}</option>
-            <option value="0">{L("disabled")}</option>
-          </select>
-        </Row>
-
-        {data.presence_tracking_enabled && (
-        <Row label={L("presenceTolerance")} hint={L("toleranceHint")}>
-          <input className="input num" type="number" min={0}
-            style={{ maxWidth: 120 }}
-            value={String(data.presence_tolerance_minutes ?? 60)}
-            onChange={(e) =>
-              set("presence_tolerance_minutes", Number(e.target.value))} />
-        </Row>
-        )}
-
-        {/* ق-143: أنشطة العمل — وتفعيلها لا يُلزم المديرين */}
-        <Row label={L("activitiesOn")} hint={L("activitiesHint")}>
-          <select className="select"
-            value={data.activities_enabled ? "1" : "0"}
-            onChange={(e) =>
-              set("activities_enabled", e.target.value === "1")}>
-            <option value="1">{L("enabled")}</option>
-            <option value="0">{L("disabled")}</option>
-          </select>
-        </Row>
-
-        <Row label={L("otBasis")} hint={L("otBasisHint")}>
-          <select className="select" value={data.overtime_basis || ""}
-            onChange={(e) => set("overtime_basis", e.target.value)}>
-            {(data.overtime_basis_options || []).map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </Row>
-
-        <Row label={L("otChoice")} hint={L("otChoiceHint")}>
-          <select className="select"
-            value={data.allow_overtime_rate_choice ? "1" : "0"}
-            onChange={(e) =>
-              set("allow_overtime_rate_choice", e.target.value === "1")}>
-            <option value="1">{L("enabled")}</option>
-            <option value="0">{L("disabled")}</option>
-          </select>
-        </Row>
-
-        {data.allow_overtime_rate_choice && (
-        <Row label={L("otBasisX2")} hint={L("otBasisX2Hint")}>
-          <select className="select" value={data.overtime_basis_x2 || ""}
-            onChange={(e) => set("overtime_basis_x2", e.target.value)}>
-            {(data.overtime_basis_options || []).map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </Row>
-        )}
-
-        <Row label={L("mobilePunch")} hint={L("mobilePunchHint")}>
-          <select className="select"
-            value={data.allow_mobile_punch ? "1" : "0"}
-            onChange={(e) =>
-              set("allow_mobile_punch", e.target.value === "1")}>
-            <option value="1">{L("enabled")}</option>
-            <option value="0">{L("disabled")}</option>
-          </select>
-        </Row>
-
-        <Row label={L("daysPerMonth")}>
-          <input type="number" className="input"
-            value={data.payroll_days_per_month}
-            onChange={(e) => set("payroll_days_per_month",
-                                 Number(e.target.value))} />
-        </Row>
-
-        {/* ق-157: **تاريخ الاقتطاع** — ويُبيَّن أثره فورًا */}
-        <Row label={L("cutoffDay")} hint={L("cutoffHint")}>
-          <div>
-            <select className="select"
-              value={String(data.payroll_cutoff_day ?? 0)}
-              onChange={(e) => set("payroll_cutoff_day",
-                                   Number(e.target.value))}>
-              <option value="0">{L("calendarMonth")}</option>
-              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-            {/* ⚠️ **والمثال يُبيّن ما سيقع** — فرقمٌ مجرَّد
-                يُساء فهمه */}
-            {!!data.payroll_cutoff_day && (
-              <div className="muted" style={{ fontSize: ".8rem",
-                                              marginTop: 6,
-                                              lineHeight: 1.8 }}>
-                {L("cutoffExample")
-                  .replace("{d}", String(data.payroll_cutoff_day))
-                  .replace("{n}", String(data.payroll_cutoff_day + 1))}
-              </div>
-            )}
-          </div>
-        </Row>
-
-        <Row label={L("varianceThreshold")}>
-          <input type="number" className="input"
-            value={data.variance_threshold_percent}
-            onChange={(e) => set("variance_threshold_percent",
-                                 e.target.value)} />
-        </Row>
-      </div>
-
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontSize: "1rem", marginBottom: 6 }}>
-          {L("advancesEnabled")}
-        </h3>
-
-        <Row label={L("advancesEnabled")}>
-          <select className="select"
-            value={data.advances_enabled ? "1" : "0"}
-            onChange={(e) => set("advances_enabled", e.target.value === "1")}>
-            <option value="1">{L("yes")}</option>
-            <option value="0">{L("no")}</option>
-          </select>
-        </Row>
-
-        {data.advances_enabled && (
-          <>
-            <Row label={L("advanceMax")}>
-              <input type="number" className="input"
-                value={data.advance_max_amount ?? ""}
-                onChange={(e) => set("advance_max_amount",
-                                     e.target.value || null)} />
-            </Row>
-            <Row label={L("advanceMaxMonths")}>
-              <input type="number" className="input"
-                value={data.advance_max_months_of_salary ?? ""}
-                onChange={(e) => set("advance_max_months_of_salary",
-                                     e.target.value || null)} />
-            </Row>
-            <Row label={L("advanceBlock")}>
-              <select className="select"
-                value={data.advance_block_if_outstanding ? "1" : "0"}
-                onChange={(e) => set("advance_block_if_outstanding",
-                                     e.target.value === "1")}>
-                <option value="1">{L("yes")}</option>
-                <option value="0">{L("no")}</option>
-              </select>
-            </Row>
-          </>
-        )}
-      </div>
-
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontSize: "1rem", marginBottom: 4 }}>
-          {L("payslipHint")}
-        </h3>
-
-        {[
-          ["payslip_show_employer_gosi", "payslipGosi"],
-          ["payslip_show_leave_balance", "payslipLeave"],
-          ["payslip_show_previous_month", "payslipPrev"],
-        ].map(([key, label]) => (
-          <Row key={key} label={L(label)}>
-            <select className="select"
-              value={data[key] ? "1" : "0"}
-              onChange={(e) => set(key, e.target.value === "1")}>
-              <option value="1">{L("yes")}</option>
-              <option value="0">{L("no")}</option>
-            </select>
-          </Row>
-        ))}
-      </div>
-
-      <div className="row">
-        {perms.has("company.edit") && (
-        <button className="btn btn-primary" onClick={save} disabled={saving}>
-          <IcCheck size={17} />
-          {saving ? L("saving") : L("save")}
-        </button>
-        )}
-        {msg && <span className="badge badge-ok">{msg}</span>}
-      </div>
-    </div>
-  );
-}
 
 
 /* ══ لوحة الاشتراك ══ */
@@ -1000,17 +688,26 @@ function SubscriptionPanel({
 
 export default function SettingsPage() {
   const { L } = useT(T);
+
+  // ق-217: ⚠️ **وما لا يملكه لا يراه**: فبندٌ يظهر ثم يُمنع
+  // **يوهم بقدرةٍ لا يملكها**.
+  const [perms, setPerms] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    apiGet<{ permissions: string[] }>("/me/workspace/")
+      .then((d) => setPerms(new Set(d.permissions || [])))
+      .catch(() => setPerms(new Set()));
+  }, []);
   // التبويب في الرابط لا في الحالة: يبقى عند التحديث، ويُفتح
   // مباشرةً من قائمة الحساب (?tab=subscription).
   const params = useSearchParams();
   const router = useRouter();
   const fromUrl = params.get("tab") as Section | null;
   const [section, setSectionState] = useState<Section>(
-    fromUrl && SECTIONS.includes(fromUrl) ? fromUrl : "payroll");
+    fromUrl && SECTIONS.includes(fromUrl) ? fromUrl : "subscription");
 
   const setSection = (s: Section) => {
     setSectionState(s);
-    router.replace(s === "payroll" ? "/settings" : `/settings?tab=${s}`,
+    router.replace(`/settings?tab=${s}`,
                    { scroll: false });
   };
 
@@ -1021,13 +718,52 @@ export default function SettingsPage() {
   }, [fromUrl, section]);
 
   const ICONS: Record<Section, React.ComponentType<{ size?: number }>> = {
-    payroll: IcPayroll,
     subscription: IcWallet,
   };
 
   return (
     <div className="stack">
       <h1>{L("title")}</h1>
+
+      {/* ق-217: **بطاقاتٌ مجمَّعة لا قائمةٌ طويلة** */}
+      <div style={{ display: "grid", gap: 16,
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(290px, 1fr))" }}>
+        {GROUPS.map((g) => {
+          const items = g.items.filter((it) => perms.has(it.perm));
+          // ⚠️ **ومجموعةٌ بلا بندٍ مسموح لا تُعرض** — فبطاقةٌ
+          // فارغة **تُوهم بنقصٍ في النظام**.
+          if (items.length === 0) return null;
+          return (
+            <div key={g.key} className="card"
+                 style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px",
+                            borderBottom: "1px solid var(--line)",
+                            fontWeight: 600, fontSize: ".92rem",
+                            color: "var(--teal)" }}>
+                {L(g.key)}
+              </div>
+              {items.map((it, i) => (
+                <Link key={it.href} href={it.href}
+                      style={{
+                        display: "block", padding: "11px 16px",
+                        color: "var(--ink-2)",
+                        borderBottom: i < items.length - 1
+                          ? "1px solid var(--line)" : "none",
+                      }}>
+                  <div style={{ fontWeight: 500, fontSize: ".88rem" }}>
+                    {L(it.label)}
+                  </div>
+                  <div className="muted" style={{ fontSize: ".76rem",
+                                                  marginTop: 2 }}>
+                    {L(it.hint)}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
         {SECTIONS.map((s) => {
@@ -1043,7 +779,6 @@ export default function SettingsPage() {
         })}
       </div>
 
-      {section === "payroll" && <PayrollPanel L={L} />}
       {section === "subscription" && <SubscriptionPanel L={L} />}
     </div>
   );
