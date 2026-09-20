@@ -41,9 +41,40 @@ def _ctx(request):
             getattr(c, "active_company_id", None))
 
 
+def _resolve_invite_role(request, account_id):
+    """
+    ق-223: الدور المختار للدعوة — أو «موظف».
+
+    ⚠⚠ **ولا يُدعى أحدٌ بدورٍ أعلى من دور الداعي**: فبلا
+    هذا **يلتفّ مديرُ إدارةٍ على القيد** بدعوة موظفٍ بدور المدير
+    العام — وهو ما يمنعه إسنادُ الدور المباشر (ق-115).
+    """
+    from apps.accounts.models_access import Role
+    from apps.employees.api import ROLE_RANK, _may_assign_roles
+    from apps.accounts.services.invites import default_role
+
+    raw_id = request.data.get("role_id")
+    if not raw_id:
+        return default_role(account_id)
+
+    role = Role.objects.filter(account_id=account_id, id=raw_id).first()
+    if role is None:
+        raise InviteError("unknown_role", "دور غير معروف")
+
+    may, my_rank = _may_assign_roles(request.user)
+    if not may:
+        raise InviteError("role_forbidden", "لا تملك إسناد الأدوار")
+    if ROLE_RANK.get(role.code, 99) > my_rank:
+        raise InviteError(
+            "role_forbidden",
+            f"لا تملك دعوة بدور «{role.name_ar}» — وهو أعلى من دورك")
+    return role
+
+
 def _invite_one(request, person, account_id, company_id, company):
     invite, raw = create_invite(
         person, account_id=account_id, company_id=company_id,
+        role=_resolve_invite_role(request, account_id),
         invited_by_person_id=getattr(
             getattr(request.user, "person", None), "id", None))
     sent = send_invite_email(invite, person, raw,
@@ -51,6 +82,7 @@ def _invite_one(request, person, account_id, company_id, company):
     return {
         "person_id": person.id,
         "name": person.display_name,
+        "role": invite.role.name_ar if invite.role else "",
         "url": invite_url(raw),
         "email_sent": sent,
         "email": (person.email or "").strip(),
@@ -147,11 +179,23 @@ def invite_preview(request, token):
     if not usable:
         return Response({"valid": False, "code": "expired"},
                         status=status.HTTP_410_GONE)
+    # ق-223: \u26a0 **وبريدٌ مطابقٌ لمستخدمٍ قائم لا يحتاج حسابًا
+    # ثانيًا** (قرار جواد): فالشخص واحد — والشاشة تعرض تأكيدًا
+    # لا كلمةَ مرور.
     return Response({
         "valid": True, "name": name,
         "company_ar": co_ar, "company_en": co_en or co_ar,
         "default_locale": locale,
+        "existing_user": _existing_user_id(token) is not None,
     })
+
+
+def _existing_user_id(token):
+    """معرّف مستخدمٍ ببريد الموظف نفسه — أو None."""
+    with connection.cursor() as c:
+        c.execute("SELECT app_invite_existing_user(%s)", [hash_token(token)])
+        row = c.fetchone()
+    return row[0] if row and row[0] else None
 
 
 @api_view(["POST"])
@@ -163,6 +207,26 @@ def invite_accept(request, token):
     locale = request.data.get("locale") or None
     if locale not in (None, "ar", "en", "ur"):
         locale = None
+
+    # ق-223: \u26a0\u26a0 **ومن بريده بريدُ مستخدمٍ قائم لا يُنشأ له
+    # حسابٌ ثانٍ** (قرار جواد): فالبريد واحدٌ والشخص واحد —
+    # **وكلمةُ المرور لا تُطلب ولا تُفحص**، والدعوة تأكيدُ استلام.
+    existing = _existing_user_id(token)
+    if existing is not None:
+        th_e = hash_token(token)
+        with transaction.atomic():
+            with connection.cursor() as c:
+                c.execute(
+                    "SELECT ok, reason FROM app_invite_accept(%s,%s,%s)",
+                    [th_e, existing, locale])
+                ok_e, reason_e = c.fetchone()
+            if not ok_e:
+                transaction.set_rollback(True)
+                code_e = {"not_found": 404, "expired": 410,
+                          "already_used": 409, "already_has_account": 409}
+                return Response({"accepted": False, "code": reason_e},
+                                status=code_e.get(reason_e, 400))
+        return Response({"accepted": True, "linked_existing": True})
 
     # رسائل جانغو تختلط لغةً (بعضها مترجم وبعضها لا) — فنكتبها
     # نحن بلغة واحدة واضحة، ورسالةً واحدة لا ثلاثًا متفرّقة.

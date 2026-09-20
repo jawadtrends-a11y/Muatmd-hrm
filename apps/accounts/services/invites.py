@@ -60,8 +60,13 @@ def generate_username():
 
 @transaction.atomic
 def create_invite(person, *, account_id, company_id,
-                  invited_by_person_id=None):
-    """ينشئ دعوة ويُرجع (الدعوة، الرمز الخام). الرمز لا يُخزَّن."""
+                  invited_by_person_id=None, role=None):
+    """
+    ينشئ دعوة ويُرجع (الدعوة، الرمز الخام). الرمز لا يُخزَّن.
+
+    ق-223: والدور يُحفظ هنا ويُسند عند القبول — فبلا دورٍ
+    **صفرُ صلاحيات**، ومن دخل لا يرى شيئًا. وافتراضه «موظف».
+    """
     ok, code = can_invite(person)
     if not ok:
         raise InviteError(code, "لا يمكن دعوة هذا الموظف")
@@ -79,8 +84,16 @@ def create_invite(person, *, account_id, company_id,
         token_hash=hash_token(raw),
         expires_at=JoinInvite.new_expiry(),
         invited_by_person_id=invited_by_person_id,
+        role=role or default_role(account_id),
     )
     return invite, raw
+
+
+def default_role(account_id):
+    """دور «موظف» — الأدنى، وبه يدخل من لم يُختر له دور."""
+    from apps.accounts.models_access import Role
+    return Role.objects.filter(account_id=account_id,
+                               code="employee").first()
 
 
 def invite_url(raw_token):

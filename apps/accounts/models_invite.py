@@ -54,6 +54,13 @@ class JoinInvite(AccountScopedModel):
     email_sent_at = models.DateTimeField(null=True, blank=True)
 
     invited_by_person_id = models.BigIntegerField(null=True, blank=True)
+
+    # ق-223: ⚠⚠ **والعضوية بلا دور صفرُ صلاحيات**: فمن قبل
+    # الدعوة ودخل **لا يرى شيئًا**. والدور يُختار هنا ويُسند عند
+    # القبول — فـRoleAssignment يحتاج membership، ولا مستخدمَ بعد.
+    role = models.ForeignKey("accounts.Role", null=True, blank=True,
+                             on_delete=models.SET_NULL,
+                             verbose_name=_("الدور"))
     accepted_at = models.DateTimeField(null=True, blank=True)
     # الحساب المُنشأ عند القبول — للتتبّع لا للدخول.
     created_user_id = models.BigIntegerField(null=True, blank=True)

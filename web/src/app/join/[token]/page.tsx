@@ -49,6 +49,12 @@ const T: Dict = {
     en: "Ask your HR department to send it again",
   },
   network: { ar: "تعذّر الاتصال بالخادم", en: "Cannot reach the server" },
+  // ق-223: بريدٌ مطابقٌ لمستخدمٍ قائم — تأكيدُ انضمامٍ لا تفعيلَ حساب
+  confirmJoin: { ar: "تأكيد الانضمام", en: "Confirm joining" },
+  alreadyHave: {
+    ar: "لك حسابٌ بهذا البريد — لا تحتاج كلمة مرورٍ جديدة. أكّد انضمامك وادخل بحسابك الحالي.",
+    en: "You already have an account with this email — just confirm and sign in as usual.",
+  },
 };
 
 type Preview = {
@@ -57,6 +63,7 @@ type Preview = {
   company_ar: string;
   company_en: string;
   default_locale: string;
+  existing_user?: boolean;
 };
 
 export default function JoinPage() {
@@ -92,10 +99,12 @@ export default function JoinPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (pw !== pw2) { setError(L("mismatch")); return; }
+    const linkOnly = info?.existing_user === true;
+    if (!linkOnly && pw !== pw2) { setError(L("mismatch")); return; }
     setBusy(true);
     try {
-      await apiPost(`/join/${token}/accept/`, { password: pw, locale: lang });
+      await apiPost(`/join/${token}/accept/`,
+        linkOnly ? { locale: lang } : { password: pw, locale: lang });
       setState("done");
     } catch (e) {
       const err = e as ApiError;
@@ -184,24 +193,32 @@ export default function JoinPage() {
         </div>
       </div>
       <h1 style={{ fontSize: "1.05rem", marginBottom: 16 }}>
-        {L("setPassword")}
+        {info?.existing_user ? L("confirmJoin") : L("setPassword")}
       </h1>
       <form onSubmit={submit} className="stack">
-        <div className="field">
-          <label className="label" htmlFor="p1">{L("password")}</label>
-          <input id="p1" className="input" type="password" dir="ltr"
-                 value={pw} autoFocus autoComplete="new-password"
-                 onChange={(e) => setPw(e.target.value)} />
-          <span className="muted" style={{ fontSize: ".8rem" }}>
-            {L("hint")}
-          </span>
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="p2">{L("confirm")}</label>
-          <input id="p2" className="input" type="password" dir="ltr"
-                 value={pw2} autoComplete="new-password"
-                 onChange={(e) => setPw2(e.target.value)} />
-        </div>
+        {info?.existing_user ? (
+          <div className="muted" style={{ fontSize: ".9rem", lineHeight: 1.7 }}>
+            {L("alreadyHave")}
+          </div>
+        ) : (
+          <>
+            <div className="field">
+              <label className="label" htmlFor="p1">{L("password")}</label>
+              <input id="p1" className="input" type="password" dir="ltr"
+                     value={pw} autoFocus autoComplete="new-password"
+                     onChange={(e) => setPw(e.target.value)} />
+              <span className="muted" style={{ fontSize: ".8rem" }}>
+                {L("hint")}
+              </span>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="p2">{L("confirm")}</label>
+              <input id="p2" className="input" type="password" dir="ltr"
+                     value={pw2} autoComplete="new-password"
+                     onChange={(e) => setPw2(e.target.value)} />
+            </div>
+          </>
+        )}
         {error && (
           <div style={{
             background: "var(--danger-soft)", color: "var(--danger)",
@@ -211,7 +228,8 @@ export default function JoinPage() {
         )}
         <button type="submit" className="btn btn-primary" disabled={busy}
                 style={{ width: "100%", height: 42 }}>
-          {busy ? L("submitting") : L("submit")}
+          {busy ? L("submitting")
+                : info?.existing_user ? L("confirmJoin") : L("submit")}
         </button>
       </form>
     </>

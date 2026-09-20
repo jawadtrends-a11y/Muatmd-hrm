@@ -67,6 +67,8 @@ type InviteResult = {
   name?: string; url?: string; email?: string;
   email_sent?: boolean; error?: string;
 };
+type RoleOpt = { id: number; name_ar: string; code: string };
+
 type BulkResult = {
   counts?: { invited: number; skipped: number };
   skipped?: { name: string; detail: string }[];
@@ -85,6 +87,11 @@ export default function UsersPage() {
   const [bulk, setBulk] = useState<BulkResult | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // ق-223: والدعوة بلا دور صفرُ صلاحيات — فمن دخل لا يرى شيئًا.
+  // والافتراضي «موظف»، والمدير يرفع من يشاء قبل الإرسال.
+  const [roles, setRoles] = useState<RoleOpt[]>([]);
+  const [pickRole, setPickRole] = useState<Record<number, string>>({});
+
   const canInvite = perms.includes("employees.invite");
   const noLogin = rows.filter((r) => !r.username);
 
@@ -95,7 +102,8 @@ export default function UsersPage() {
     setInviting(r.person_id);
     try {
       const d = await apiPost<InviteResult>(
-        `/employees/${r.person_id}/invite/`, {});
+        `/employees/${r.person_id}/invite/`,
+        { role_id: pickRole[r.person_id] || null });
       setResult(d); setCopied(false); await reload();
     } catch (e) {
       setResult({ error: (e as ApiError).message } as InviteResult);
@@ -116,6 +124,9 @@ export default function UsersPage() {
   useEffect(() => {
     apiGet<{ permissions: string[] }>("/me/workspace/")
       .then((p) => setPerms(p.permissions || []))
+      .catch(() => {});
+    apiGet<RoleOpt[]>("/access/roles/")
+      .then((d) => setRoles(Array.isArray(d) ? d : []))
       .catch(() => {});
     apiGet<Row[]>("/access/members/")
       .then((d) => { setRows(d); setBusy(false); })
@@ -213,12 +224,23 @@ export default function UsersPage() {
                             {L("details")}
                           </Link>
                         ) : canInvite ? (
-                          <button className="btn btn-sm btn-primary"
-                                  onClick={() => inviteOne(r)}
-                                  disabled={inviting !== null}>
-                            {inviting === r.person_id
-                              ? L("inviting") : L("invite")}
-                          </button>
+                          <div className="row" style={{ gap: 6 }}>
+                            <select className="input" style={{ minWidth: 130 }}
+                              value={pickRole[r.person_id]
+                                ?? String(roles.find((x) => x.code === "employee")?.id ?? "")}
+                              onChange={(e) => setPickRole((st) => ({
+                                ...st, [r.person_id]: e.target.value }))}>
+                              {roles.map((x) => (
+                                <option key={x.id} value={x.id}>{x.name_ar}</option>
+                              ))}
+                            </select>
+                            <button className="btn btn-sm btn-primary"
+                                    onClick={() => inviteOne(r)}
+                                    disabled={inviting !== null}>
+                              {inviting === r.person_id
+                                ? L("inviting") : L("invite")}
+                            </button>
+                          </div>
                         ) : null}
                       </td>
                     </tr>
