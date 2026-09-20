@@ -126,11 +126,18 @@ def test_blocked_when_account_exists(env):
 
 
 def test_preview_returns_name_only(env):
-    """لا تسريب: الاسم والشركة فقط، لا هوية ولا جوال ولا راتب."""
+    """
+    لا تسريب: الاسم والشركة فقط، لا هوية ولا جوال ولا راتب.
+
+    ق-223: و`existing_user` منطقيٌّ لا بيانات — تحتاجه الشاشة
+    لتعرف أتطلب كلمة مرورٍ أم تعرض تأكيدًا. ومن يملك الرابط
+    **يعرف الاسم والشركة أصلًا**.
+    """
     r = env["client"].get(f"/api/join/{env['raw_token']}/")
     assert r.status_code == 200
     assert set(r.json()) == {"valid", "name", "company_ar", "company_en",
-                             "default_locale"}
+                             "default_locale", "existing_user"}
+    assert isinstance(r.json()["existing_user"], bool)
 
 
 def test_token_is_single_use(env):
@@ -174,3 +181,122 @@ def test_reinvite_revokes_previous(env):
                            **env["hr"])
     assert r.status_code == 200
     assert env["client"].get(f"/api/join/{old}/").status_code == 410
+
+
+# ══════════ ق-223: العضوية والدور والربط بحسابٍ قائم ══════════
+
+def test_accept_creates_membership(env):
+    """
+    ⚠️⚠️ الأهمّ: القبول يُنشئ عضوية — وبلاها **لا يدخل أحد**.
+
+    فالنظام يعرف حسابَ الداخل من عضويته وحدها، ومن قبل الدعوة
+    بلا عضوية **يرى «لا ملف موظف»** وكلُّ قراءةٍ فراغٌ صامت.
+    """
+    r = env["client"].post(
+        f"/api/join/{env['raw_token']}/accept/",
+        data={"password": "Strong@2026x"}, content_type="application/json")
+    assert r.status_code == 200, r.content
+
+    with account_scope(env["account_id"]):
+        p = Person.objects.get(id=env["invitable"])
+        assert p.user_id is not None
+        m = AccountMembership.objects.filter(user_id=p.user_id).first()
+        assert m is not None, "قُبلت الدعوة بلا عضوية"
+        assert m.account_id == env["account_id"]
+        assert m.active_company_id == env["company_id"]
+
+
+def test_accept_assigns_invite_role(env):
+    """والعضوية بلا دور صفرُ صلاحيات — فلا شاشةَ تفتح."""
+    with account_scope(env["account_id"]):
+        role = Role.objects.get(account_id=env["account_id"],
+                                code="hr_manager")
+        JoinInvite.objects.filter(id=env["invite_id"]).update(role=role)
+
+    r = env["client"].post(
+        f"/api/join/{env['raw_token']}/accept/",
+        data={"password": "Strong@2026x"}, content_type="application/json")
+    assert r.status_code == 200, r.content
+
+    with account_scope(env["account_id"]):
+        p = Person.objects.get(id=env["invitable"])
+        m = AccountMembership.objects.get(user_id=p.user_id)
+        ra = RoleAssignment.objects.filter(membership=m).first()
+        assert ra is not None, "قُبلت الدعوة بلا دور"
+        assert ra.role.code == "hr_manager"
+        assert ra.scope == Scope.COMPANY.value
+
+
+def test_owner_role_actually_owns(env):
+    """
+    ⚠️ ودورٌ لا يُملّك خيارٌ يوهم: فدعوةٌ بدور «مالك الحساب»
+    تُملّك فعلًا — والمالك القائم يبقى معه.
+    """
+    with account_scope(env["account_id"]):
+        role = Role.objects.get(account_id=env["account_id"], code="owner")
+        JoinInvite.objects.filter(id=env["invite_id"]).update(role=role)
+
+    r = env["client"].post(
+        f"/api/join/{env['raw_token']}/accept/",
+        data={"password": "Strong@2026x"}, content_type="application/json")
+    assert r.status_code == 200, r.content
+
+    with account_scope(env["account_id"]):
+        p = Person.objects.get(id=env["invitable"])
+        m = AccountMembership.objects.get(user_id=p.user_id)
+        assert m.is_account_owner is True
+
+
+def test_matching_email_links_without_new_user(env):
+    """
+    ⚠️⚠️ وبريدٌ مطابقٌ لمستخدمٍ قائم: **لا حسابَ ثانٍ ولا كلمة
+    مرور** — فالبريد واحدٌ والشخص واحد، والدعوة تأكيدُ استلام.
+    """
+    # مستخدمٌ حرٌّ بلا ملفّ موظف — كمالك حسابٍ لم يُربط بأحد
+    existing = User.objects.create_user(
+        username="free.user", password="Pw@2026xx",
+        email="same.person@example.com")
+    with account_scope(env["account_id"]):
+        Person.objects.filter(id=env["invitable"]).update(
+            email="Same.Person@example.com")
+
+    before = User.objects.count()
+    pv = env["client"].get(f"/api/join/{env['raw_token']}/")
+    assert pv.json()["existing_user"] is True
+
+    r = env["client"].post(
+        f"/api/join/{env['raw_token']}/accept/",
+        data={}, content_type="application/json")
+    assert r.status_code == 200, r.content
+    assert r.json().get("linked_existing") is True
+    assert User.objects.count() == before, "أُنشئ حسابٌ ثانٍ لنفس البريد"
+
+    with account_scope(env["account_id"]):
+        p = Person.objects.get(id=env["invitable"])
+        assert p.user_id == existing.id
+
+
+def test_linked_user_email_falls_back_to_new_account(env):
+    """
+    ⚠️ ومستخدمٌ له ملفٌّ أصلًا لا يُربط بملفٍّ ثانٍ: فموظفان
+    ببريدٍ واحد واقعٌ لا نادر — **والقبول لا ينهار، بل يُنشئ
+    حسابًا كالمعتاد**.
+    """
+    linked = User.objects.get(username="inv.hr")
+    linked.email = "shared@example.com"
+    linked.save(update_fields=["email"])
+    with account_scope(env["account_id"]):
+        Person.objects.filter(id=env["invitable"]).update(
+            email="shared@example.com")
+
+    pv = env["client"].get(f"/api/join/{env['raw_token']}/")
+    assert pv.json()["existing_user"] is False
+
+    r = env["client"].post(
+        f"/api/join/{env['raw_token']}/accept/",
+        data={"password": "Strong@2026x"}, content_type="application/json")
+    assert r.status_code == 200, r.content
+
+    with account_scope(env["account_id"]):
+        p = Person.objects.get(id=env["invitable"])
+        assert p.user_id != linked.id

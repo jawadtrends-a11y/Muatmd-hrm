@@ -224,8 +224,13 @@ export default function UsersPage() {
                             {L("details")}
                           </Link>
                         ) : canInvite ? (
-                          <div className="row" style={{ gap: 6 }}>
-                            <select className="input" style={{ minWidth: 130 }}
+                          <div className="row" style={{
+                            gap: 6, flexWrap: "nowrap",
+                            justifyContent: "flex-end" }}>
+                            <select className="input"
+                              style={{ width: 150, minWidth: 150,
+                                       flex: "0 0 150px", height: 32,
+                                       fontSize: ".82rem", padding: "0 8px" }}
                               value={pickRole[r.person_id]
                                 ?? String(roles.find((x) => x.code === "employee")?.id ?? "")}
                               onChange={(e) => setPickRole((st) => ({
@@ -235,6 +240,7 @@ export default function UsersPage() {
                               ))}
                             </select>
                             <button className="btn btn-sm btn-primary"
+                                    style={{ whiteSpace: "nowrap" }}
                                     onClick={() => inviteOne(r)}
                                     disabled={inviting !== null}>
                               {inviting === r.person_id
