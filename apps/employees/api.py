@@ -156,6 +156,13 @@ def employees(request):
 
     d = request.data
 
+    # ق-226: والسقف يُفحص قبل كل إضافة.
+    try:
+        check_headcount_limit(comp.account_id, adding=1)
+    except HeadcountLimitError as e:
+        return Response({"detail": str(e), "code": "headcount_limit"},
+                        status=403)
+
     # ⚠️ معاملة واحدة تلفّ إنشاء الشخص والارتباط معًا (with atomic).
     # بلاها: create_person تنجح وتُحفظ بمعاملتها الخاصة، ثم
     # create_employment تفشل — فيبقى شخص يتيم يمنع إعادة المحاولة
@@ -1150,6 +1157,59 @@ def update_employee_profile(request, employment_id):
 
 
 
+class HeadcountLimitError(Exception):
+    """سقف الموظفين بلغ — رسالةٌ تُسمّي المطلوب لا رفضٌ صامت."""
+
+
+def check_headcount_limit(account_id, adding=1):
+    """
+    ق-226: \u26a0\u26a0 **وسقفُ التجربة كان مكتوبًا ولا يُفحص**
+    (بلاغ جواد): `trial_max_employees` في إعدادات المنصة —
+    **حقلٌ في اللوحة بلا أثر**، وحسابٌ تجريبيٌّ أضاف ثلاثين.
+
+    والسقف: **التجربة من إعدادات المنصة**، والمدفوع من
+    `plan.max_employees` (فارغٌ = بلا سقف).
+
+    \u26a0 **ويُفحص قبل الإدخال لا في وسطه**: فاستيرادٌ يقف في
+    منتصفه **يترك نصف الملفّ داخلًا**.
+    """
+    from apps.accounts.models_billing_v2 import AccountSubscription
+    from apps.accounts.models_platform import get_settings
+    from apps.employees.models import Employment, EmploymentStatus
+
+    # \u26a0\u26a0 **ولا اشتراكَ يعني لا سقف**: وهذا `fail open` —
+    # فالعزل يحجب الاشتراك خارج السياق، **والحارس يصمت**. فنقرأ
+    # بسياقٍ صريح، ولا نمضي على فراغ.
+    from apps.core.tenancy.context import account_scope
+
+    with account_scope(account_id):
+        sub = AccountSubscription.objects.filter(
+            account_id=account_id).select_related("plan").first()
+    if sub is None:
+        return
+
+    if sub.state == "trial":
+        cap = get_settings().trial_max_employees
+        label = "الحساب التجريبي"
+    else:
+        cap = getattr(sub.plan, "max_employees", None) if sub.plan else None
+        label = f"باقة {sub.plan.name_ar}" if sub.plan else "الباقة"
+
+    if not cap:
+        return
+
+    # \u26a0\u26a0 **والعدّ داخل السياق أيضًا**: فقراءةٌ خارجه
+    # **تُرجع صفرًا صامتًا** — فيمرّ كلُّ شيء والحارس ساكت.
+    with account_scope(account_id):
+        now = Employment.objects.filter(
+            account_id=account_id,
+            status=EmploymentStatus.ACTIVE).count()
+    if now + adding > cap:
+        raise HeadcountLimitError(
+            f"{label} يسمح بـ{cap} موظفًا — ولديك {now}. "
+            f"اشترك أو رقِّ باقتك لإضافة المزيد.")
+
+
 def _resolve_employment(request, employment_id, write=False):
     """
     يجلب الارتباط الوظيفي — الموظف يصل لملفه هو بلا صلاحية (ق-65).
@@ -1604,6 +1664,15 @@ def import_execute(request):
                        "لا يُستورَد حتى تُصلَح كلّها"),
             "code": "has_errors",
             "errors": out["errors"][:100]}, status=400)
+
+    # ق-226: \u26a0\u26a0 **والسقف يُفحص قبل الإدخال لا في وسطه**:
+    # فملفٌّ يقف في منتصفه **يترك نصفه داخلًا ونصفه خارجًا** —
+    # وبلا هذا الفحص **يُلتفّ على السقف بملفٍّ واحد**.
+    try:
+        check_headcount_limit(comp.account_id, adding=len(out["rows"]))
+    except HeadcountLimitError as e:
+        return Response({"detail": str(e), "code": "headcount_limit"},
+                        status=403)
 
     actor = getattr(request.user, "person", None)
     try:

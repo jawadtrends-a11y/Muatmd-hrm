@@ -45,6 +45,17 @@ export default function SignupPage() {
     setBusy(true); setErr("");
     try {
       await apiPost("/signup/", f);
+      // ق-225: والاختيار يُحفظ عند الإرسال — فيصمد حتى الدفع.
+      try {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get("plan")) {
+          localStorage.setItem("pick_plan", JSON.stringify({
+            code: q.get("plan"),
+            employees: Number(q.get("employees") || 0) || 1,
+            cycle: q.get("cycle") === "annual" ? "annual" : "monthly",
+          }));
+        }
+      } catch { /* لا يمنع المتابعة */ }
       setSent(f.email);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e));

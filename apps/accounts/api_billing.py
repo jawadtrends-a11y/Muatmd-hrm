@@ -266,9 +266,18 @@ def start_checkout(request):
     sub.save(update_fields=["plan", "cycle", "subscribed_employees",
                             "updated_at"])
 
+    # ق-225: ⚠⚠ **ومن دفع في تجربته لا يخسر بقيّتها** (قرار
+    # جواد): فالفترة المدفوعة **تبدأ بعد انتهاء التجربة**، لا من
+    # يوم الدفع — وإلا **دفع شهرًا وأخذ ثلاثة وعشرين يومًا**.
+    from datetime import date as _date
+    period_start = None
+    if sub.trial_ends_at and sub.trial_ends_at >= _date.today():
+        period_start = sub.trial_ends_at
+
     try:
         invoice, disc = billing.create_invoice(
             subscription=sub, headcount=employees,
+            period_start=period_start,
             coupon_code=request.data.get("coupon_code"))
         billing.issue_invoice(invoice)
     except billing.BillingError as e:

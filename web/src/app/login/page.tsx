@@ -87,7 +87,10 @@ export default function LoginPage() {
         password,
       });
       setToken(res.token);
-      router.replace("/");
+      // ق-225: ووجهةٌ مطلوبة تُحترم — فمن جاء ليُكمل اشتراكه
+      // **لا يُرمى للرئيسية** فيبدأ من الصفر.
+      const nx = new URLSearchParams(window.location.search).get("next");
+      router.replace(nx && nx.startsWith("/") ? nx : "/");
     } catch (e) {
       const err = e as ApiError;
       setError(err.isNetwork ? L("network")

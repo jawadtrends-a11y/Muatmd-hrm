@@ -221,3 +221,107 @@ def test_employees_isolated_between_accounts(env, rls_enforced_late):
     from apps.employees.models import Employment
     with account_scope(other.account_id):
         assert Employment.objects.count() == 0
+
+
+# ══════════ ق-226: سقف موظفي التجربة ══════════
+
+def _set_trial_cap(n):
+    from apps.accounts.models_platform import get_settings
+    s = get_settings()
+    s.trial_max_employees = n
+    s.save(update_fields=["trial_max_employees"])
+
+
+def _ensure_trial(account_id):
+    """يضمن اشتراكًا تجريبيًّا — فالسقف معلَّقٌ بالحالة."""
+    from apps.accounts.models_billing_v2 import AccountSubscription
+    with account_scope(account_id):
+        sub, _ = AccountSubscription.objects.get_or_create(
+            account_id=account_id, defaults={"state": "trial"})
+        if sub.state != "trial":
+            sub.state = "trial"
+            sub.save(update_fields=["state"])
+    return sub
+
+
+def test_trial_cap_blocks_extra_employee(env):
+    """
+    ⚠️⚠️ الأهمّ: التجربة لا تتجاوز سقفها — **وحقلٌ في اللوحة بلا
+    فحصٍ سقفٌ بلا أثر**: فحسابٌ تجريبيٌّ أضاف ثلاثين وسقفه خمسة.
+    """
+    from apps.employees.api import (HeadcountLimitError,
+                                    check_headcount_limit)
+    _ensure_trial(env["account_id"])
+    _set_trial_cap(1)
+
+    c = _client(env, "hr_manager")
+    r = _post(c, "/api/employees/", {
+        "first_name_ar": "سعد", "family_name_ar": "الحربي",
+        "gender": "male", "nationality_code": "SA",
+        "id_type": "national_id", "id_number": "1095556667",
+        "mobile": "0505556667", "employee_no": "CAP-1",
+        "join_date": "2024-01-01"})
+    assert r.status_code == 201, r.content
+
+    # والثاني يتجاوز السقف — فيُمنع برسالةٍ تُسمّي المطلوب
+    with pytest.raises(HeadcountLimitError) as ex:
+        check_headcount_limit(env["account_id"], adding=1)
+    assert "1" in str(ex.value)
+
+    r2 = _post(c, "/api/employees/", {
+        "first_name_ar": "نواف", "family_name_ar": "القحطاني",
+        "gender": "male", "nationality_code": "SA",
+        "id_type": "national_id", "id_number": "1096667778",
+        "mobile": "0506667778", "employee_no": "CAP-2",
+        "join_date": "2024-01-01"})
+    assert r2.status_code == 403, r2.content
+    assert r2.json()["code"] == "headcount_limit"
+
+
+def test_trial_cap_counts_inside_scope(env):
+    """
+    ⚠️⚠️ ودرسُ العزل: **العدّ خارج السياق يُرجع صفرًا صامتًا** —
+    فيمرّ كلُّ شيء **والحارس ساكت**. وهذا ما كسر الحارس أول مرّة.
+    """
+    from apps.employees.api import (HeadcountLimitError,
+                                    check_headcount_limit)
+    from apps.employees.models import Employment, EmploymentStatus
+
+    _ensure_trial(env["account_id"])
+    _set_trial_cap(1)
+
+    c = _client(env, "hr_manager", username="u-scope")
+    _post(c, "/api/employees/", {
+        "first_name_ar": "بدر", "family_name_ar": "العتيبي",
+        "gender": "male", "nationality_code": "SA",
+        "id_type": "national_id", "id_number": "1097778889",
+        "mobile": "0507778889", "employee_no": "SC-1",
+        "join_date": "2024-01-01"})
+
+    # والعدّ الصحيح داخل السياق — وهو ما يعتمده الحارس.
+    # \u26a0 ولا يُفحص «خارج السياق» هنا: ففي الاختبار يبقى
+    # السياق مضبوطًا من الطلب السابق — **والفخّ يظهر في
+    # الخدمة لا في الاختبار**.
+    with account_scope(env["account_id"]):
+        assert Employment.objects.filter(
+            account_id=env["account_id"],
+            status=EmploymentStatus.ACTIVE).count() == 1
+
+    # فيمنع الزائد
+    with pytest.raises(HeadcountLimitError):
+        check_headcount_limit(env["account_id"], adding=1)
+
+
+def test_trial_cap_blocks_bulk_import(env):
+    """⚠️ ولا يُلتفّ على السقف بملفٍّ واحد."""
+    from apps.employees.api import (HeadcountLimitError,
+                                    check_headcount_limit)
+    _ensure_trial(env["account_id"])
+    _set_trial_cap(3)
+
+    # استيرادُ عشرةٍ يتجاوز الثلاثة — فيُرفض قبل الإدخال
+    with pytest.raises(HeadcountLimitError):
+        check_headcount_limit(env["account_id"], adding=10)
+
+    # وثلاثةٌ تمرّ
+    check_headcount_limit(env["account_id"], adding=3)

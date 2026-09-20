@@ -240,7 +240,19 @@ export default function PricingPage() {
                     </div>
                   )}
 
-                  <Link href="/signup" className="btn btn-primary"
+                  {/* ق-225: والاختيار يُحمل معه — فمن اختار باقةً
+                      وعددًا **لا يبدأ من الصفر بعد التسجيل**،
+                      ويُحفظ محليًّا أيضًا فرابط البريد قد يُفتح
+                      في متصفّحٍ آخر. */}
+                  <Link href={`/signup?plan=${p.code}`
+                              + `&employees=${count}&cycle=${cycle}`}
+                        onClick={() => {
+                          try {
+                            localStorage.setItem("pick_plan", JSON.stringify(
+                              { code: p.code, employees: count, cycle }));
+                          } catch { /* لا يمنع المتابعة */ }
+                        }}
+                        className="btn btn-primary"
                         style={{ marginTop: 16, width: "100%", height: 42,
                                  display: "grid", placeItems: "center" }}>
                     {L("start")}

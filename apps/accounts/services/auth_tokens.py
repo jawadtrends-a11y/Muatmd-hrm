@@ -123,6 +123,32 @@ class TokenAuthentication(BaseAuthentication):
         return self.keyword
 
 
+def issue_for_signup(*, user, device_kind=DeviceKind.WEB, ip=None):
+    """
+    يُصدر رمزًا بعد تأكيد البريد (ق-225) — فلا دخولَ ثانٍ.
+
+    ⚠⚠ **ولا يُستدعى إلا بعد تحقّقٍ ناجح من رمز التفعيل**:
+    فمن استدعاه بلا تحقّق **فتح بابًا بلا قفل**. ورمز التفعيل
+    **يُستهلك مرّة** — فالدعوة لا تُقبل مرّتين.
+
+    ⚠ **وعمرُه كعمر الجلسة العادية**: فهو دخولٌ حقيقيّ لا
+    جلسةٌ مؤقّتة — و`_lifetime` تُرجع **تاريخ الانتهاء نفسه**
+    لا مدّةً تُجمع.
+    """
+    if not user.is_active:
+        raise LoginError("الحساب معطّل")
+
+    raw, digest, prefix = generate_token()
+    token = AuthToken.objects.create(
+        user=user, token_hash=digest, prefix=prefix,
+        device_kind=device_kind, device_name="تفعيل التسجيل",
+        ip_address=ip,
+        expires_at=_lifetime(device_kind))
+
+    logger.info("signup_token_issued", extra={"user_id": user.id, "ip": ip})
+    return raw, token
+
+
 def issue_for_impersonation(*, user, device_kind=DeviceKind.WEB, ip=None):
     """
     يُصدر رمزًا بلا كلمة مرور — **لجلسة دعمٍ فنيّ معتمدة** (ق-220).

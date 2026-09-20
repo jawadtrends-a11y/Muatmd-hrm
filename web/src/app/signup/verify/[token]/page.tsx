@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { apiPost, ApiError } from "@/lib/api";
+import { apiPost, setToken, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck } from "@/components/Icons";
 import { Shell } from "../../page";
@@ -17,6 +17,7 @@ const T: Dict = {
   },
   login: { ar: "تسجيل الدخول", en: "Sign in" },
   signupAgain: { ar: "التسجيل من جديد", en: "Sign up again" },
+  continueSub: { ar: "أكمل اشتراكك", en: "Continue to subscribe" },
 };
 
 export default function VerifyPage() {
@@ -25,12 +26,32 @@ export default function VerifyPage() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(true);
+  // ق-225: ومن اختار باقةً قبل التسجيل يُكمل اشتراكه بعد الدخول.
+  const [hasPick, setHasPick] = useState(false);
+
+  useEffect(() => {
+    try { setHasPick(!!localStorage.getItem("pick_plan")); }
+    catch { /* لا يمنع شيئًا */ }
+  }, []);
 
   const run = useCallback(async () => {
     const token = String(params?.token || "");
     if (!token) { setErr("رابط غير صالح"); setBusy(false); return; }
     try {
-      await apiPost(`/signup/verify/${encodeURIComponent(token)}/`, {});
+      // ق-225: \u26a0\u26a0 **والتفعيل يُدخل** (قرار جواد): فمن فتح
+      // رابط بريده **لا يُطالَب بدخولٍ ثانٍ** — ومن اختار باقةً
+      // قبل التسجيل يُنقل لإكمال دفعه مباشرة.
+      const out = await apiPost<{ token?: string }>(
+        `/signup/verify/${encodeURIComponent(token)}/`, {});
+      if (out?.token) {
+        setToken(out.token);
+        let next = "/";
+        try {
+          if (localStorage.getItem("pick_plan")) next = "/subscribe";
+        } catch { /* لا يمنع الدخول */ }
+        window.location.href = next;
+        return;
+      }
       setDone(true);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e));
@@ -51,8 +72,13 @@ export default function VerifyPage() {
             <div className="muted" style={{ fontSize: ".9rem" }}>
               {L("okBody")}
             </div>
-            <Link href="/login" className="btn btn-primary"
-                  style={{ marginTop: 20 }}>{L("login")}</Link>
+            {/* ق-225: ومن جاء من صفحة الأسعار يُكمل اشتراكه —
+                فلا يعود لصفر بعد أن اختار باقته وعدده. */}
+            <Link href={hasPick ? "/login?next=/subscribe" : "/login"}
+                  className="btn btn-primary"
+                  style={{ marginTop: 20 }}>
+              {hasPick ? L("continueSub") : L("login")}
+            </Link>
           </>
         ) : (
           <>

@@ -113,6 +113,22 @@ export default function SubscribePage() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [checkout, setCheckout] = useState<Checkout | null>(null);
+  // ق-225: واختيار الزائر من صفحة الأسعار يُستأنف هنا — فالعدد
+  // والدورة يُملآن، ولا يُعيد ما اختاره قبل التسجيل.
+  const [picked, setPicked] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pick_plan");
+      if (!raw) return;
+      const v = JSON.parse(raw) as {
+        code?: string; employees?: number; cycle?: string };
+      if (v.employees && v.employees > 0) setCount(v.employees);
+      if (v.cycle === "annual" || v.cycle === "monthly") setCycle(v.cycle);
+      if (v.code) setPicked(v.code);
+      localStorage.removeItem("pick_plan");
+    } catch { /* اختيارٌ تالف لا يكسر الصفحة */ }
+  }, []);
   const [paying, setPaying] = useState<number | null>(null);
 
   // ق-181: **الفواتير والبطاقات** — كشفهما الجرد يتيمَين.
@@ -353,6 +369,12 @@ export default function SubscribePage() {
           return (
             <div key={p.id} className="card" style={{
               padding: 22, display: "flex", flexDirection: "column",
+              // ق-225: والباقة التي اختارها قبل التسجيل تُبرَز —
+              // فلا يبحث عنها من جديد.
+              ...(picked && picked === p.code
+                ? { borderColor: "var(--teal)",
+                    boxShadow: "0 0 0 2px var(--teal-soft)" }
+                : {}),
             }}>
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>

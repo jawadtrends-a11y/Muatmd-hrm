@@ -193,9 +193,16 @@ def verify_signup(raw_token, ip=None):
     req.created_account_id = result.account_id
     req.save(update_fields=["status", "verified_at", "created_account_id"])
 
+    # ق-225: ورمزُ دخولٍ مع التفعيل — **فلا دخولَ ثانٍ**: من فتح
+    # رابط بريده **يجد نفسه داخل النظام**، ومن جاء ليشترك يُكمل
+    # دفعه بلا خطوةٍ زائدة.
+    from apps.accounts.services import auth_tokens as _auth
+
+    raw_login, _tok = _auth.issue_for_signup(user=user, ip=ip)
+
     logger.info("حساب جديد بالتسجيل الذاتيّ: %s", result.account_id)
     return {"account_id": result.account_id, "user_id": user.id,
-            "username": user.username}
+            "username": user.username, "token": raw_login}
 
 
 # ══════════ استعادة كلمة المرور ══════════
