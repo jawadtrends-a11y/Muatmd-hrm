@@ -13,6 +13,9 @@ const T: Dict = {
   title: { ar: "تسجيل الدخول", en: "Sign in" },
   forgot: { ar: "نسيت كلمة المرور؟", en: "Forgot password?" },
   noAccount: { ar: "ليس لديك حساب؟", en: "No account?" },
+  // ق-224: والأسعار صفحةٌ قائمةٌ بلا رابطٍ يصلها — فالزائر لا
+  // يعرف بوجودها. وهي علّة ق-209 نفسها في شاشةٍ أخرى.
+  pricing: { ar: "الأسعار والباقات", en: "Pricing & plans" },
   createOne: { ar: "أنشئ حساب شركة", en: "Create a company account" },
   toSite: { ar: "الموقع الرئيسي", en: "Main site" },
   toAcc: { ar: "معتمد المحاسبي", en: "Muatmd Accounting" },
@@ -172,6 +175,12 @@ export default function LoginPage() {
                                           fontWeight: 500 }}>
               {L("createOne")}
             </Link>
+            <div style={{ marginTop: 10 }}>
+              <Link href="/pricing" className="muted"
+                    style={{ fontSize: ".86rem" }}>
+                {L("pricing")}
+              </Link>
+            </div>
           </div>
         </div>
 
