@@ -1010,7 +1010,7 @@ def update_employee_profile(request, employment_id):
         "family_name_ar", "full_name_en", "gender", "birth_date",
         "birth_date_hijri", "marital_status", "nationality_code",
         "id_expiry_date", "id_expiry_hijri", "passport_number",
-        "passport_expiry_date", "email",
+        "passport_expiry_date", "email", "mobile_e164",
         "preferred_locale", "gosi_scheme_code",
         "gosi_first_subscription_date",
     }
@@ -1055,6 +1055,13 @@ def update_employee_profile(request, employment_id):
     if section == "gosi":
         d = {ALIASES.get(k, k): v for k, v in d.items()}
 
+    # ق-222: ⚠⚠ **والقراءة تُرجع `mobile` والكتابة تقبل
+    # `mobile_e164`** — فالشاشة ترسل ما قرأته **ويُتجاهل صامتًا**.
+    # وهي علّة ق-178 نفسها في حقلٍ آخر.
+    if "mobile" in d and "mobile_e164" not in d:
+        d = {("mobile_e164" if k == "mobile" else k): v
+             for k, v in d.items()}
+
     changed = []
 
     for key, value in d.items():
@@ -1087,6 +1094,33 @@ def update_employee_profile(request, employment_id):
 
     if not changed:
         return Response({"detail": "لا حقول قابلة للتعديل"}, status=400)
+
+    # ق-222: ⚠⚠ **والجوال والبريد يُدخَل بهما النظام** (ق-94):
+    # **فمكرَّرٌ بينهما يعني دخولًا ملتبسًا** — فيُفحصان كما في
+    # الإنشاء، **بالاستثناء عن صاحب الملفّ نفسه**.
+    #
+    # ⚠ **والجوال يُطبَّع**: فمن كتب `0501234567` ومن كتب
+    # `+966501234567` **شخصٌ واحدٌ برقمين لولا التوحيد**.
+    if "mobile_e164" in changed:
+        from apps.employees.services.validators import normalize_mobile
+        norm, m_err = normalize_mobile(p.mobile_e164 or "")
+        if m_err:
+            return Response({"detail": m_err, "code": "invalid_mobile"},
+                            status=400)
+        p.mobile_e164 = norm
+
+    if "mobile_e164" in changed or "email" in changed:
+        from apps.employees.services.duplicates import (
+            check_person_duplicates)
+        chk = check_person_duplicates(
+            account_id=p.account_id, id_type=p.id_type,
+            id_number=p.id_number, name_ar="",
+            mobile_e164=p.mobile_e164 if "mobile_e164" in changed else "",
+            email=p.email if "email" in changed else "",
+            exclude_person_id=p.id)
+        if chk.blocking:
+            return Response({"detail": "\n".join(chk.blocking),
+                             "code": "duplicate"}, status=400)
 
     # الآيبان يُتحقق منه — اشتراط البنك المركزي (ق-57)
     if "iban" in changed and emp.iban:

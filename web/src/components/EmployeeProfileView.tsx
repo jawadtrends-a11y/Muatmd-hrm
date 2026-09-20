@@ -1035,13 +1035,16 @@ function DependentsTab({
 /* ══ الاتصال وأرقام الطوارئ ══ */
 
 function ContactTab({
-  empId, personal, contacts, L, onChanged,
+  empId, personal, contacts, L, onChanged, onSaveContact,
+  savingContact,
 }: {
   empId: number;
   personal: Record<string, string>;
   contacts: Profile["emergency_contacts"];
   L: (k: string, f?: string) => string;
   onChanged: () => void;
+  onSaveContact: (d: Record<string, unknown>) => Promise<void>;
+  savingContact: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -1085,13 +1088,19 @@ function ContactTab({
         }}
       />
 
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontSize: "1rem", marginBottom: 12 }}>{L("contact")}</h3>
-        <ViewGrid items={[
-          { label: L("mobile"), value: personal.mobile, numeric: true },
-          { label: L("email"), value: personal.email },
-        ]} />
-      </div>
+      {/* ق-222: \u26a0\u26a0 **وبيانات الاتصال كانت عرضًا لا تحريرًا**
+          (بلاغ جواد): فجوالٌ أو بريدٌ أُدخل بخطأ **لا يُصحَّح** —
+          ولا صلةَ للصلاحيات، فالمسار لم يكن في الشاشة أصلًا. */}
+      <EditableSection
+        title={L("contact")} icon={IcUser} L={L} busy={savingContact}
+        readOnly={false}
+        values={{ mobile: personal.mobile, email: personal.email }}
+        onSave={onSaveContact}
+        fields={[
+          { key: "mobile", label: L("mobile") },
+          { key: "email", label: L("email") },
+        ]}
+      />
 
       <div className="spread">
         <h3 style={{ fontSize: "1rem" }}>{L("emergency")}</h3>
@@ -1892,7 +1901,9 @@ function ProfileInner({
 
       {tab === "contact" && (
         <ContactTab empId={empId} personal={data.personal}
-          contacts={data.emergency_contacts} L={L} onChanged={load} />
+          contacts={data.emergency_contacts} L={L} onChanged={load}
+          savingContact={saving}
+          onSaveContact={(d) => save("contact", d)} />
       )}
 
       {tab === "documents" && (
