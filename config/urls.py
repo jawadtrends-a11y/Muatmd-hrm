@@ -45,6 +45,7 @@ from apps.employees import api_training as training_api
 from apps.core import api_public as public_api
 from apps.core import api_keys_admin as keys_admin_api
 from apps.notifications import api as notifications_api
+from apps.notifications import api_push as push_api
 
 
 def health(request):
@@ -584,6 +585,8 @@ urlpatterns = [
     path("api/notifications/templates/", notifications_api.notification_templates, name="notification-templates"),
     path("api/notifications/templates/<int:template_id>/", notifications_api.notification_template_detail, name="notification-template-detail"),
     path("api/me/notifications/", notifications_api.my_notifications, name="my-notifications"),
+    # ق-232: أجهزة الجوال لإشعارات الدفع
+    path("api/me/devices/", push_api.my_devices, name="my-devices"),
     path("api/me/notifications/archive/", notifications_api.notifications_archive,
          name="notifications-archive"),
     path("api/me/notifications/read/", notifications_api.mark_read, name="notifications-read"),

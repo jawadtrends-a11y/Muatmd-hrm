@@ -154,3 +154,9 @@ class NotificationDelivery(AccountScopedModel):
 from apps.notifications.models_announcement import (  # noqa: E402,F401
     Announcement, AnnouncementAttachment, AnnouncementKind, AudienceType,
 )
+
+
+# أجهزة الجوال لإشعارات الدفع (ق-232)
+from apps.notifications.models_push import (  # noqa: E402,F401
+    DevicePlatform, PushDevice,
+)

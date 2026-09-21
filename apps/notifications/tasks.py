@@ -140,8 +140,11 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
                     account_id=account_id, company_id=company_id,
                     notif=notif, person_id=person_id, event_key=event_key,
                     locale=locale, context=ctx)
+            elif channel == Channel.PUSH:
+                _queue_push(account_id, notif, person_id, event_key)
+                continue
             else:
-                # واتساب وإشعار الجوال — لا مزوّد بعد (ق-90)
+                # واتساب — لا مزوّد بعد (ق-90)
                 st, err = DeliveryStatus.PENDING, ""
             NotificationDelivery.objects.create(
                 account_id=account_id, notification=notif, channel=channel,
@@ -150,5 +153,78 @@ def dispatch_notification(self, *, account_id, event_key, company_id=None,
                               if st != DeliveryStatus.PENDING else None),
             )
 
+        # ق-232: \u26a0\u26a0 **كل إشعارٍ داخل النظام يُدفع للجوال** (قرار جواد) —
+        # فلا يُعدَّل حدثٌ واحد: القائم والقادم يصلان بلا عمل.
+        if Channel.PUSH not in spec.channels:
+            _queue_push(account_id, notif, person_id, event_key)
+
     return {"event": event_key, "notifications": created,
             "recipients": len(recipients)}
+
+
+
+# ══════════ إشعارات الجوال (ق-232) ══════════
+
+def _queue_push(account_id, notif, person_id, event_key):
+    """
+    يُسجّل التسليم ويُرسله **بعد اكتمال الحفظ**.
+
+    \u26a0 **بلا جهازٍ نشط لا سجلّ** — فمستخدمو الويب بلا تطبيق يُضيفون
+    سطرًا لكل إشعار: جدولٌ يتضخّم بلا فائدة.
+    """
+    from django.db import transaction
+
+    from apps.notifications.models_push import PushDevice
+
+    if not PushDevice.objects.filter(person_id=person_id,
+                                     is_active=True).exists():
+        return
+    if not _channel_allowed(account_id, person_id, event_key, Channel.PUSH):
+        NotificationDelivery.objects.create(
+            account_id=account_id, notification=notif, channel=Channel.PUSH,
+            status=DeliveryStatus.SKIPPED, error="معطّل في تفضيلات المستخدم")
+        return
+    d = NotificationDelivery.objects.create(
+        account_id=account_id, notification=notif, channel=Channel.PUSH,
+        status=DeliveryStatus.PENDING)
+    transaction.on_commit(lambda: push_notification.apply_async(
+        kwargs={"account_id": account_id, "delivery_id": d.id}))
+
+
+@shared_task(base=AccountTask, bind=True, max_retries=3,
+             default_retry_delay=30)
+def push_notification(self, *, account_id, delivery_id):
+    """يدفع إشعارًا واحدًا لأجهزة مستقبله — ويكتب النتيجة في سجلّ التسليم."""
+    from apps.notifications.services.push import PushTransient, send_to_person
+
+    d = (NotificationDelivery.objects.select_related("notification")
+         .filter(id=delivery_id).first())
+    if d is None or d.status != DeliveryStatus.PENDING:
+        return {"skipped": True}
+    n = d.notification
+    try:
+        res = send_to_person(
+            person_id=n.recipient_person_id, title=n.title, body=n.body,
+            data={"notification_id": n.id, "event_key": n.event_key,
+                  "link_url": n.link_url})
+    except PushTransient as e:
+        if self.request.retries >= self.max_retries:
+            d.status = DeliveryStatus.FAILED
+            d.error = f"Expo غير متاح بعد {self.max_retries} محاولات: {e}"[:500]
+            d.attempted_at = timezone.now()
+            d.save()
+            return {"failed": True}
+        raise self.retry(exc=e)
+
+    if res.no_devices:
+        d.status, d.error = DeliveryStatus.SKIPPED, "لا جهاز نشط"
+    elif res.sent:
+        d.status = DeliveryStatus.SENT
+        d.error = "; ".join(res.errors)[:500]
+    else:
+        d.status = DeliveryStatus.FAILED
+        d.error = "; ".join(res.errors)[:500] or "رُفض"
+    d.provider_ref = ",".join(res.ticket_ids)[:120]
+    d.attempted_at = timezone.now()
+    d.save()
+    return {"sent": res.sent, "failed": res.failed}
