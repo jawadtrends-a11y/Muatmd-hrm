@@ -5,6 +5,7 @@
  *
  * أول ما يعرّفه العميل قبل إضافة موظف واحد.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 
 import { apiDelete, apiGet, apiPost, apiPut, ApiError }
@@ -290,12 +291,9 @@ export default function OrgPage() {
   const [canManage, setCanManage] = useState(false);
   // التبويب في الرابط: من يحدّث الصفحة يعود لما كان فيه لا
   // للأول (نفس نهج ملف الموظف)
-  const [tab, setTabState] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "branches";
-    const q = new URLSearchParams(window.location.search).get("tab");
-    return (TABS as readonly string[]).includes(q || "")
-      ? (q as Tab) : "branches";
-  });
+  // ق-231: الخُطّاف المشترك — فالقراءة عند التصيير كانت تُنتج صفحتين
+  // مختلفتين (خادمٌ يرسم «الفروع» ومتصفّحٌ يرسم غيره)
+  const [tab, setTab] = useUrlTab<Tab>(TABS, "branches");
 
   // ق-190: **عرض الشجرة** — فالهيكل التنظيميّ **يُفهم بالشجرة
   // لا بالقائمة** (قرار جواد)، **ونقلُ إدارةٍ عملٌ حقيقيّ**.
@@ -304,14 +302,6 @@ export default function OrgPage() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [moveBusy, setMoveBusy] = useState(false);
 
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    if (typeof window !== "undefined") {
-      const u = new URL(window.location.href);
-      u.searchParams.set("tab", t);
-      window.history.replaceState(null, "", u.toString());
-    }
-  };
 
   const loadTree = useCallback(async () => {
     try {

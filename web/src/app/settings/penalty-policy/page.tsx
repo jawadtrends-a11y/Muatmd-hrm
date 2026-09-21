@@ -5,6 +5,7 @@
  * ⚠️ **التنقيح ينسخ ولا يدوس**: مخالفةُ يناير تُقاس بلائحة يناير
  * — وهو ما يصمد أمام هيئة تسوية الخلافات.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -81,7 +82,7 @@ type Opt = { value: string; label: string };
 
 export default function PenaltyPolicyPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"list" | "versions">("list");
+  const [tab, setTab] = useUrlTab<"list" | "versions">(["list", "versions"], "list");
   const [rows, setRows] = useState<Violation[]>([]);
   const [kinds, setKinds] = useState<Opt[]>([]);
   const [cats, setCats] = useState<Opt[]>([]);

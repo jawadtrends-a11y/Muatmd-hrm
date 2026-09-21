@@ -92,6 +92,24 @@ def summary_tab(run):
 
 # ══════════ 2. كشف الرواتب ══════════
 
+def _fixed_codes(run):
+    """
+    ق-230: \u26a0\u26a0 **تعريفٌ واحدٌ للثابت** — رموز هياكل رواتب الشركة.
+
+    فالكشف كان يُعرّفه من الهيكل، **وتبويب الإضافات بثلاثة رموزٍ مكتوبةٍ
+    باليد** — فبدلٌ ثابتٌ رابع يظهر ثابتًا هنا **وإضافةً هناك كل شهر**.
+    """
+    from apps.employees.models import SalaryLine
+    return set(SalaryLine.objects.filter(
+        structure__company_id=run.company_id).values_list(
+        "component__code", flat=True).distinct())
+
+
+def _dept(slip):
+    d = slip.employment.department
+    return d.name_ar if d else "بلا إدارة"
+
+
 def payslips_tab(run, search=None):
     """قائمة القسائم — صف لكل موظف."""
     from django.db.models import Q
@@ -115,9 +133,7 @@ def payslips_tab(run, search=None):
     # ق-227: \u26a0\u26a0 **والإضافيّ = استحقاقٌ خارج هيكل الراتب** — فلا
     # تُصنَّف الرموز باليد: **الهيكل نفسه يُعرّف الثابت**. واستعلامٌ
     # واحدٌ للشركة لا واحدٌ لكل موظف — فألفُ موظفٍ لا يعني ألفَ استعلام.
-    fixed_codes = set(SalaryLine.objects.filter(
-        structure__company_id=run.company_id).values_list(
-        "component__code", flat=True).distinct())
+    fixed_codes = _fixed_codes(run)
 
     rows = []
     for s in slips:
@@ -249,13 +265,15 @@ def adjustments_tab(run, kind=None):
     kind: deduction أو earning أو None للكل
     """
     rows = []
+    fixed = _fixed_codes(run)
     for slip in run.payslips.select_related(
-            "employment__person").prefetch_related("lines"):
+            "employment__person", "employment__department"
+    ).prefetch_related("lines"):
         for line in slip.lines.all():
             if line.line_type not in ("deduction", "earning"):
                 continue
-            if line.component_code in ("BASIC", "HOUSING", "TRANSPORT"):
-                continue      # الثوابت ليست حسومات ولا إضافات
+            if line.component_code in fixed:
+                continue      # الثوابت (من الهيكل) ليست حسومات ولا إضافات
             if kind and line.line_type != kind:
                 continue
             rows.append({
@@ -318,16 +336,19 @@ def comparison_tab(run):
         p.employment_id: p
         for p in Payslip.objects.filter(
             run__company=run.company, run__run_type=run.run_type,
-            run__period_year=prev_year, run__period_month=prev_month)
+            run__period_year=prev_year, run__period_month=prev_month
+        ).select_related("employment__person", "employment__department")
     }
 
     rows = []
-    for slip in run.payslips.select_related("employment__person"):
+    for slip in run.payslips.select_related(
+            "employment__person", "employment__department"):
         prev = previous.get(slip.employment_id)
         if prev is None:
             rows.append({
                 "employee_no": slip.employment.employee_no,
                 "name": slip.employment.person.display_name,
+                "department": _dept(slip),
                 "previous_net": None, "current_net": _fmt(slip.net_pay),
                 "difference": _fmt(slip.net_pay),
                 "variance_percent": None,
@@ -340,6 +361,7 @@ def comparison_tab(run):
         rows.append({
             "employee_no": slip.employment.employee_no,
             "name": slip.employment.person.display_name,
+                "department": _dept(slip),
             "previous_net": _fmt(prev.net_pay),
             "current_net": _fmt(slip.net_pay),
             "difference": _fmt(diff),
@@ -355,12 +377,77 @@ def comparison_tab(run):
         rows.append({
             "employee_no": p.employment.employee_no,
             "name": p.employment.person.display_name,
+            "department": _dept(p),
             "previous_net": _fmt(p.net_pay), "current_net": None,
             "difference": _fmt(-p.net_pay), "variance_percent": None,
             "status": "خرج من المسير",
         })
 
     return sorted(rows, key=lambda r: r["status"] != "يحتاج مراجعة")
+
+
+def comparison_summary(run):
+    """
+    ق-230: خلاصة المقارنة للرسوم — الشهر السابق مقابل الحالي.
+
+    الإجماليّات · وبالإدارة · وأكبر عشرة تغيّرات. **كائنٌ لا قائمة** —
+    فيجلبه لوحٌ مستقلّ لا `loadTab` (درس ق-٢٢٧).
+    """
+    from apps.payroll.models import Payslip
+
+    py, pm = ((run.period_year - 1, 12) if run.period_month == 1
+              else (run.period_year, run.period_month - 1))
+    prev = list(Payslip.objects.filter(
+        run__company=run.company, run__run_type=run.run_type,
+        run__period_year=py, run__period_month=pm
+    ).select_related("employment__person", "employment__department"))
+    curr = list(run.payslips.select_related(
+        "employment__person", "employment__department"))
+
+    def tot(slips):
+        return {
+            "count": len(slips),
+            "gross": _fmt(sum(((x.gross_earnings or ZERO) for x in slips), ZERO)),
+            "deductions": _fmt(sum(((x.total_deductions or ZERO) for x in slips), ZERO)),
+            "net": _fmt(sum(((x.net_pay or ZERO) for x in slips), ZERO)),
+        }
+
+    dep = defaultdict(lambda: {"prev": ZERO, "curr": ZERO})
+    for x in prev:
+        dep[_dept(x)]["prev"] += x.net_pay or ZERO
+    for x in curr:
+        dep[_dept(x)]["curr"] += x.net_pay or ZERO
+
+    by_prev = {x.employment_id: x for x in prev}
+    curr_ids = {x.employment_id for x in curr}
+    changes = []
+    for x in curr:
+        before = by_prev[x.employment_id].net_pay if x.employment_id in by_prev else ZERO
+        d = (x.net_pay or ZERO) - (before or ZERO)
+        if d:
+            changes.append((abs(d), {"name": x.employment.person.display_name,
+                                     "employee_no": x.employment.employee_no,
+                                     "difference": _fmt(d)}))
+    for x in prev:
+        if x.employment_id not in curr_ids:
+            d = -(x.net_pay or ZERO)
+            changes.append((abs(d), {"name": x.employment.person.display_name,
+                                     "employee_no": x.employment.employee_no,
+                                     "difference": _fmt(d)}))
+    changes.sort(key=lambda t: t[0], reverse=True)
+
+    return {
+        "has_previous": bool(prev),
+        "previous_period": f"{py}-{pm:02d}",
+        "current_period": f"{run.period_year}-{run.period_month:02d}",
+        "previous": tot(prev),
+        "current": tot(curr),
+        "by_department": sorted(
+            [{"department": k, "previous": _fmt(v["prev"]),
+              "current": _fmt(v["curr"])} for k, v in dep.items()],
+            key=lambda r: Decimal(r["current"]), reverse=True),
+        "top_changes": [t[1] for t in changes[:10]],
+    }
 
 
 # ══════════ التجميع ══════════
@@ -370,6 +457,7 @@ TABS = {
     "payslips": payslips_tab,
     "excluded": excluded_tab,
     "adjustments": adjustments_tab,
+    "comparison_summary": comparison_summary,
     "gosi": gosi_tab,
     "comparison": comparison_tab,
 }

@@ -5,6 +5,7 @@
  * ⚠️ **القرار هنا لا عند الموظف**: أيُدرج في المسير أم يُصرف
  * خارجه — والمعتمِد أدرى بحال الصرف يومَه.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -57,7 +58,7 @@ type Opt = { value: string; label: string };
 
 export default function ClaimsPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"pending" | "settled">("pending");
+  const [tab, setTab] = useUrlTab<"pending" | "settled">(["pending", "settled"], "pending");
   const [rows, setRows] = useState<Claim[]>([]);
   const [methods, setMethods] = useState<Opt[]>([]);
   const [runTypes, setRunTypes] = useState<Opt[]>([]);

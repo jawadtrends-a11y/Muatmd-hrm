@@ -5,6 +5,7 @@
  * **العميل يختار حقوله ويبني تقريره** — لا ينتظر تقريرًا جديدًا
  * لكل حاجة. ويعاين قبل أن يحفظ، ويصدّر إكسل أو PDF.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -77,7 +78,7 @@ type Result = {
 
 export default function BuilderPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"saved" | "build">("saved");
+  const [tab, setTab] = useUrlTab<"saved" | "build">(["saved", "build"], "saved");
   const [sources, setSources] = useState<Source[]>([]);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [busy, setBusy] = useState(true);

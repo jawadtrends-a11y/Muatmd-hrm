@@ -5,6 +5,7 @@
  * ⚠️ **ولوحةُ من أقرّ ومن لم يُقرّ** — فسياسةٌ نُشرت ولا يُعرف
  * من قرأها بلا فائدة.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -401,7 +402,7 @@ function ComplianceDialog({ info, L, onClose }: {
   onClose: () => void;
 }) {
   const { policy, data } = info;
-  const [tab, setTab] = useState<"pending" | "done">("pending");
+  const [tab, setTab] = useUrlTab<"pending" | "done">(["pending", "done"], "pending");
   const list = tab === "pending" ? data.pending_rows : data.done_rows;
 
   return (

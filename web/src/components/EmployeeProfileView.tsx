@@ -6,6 +6,7 @@
  * كل تبويب قسم مستقل يُعدَّل وحده — فتغيير حقل لا يرسل الملف
  * كاملًا، ولا يفتح باب الخطأ في بيانات لم تُمسّ.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -1310,18 +1311,8 @@ function ProfileInner({
    * فمن يحدّث الصفحة يبقى في تبويبه، ومن يرسل رابطًا لزميله يفتح
    * على التبويب نفسه — والرجوع يعمل كما يتوقّع.
    */
-  const search = useSearchParams();
-  const urlTab = search?.get("tab") as Tab | null;
-  const [tab, setTabState] = useState<Tab>(
-    urlTab && (TABS as readonly string[]).includes(urlTab)
-      ? urlTab : "personal");
-
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    const q = new URLSearchParams(Array.from(search?.entries() ?? []));
-    q.set("tab", t);
-    router.replace(`?${q.toString()}`, { scroll: false });
-  };
+  // ق-231: الخُطّاف المشترك — بلا useSearchParams فلا حاجة لـSuspense
+  const [tab, setTab] = useUrlTab<Tab>(TABS, "personal");
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");

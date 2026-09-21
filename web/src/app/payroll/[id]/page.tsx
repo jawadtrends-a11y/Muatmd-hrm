@@ -6,6 +6,7 @@
  * شاشات اطلاع لا تُصدَّر: ملخص · كشف الرواتب · المستبعدون ·
  * الحسومات · التأمينات · المقارنة. والتصدير لمُدد والبنك منفصل.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -54,6 +55,24 @@ const T: Dict = {
   warningsT: { ar: "تنبيهات", en: "Warnings" },
   noDed: { ar: "لا حسومات", en: "No deductions" },
   close: { ar: "إغلاق", en: "Close" },
+  searchPh: { ar: "بحث بالاسم أو الرقم…", en: "Search name or number…" },
+  allDepts: { ar: "كل الإدارات", en: "All departments" },
+  fAll: { ar: "الكل", en: "All" },
+  fWarn: { ar: "بتنبيهات", en: "With warnings" },
+  fDed: { ar: "بحسومات", en: "With deductions" },
+  fAdd: { ar: "بإضافي", en: "With additions" },
+  fVar: { ar: "بتباين", en: "With variance" },
+  fManual: { ar: "يدويّ", en: "Manual" },
+  fAuto: { ar: "آليّ", en: "Automatic" },
+  prevT: { ar: "السابق", en: "Previous" },
+  currT: { ar: "الحالي", en: "Current" },
+  countT: { ar: "عدد الموظفين", en: "Employees" },
+  netDiff: { ar: "فرق الصافي", en: "Net change" },
+  totalsT: { ar: "الإجماليّات", en: "Totals" },
+  byDept: { ar: "الصافي بالإدارة", en: "Net by department" },
+  topChanges: { ar: "أكبر التغيّرات", en: "Largest changes" },
+  noPrev: { ar: "لا مسير سابق للمقارنة — تُعرض أرقام هذا المسير وحدها",
+            en: "No previous run — showing this run only" },
   excludeT: { ar: "استبعاد", en: "Exclude" },
   excludeFrom: { ar: "استبعاد من المسير", en: "Exclude from run" },
   scopeRun: { ar: "هذا المسير فقط", en: "This run only" },
@@ -294,7 +313,7 @@ export default function RunDetailPage() {
   const runId = Number(params.id);
 
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [tab, setTab] = useState<Tab>("summary");
+  const [tab, setTab] = useUrlTab<Tab>(TABS, "summary");
   const [deferring, setDeferring] = useState<number | null>(null);
   const [slipInfo, setSlipInfo] = useState<Record<string, unknown> | null>(null);
   const [excl, setExcl] = useState<Record<string, unknown> | null>(null);
@@ -352,6 +371,45 @@ export default function RunDetailPage() {
   }, [runId]);
 
   useEffect(() => { loadTab(tab); }, [tab, loadTab]);
+
+  // ق-230: \u26a0 **البحث والفلترة في كل التبويبات** (بلاغ جواد) — في
+  // المتصفّح على ما جُلب: فالتبويب يجلب صفوفه كاملة، والفلترة فوقها فورية.
+  const [q, setQ] = useState("");
+  const [dept, setDept] = useState("");
+  const [quick, setQuick] = useState("");
+  useEffect(() => { setQ(""); setDept(""); setQuick(""); }, [tab]);
+
+  const qn = q.trim().toLowerCase();
+  const qKey = tab === "adjustments" ? "type" : "status";
+  const filtered = (tabData || []).filter((r) => {
+    if (qn) {
+      const hay = `${r.name ?? ""} ${r.employee_no ?? ""} ${r.reason ?? ""}`
+        .toLowerCase();
+      if (!hay.includes(qn)) return false;
+    }
+    if (dept && String(r.department ?? "") !== dept) return false;
+    if (!quick) return true;
+    if (tab === "payslips") {
+      if (quick === "warn") return Number(r.warnings_count) > 0;
+      if (quick === "ded") return Number(r.deductions) > 0;
+      if (quick === "add") return Number(r.additions) > 0;
+      if (quick === "var") return !!r.has_variance;
+      return true;
+    }
+    if (tab === "excluded") return quick === "manual" ? !!r.manual : !r.manual;
+    return String(r[qKey] ?? "") === quick;
+  });
+  const depts = Array.from(new Set((tabData || [])
+    .map((r) => String(r.department ?? "")).filter(Boolean))).sort();
+  const quickOpts: [string, string][] =
+    tab === "payslips"
+      ? [["warn", L("fWarn")], ["ded", L("fDed")], ["add", L("fAdd")],
+         ["var", L("fVar")]]
+      : tab === "excluded"
+        ? [["manual", L("fManual")], ["auto", L("fAuto")]]
+        : Array.from(new Set((tabData || [])
+            .map((r) => String(r[qKey] ?? "")).filter(Boolean)))
+            .map((v) => [v, v] as [string, string]);
 
   useEffect(() => {
     apiGet<{ templates: { id: number; name_ar: string }[] }>(
@@ -589,14 +647,48 @@ export default function RunDetailPage() {
       ) : tab === "gosi" ? (
         <GosiPanel runId={runId} L={L} />
       ) : (
+        <div className="stack">
+        <div className="card" style={{ padding: 12 }}>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input className="input" placeholder={L("searchPh")} value={q}
+                   onChange={(e) => setQ(e.target.value)}
+                   style={{ flex: "1 1 220px", minWidth: 180 }} />
+            {depts.length > 1 && (
+              <select className="input" value={dept} style={{ width: 180 }}
+                      onChange={(e) => setDept(e.target.value)}>
+                <option value="">{L("allDepts")}</option>
+                {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
+            {quickOpts.length > 0 && (
+              <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                <button className={`btn btn-sm ${!quick ? "btn-primary" : "btn-ghost"}`}
+                        onClick={() => setQuick("")}>{L("fAll")}</button>
+                {quickOpts.map(([v, lab]) => (
+                  <button key={v} onClick={() => setQuick(v)}
+                          className={`btn btn-sm ${quick === v ? "btn-primary" : "btn-ghost"}`}>
+                    {lab}</button>
+                ))}
+              </div>
+            )}
+            <span className="muted num" style={{ fontSize: ".82rem",
+                                                 marginInlineStart: "auto" }}>
+              {filtered.length} / {(tabData || []).length}
+            </span>
+          </div>
+        </div>
         <div className="card" style={{ overflow: "hidden" }}>
           {tabBusy ? (
             <div style={{ padding: 36, textAlign: "center", color: "var(--ink-3)" }}>
               {L("loading")}
             </div>
           ) : (
-            <TabTable rows={tabData} cols={cols[tab]} empty={L("empty")} />
+            <TabTable rows={filtered} cols={cols[tab]} empty={L("empty")} />
           )}
+        </div>
+        {/* ق-230: البحث ثم الجدول ثم الرسوم (قرار جواد) — فمن جاء
+            يبحث عن موظفٍ يجده أولًا، والصورة الكاملة بعده */}
+        {tab === "comparison" && <ComparisonCharts runId={runId} L={L} />}
         </div>
       )}
 
@@ -1037,6 +1129,170 @@ function ChainStrip({ runId, L }: {
                   onClick={() => decide(false)}>{L("chainReject")}</button>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* ══ ق-230: رسوم المقارنة — بلا مكتبة: ألوان النظام والوضع الليلي تلقائيًّا ══ */
+
+function ComparisonCharts({
+  runId, L,
+}: {
+  runId: number;
+  L: (k: string, f?: string) => string;
+}) {
+  type Tot = { count: number; gross: string; deductions: string; net: string };
+  type Sum = {
+    has_previous: boolean; previous_period: string; current_period: string;
+    previous: Tot; current: Tot;
+    by_department: { department: string; previous: string; current: string }[];
+    top_changes: { name: string; employee_no: string; difference: string }[];
+  };
+  const [d, setD] = useState<Sum | null>(null);
+
+  useEffect(() => {
+    apiGet<{ data: Sum }>(`/payroll/runs/${runId}/tab/comparison_summary/`)
+      .then((r) => setD(r.data)).catch(() => setD(null));
+  }, [runId]);
+
+  if (!d) return null;
+
+  const n = (x: string | number) => Number(x) || 0;
+  const fmt = (x: string | number) =>
+    n(x).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const PREV = "var(--copper)";
+  const CURR = "var(--teal)";
+
+  const Bar = ({ v, max, color }: { v: number; max: number; color: string }) => (
+    <div style={{ background: "var(--paper-2)", borderRadius: 4, height: 12,
+                  flex: 1, overflow: "hidden" }}>
+      <div style={{ width: `${max > 0 ? Math.max(v ? 2 : 0, (Math.abs(v) / max) * 100) : 0}%`,
+                    height: "100%", background: color, borderRadius: 4 }} />
+    </div>
+  );
+
+  const metrics: [string, keyof Tot][] = [
+    [L("gross"), "gross"], [L("deductions"), "deductions"], [L("netAmount"), "net"]];
+  const mMax = Math.max(1, ...metrics.flatMap(([, k]) =>
+    [n(d.previous[k]), n(d.current[k])]));
+  const dMax = Math.max(1, ...d.by_department.flatMap((x) =>
+    [n(x.previous), n(x.current)]));
+  const cMax = Math.max(1, ...d.top_changes.map((x) => Math.abs(n(x.difference))));
+  const diff = n(d.current.net) - n(d.previous.net);
+
+  const Legend = () => (
+    <div className="row" style={{ gap: 14, fontSize: ".78rem" }}>
+      <span className="row" style={{ gap: 5 }}>
+        <span style={{ width: 10, height: 10, background: PREV, borderRadius: 2 }} />
+        {L("prevT")} {d.previous_period}</span>
+      <span className="row" style={{ gap: 5 }}>
+        <span style={{ width: 10, height: 10, background: CURR, borderRadius: 2 }} />
+        {L("currT")} {d.current_period}</span>
+    </div>
+  );
+
+  const kpis: [string, string, string?][] = [
+    [L("countT"), `${d.current.count}`, d.has_previous ? `${d.previous.count}` : undefined],
+    [L("netAmount"), fmt(d.current.net), d.has_previous ? fmt(d.previous.net) : undefined],
+    [L("gross"), fmt(d.current.gross), d.has_previous ? fmt(d.previous.gross) : undefined],
+    [L("netDiff"), d.has_previous ? `${diff > 0 ? "+" : ""}${fmt(diff)}` : "—"],
+  ];
+
+  return (
+    <div className="stack">
+      {!d.has_previous && (
+        <div className="card" style={{ padding: "10px 14px",
+                                       background: "var(--copper-soft)" }}>
+          {L("noPrev")} ({d.previous_period})
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 12,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        {kpis.map(([k, v, before], i) => (
+          <div key={i} className="card" style={{ padding: 16 }}>
+            <div className="muted" style={{ fontSize: ".8rem" }}>{k}</div>
+            <div className="num" style={{ fontWeight: 700, fontSize: "1.25rem",
+              color: i === 3 && d.has_previous
+                ? (diff < 0 ? "var(--danger)" : "var(--ok)") : undefined }}>
+              {v}</div>
+            {before !== undefined && (
+              <div className="muted num" style={{ fontSize: ".76rem" }}>
+                {L("prevT")}: {before}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gap: 12,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+        <div className="card" style={{ padding: 16 }}>
+          <div className="spread" style={{ marginBottom: 12 }}>
+            <b>{L("totalsT")}</b><Legend />
+          </div>
+          {metrics.map(([label, k]) => (
+            <div key={k} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: ".84rem", marginBottom: 4 }}>{label}</div>
+              {d.has_previous && (
+                <div className="row" style={{ gap: 8, marginBottom: 3 }}>
+                  <Bar v={n(d.previous[k])} max={mMax} color={PREV} />
+                  <span className="num muted" style={{ width: 100, fontSize: ".76rem" }}>
+                    {fmt(d.previous[k])}</span>
+                </div>
+              )}
+              <div className="row" style={{ gap: 8 }}>
+                <Bar v={n(d.current[k])} max={mMax} color={CURR} />
+                <span className="num" style={{ width: 100, fontSize: ".76rem" }}>
+                  {fmt(d.current[k])}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card" style={{ padding: 16 }}>
+          <div className="spread" style={{ marginBottom: 12 }}>
+            <b>{L("byDept")}</b><Legend />
+          </div>
+          {d.by_department.map((x) => (
+            <div key={x.department} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: ".84rem", marginBottom: 4 }}>{x.department}</div>
+              {d.has_previous && (
+                <div className="row" style={{ gap: 8, marginBottom: 3 }}>
+                  <Bar v={n(x.previous)} max={dMax} color={PREV} />
+                  <span className="num muted" style={{ width: 100, fontSize: ".76rem" }}>
+                    {fmt(x.previous)}</span>
+                </div>
+              )}
+              <div className="row" style={{ gap: 8 }}>
+                <Bar v={n(x.current)} max={dMax} color={CURR} />
+                <span className="num" style={{ width: 100, fontSize: ".76rem" }}>
+                  {fmt(x.current)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {d.has_previous && d.top_changes.length > 0 && (
+          <div className="card" style={{ padding: 16 }}>
+            <b style={{ display: "block", marginBottom: 12 }}>{L("topChanges")}</b>
+            {d.top_changes.map((x, i) => {
+              const v = n(x.difference);
+              return (
+                <div key={i} className="row" style={{ gap: 8, marginBottom: 7 }}>
+                  <span className="truncate" style={{ width: 140, fontSize: ".82rem" }}
+                        title={x.name}>{x.name}</span>
+                  <Bar v={v} max={cMax}
+                       color={v < 0 ? "var(--danger)" : "var(--ok)"} />
+                  <span className="num" style={{ width: 90, fontSize: ".76rem",
+                    color: v < 0 ? "var(--danger)" : "var(--ok)" }}>
+                    {v > 0 ? "+" : ""}{fmt(v)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@
  *
  * ⚠️ **وبندٌ بلا ربطٍ يمنع التصدير** — فالشاشة تُظهر ما ينقص.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -79,7 +80,7 @@ type Opt = { value: string; label: string };
 
 export default function GLPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"accounts" | "templates">("accounts");
+  const [tab, setTab] = useUrlTab<"accounts" | "templates">(["accounts", "templates"], "accounts");
   const [accs, setAccs] = useState<Acc[]>([]);
   const [tpls, setTpls] = useState<Tpl[]>([]);
   const [groupings, setGroupings] = useState<Opt[]>([]);

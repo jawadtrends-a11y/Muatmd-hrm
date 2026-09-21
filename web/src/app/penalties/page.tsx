@@ -5,6 +5,7 @@
  * **السجلّ يعرض المخالف والمسؤول يوقّع بضغطة** — فما لا يُعرض لا
  * يُطبَّق، ولا يفتح أحدٌ شاشةً ليبحث عن مخالف.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -108,7 +109,7 @@ const monthStart = () => {
 
 export default function PenaltiesPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"board" | "register">("board");
+  const [tab, setTab] = useUrlTab<"board" | "register">(["board", "register"], "board");
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState<Row[]>([]);

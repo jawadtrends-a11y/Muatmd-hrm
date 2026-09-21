@@ -5,6 +5,7 @@
  * ⚠️ **والترشيح يُعتمد من الموارد** — فترشيحٌ بلا مراجعة يصرف
  * ميزانيةً بلا ضابط.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -89,7 +90,7 @@ const TONE: Record<string, string> = {
 
 export default function TrainingPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"courses" | "noms" | "reqs">("courses");
+  const [tab, setTab] = useUrlTab<"courses" | "noms" | "reqs">(["courses", "noms", "reqs"], "courses");
   const [courses, setCourses] = useState<Course[]>([]);
   const [noms, setNoms] = useState<Nom[]>([]);
   const [reqs, setReqs] = useState<Req[]>([]);

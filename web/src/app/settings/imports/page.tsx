@@ -8,6 +8,7 @@
  * ⚠️⚠️ **والخطأ في سطرٍ يوقف الملفّ كلّه**: فاستيرادٌ نصفُه
  * ناقصٌ **أسوأ من لا شيء**.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useEffect, useRef, useState } from "react";
 
 import { apiGet, apiUpload, downloadFile, ApiError } from "@/lib/api";
@@ -67,7 +68,7 @@ const PATHS: Record<TabKey, { tpl: string; up: string }> = {
 
 export default function ImportsPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<TabKey>("emp");
+  const [tab, setTab] = useUrlTab<TabKey>(["emp", "bal", "days"], "emp");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [types, setTypes] = useState<LType[]>([]);

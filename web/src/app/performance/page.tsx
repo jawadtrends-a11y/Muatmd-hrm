@@ -4,6 +4,7 @@
  *
  * ⚠️ **والمؤشّر لا يُقاس به قبل اعتماد الموارد**.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, qs, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -116,7 +117,7 @@ const TONE: Record<string, string> = {
 
 export default function PerformancePage() {
   const { L } = useT(T);
-  const [tab, setTab] = useState<"kpis" | "assign" | "cycles">("kpis");
+  const [tab, setTab] = useUrlTab<"kpis" | "assign" | "cycles">(["kpis", "assign", "cycles"], "kpis");
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [assigns, setAssigns] = useState<Assign[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);

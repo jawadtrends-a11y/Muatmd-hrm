@@ -7,6 +7,7 @@
  * المفتاح بلا خطوة ثانية. والموروث من الدور مميّز عن الاستثناء
  * الشخصي، فيعرف ما غيّره بيده.
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -122,7 +123,7 @@ export default function UserPage() {
   const params = useParams();
   const id = params?.id as string;
 
-  const [tab, setTab] = useState<"account" | "permissions">("account");
+  const [tab, setTab] = useUrlTab<"account" | "permissions">(["account", "permissions"], "account");
   /** ق-74: أنواع الطلبات التي يعتمدها — بلا تخصيص يعتمد الكل */
   const [scopes, setScopes] = useState<ScopeType[]>([]);
   const [scopeOn, setScopeOn] = useState<Set<string>>(new Set());

@@ -5,6 +5,7 @@
  *   • أرصدتي — بالتدرّج النظامي للمرضية (م/117)
  *   • تاريخ إجازاتي — السابقة والمستقبلية
  */
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -83,7 +84,7 @@ const TONE: Record<string, string> = {
 
 export default function MyLeavesPage() {
   const { L, lang } = useT(T);
-  const [tab, setTab] = useState<"balances" | "history">("balances");
+  const [tab, setTab] = useUrlTab<"balances" | "history">(["balances", "history"], "balances");
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState(true);
