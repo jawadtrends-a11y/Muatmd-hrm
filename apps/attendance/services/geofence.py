@@ -19,7 +19,16 @@ class MobilePunchDisabled(Exception):
 
 
 class GeofenceError(Exception):
-    """رفض بصمة — رسالته تُعرض للموظف."""
+    """
+    رفض بصمة — رسالته تُعرض للموظف.
+
+    ق-233: \u26a0 **برمزٍ ونصٍّ إنجليزيّ** — فموظف التطبيق الإنجليزيّ كان يقرأ
+    الرفض بالعربية. و`str(e)` يبقى عربيًّا فلا ينكسر ما يعتمد عليه.
+    """
+
+    def __init__(self, message, code="outside_geofence", en=""):
+        super().__init__(message)
+        self.code, self.en = code, en or message
 
 
 def distance_meters(lat1, lon1, lat2, lon2) -> float:
@@ -56,6 +65,13 @@ def sites_for(employment, at_date=None):
     return out
 
 
+def _as_float(v):
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def verify_location(*, employment, latitude, longitude, accuracy_m=None):
     """
     يتحقق أن الموظف داخل أحد مواقعه (ق-62).
@@ -66,7 +82,8 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
     sites = sites_for(employment)
     if not sites:
         raise GeofenceError(
-            "لا موقع عمل مُسند إليك — راجع مدير الموارد البشرية")
+            "لا موقع عمل مُسند إليك — راجع مدير الموارد البشرية",
+            code="no_site", en="No work site is assigned to you — contact HR")
 
     # المواقع التي لا تفرض التحقق تُقبل مباشرةً
     open_sites = [s for s in sites if not s.enforce_geofence]
@@ -76,11 +93,13 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
     geo_sites = [s for s in sites if s.has_coordinates]
     if not geo_sites:
         raise GeofenceError(
-            "مواقعك بلا إحداثيات مضبوطة — راجع مدير الموارد البشرية")
+            "مواقعك بلا إحداثيات مضبوطة — راجع مدير الموارد البشرية",
+            code="no_coordinates", en="Your work sites have no coordinates set — contact HR")
 
     if latitude is None or longitude is None:
         raise GeofenceError(
-            "تعذّر تحديد موقعك — فعّل خدمة الموقع وحاول مجددًا")
+            "تعذّر تحديد موقعك — فعّل خدمة الموقع وحاول مجددًا",
+            code="no_location", en="Could not determine your location — enable location services and try again")
 
     best = None
     best_distance = None
@@ -92,6 +111,17 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
             best, best_distance = site, d
 
         if d <= site.effective_radius:
+            # ق-233: \u26a0\u26a0 **والدقّة كانت تُستقبل ولا تُستعمل** — فموقعٌ
+            # بدقّة ±٨٠٠م يقع مركزه صدفةً داخل النطاق **كان يُقبل**. والحدّ
+            # نصف قطر الموقع نفسه: الجوال لا يُثبت أنه داخله بأسوأ من ذلك.
+            acc = _as_float(accuracy_m)
+            if acc is not None and acc > site.effective_radius:
+                raise GeofenceError(
+                    f"موقعك غير دقيق (±{round(acc)} م) — اخرج لمكانٍ مكشوف "
+                    "وانتظر ثوانيَ ثم حاول مجددًا",
+                    code="low_accuracy",
+                    en=f"Your location is not precise (±{round(acc)} m) — move to "
+                       "an open area, wait a few seconds and try again")
             logger.info("geofence_ok", extra={
                 "site": site.code, "distance": round(d)})
             return site, round(d)
@@ -100,7 +130,10 @@ def verify_location(*, employment, latitude, longitude, accuracy_m=None):
     over = round(best_distance - best.effective_radius)
     raise GeofenceError(
         f"أنت خارج نطاق «{best.name_ar}» بـ{over} مترًا. "
-        "إن كنت في موقعك فعلًا، قدّم طلب تصحيح بصمة من «خدماتي»")
+        "إن كنت في موقعك فعلًا، قدّم طلب تصحيح بصمة من «خدماتي»",
+        code="outside_geofence",
+        en=f"You are {over} m outside «{getattr(best, 'name_en', '') or best.name_ar}». "
+           "If you are on site, submit a punch correction request")
 
 
 
@@ -137,7 +170,8 @@ def _mobile_punch_allowed(employment):
 
 def record_punch(*, employment, latitude=None, longitude=None,
                  method="mobile_gps", device_code="", accuracy_m=None,
-                 punched_at=None, skip_geofence=False, direction=""):
+                 punched_at=None, skip_geofence=False, direction="",
+                 mocked=False):
     """
     يسجّل بصمة بعد التحقق.
 
@@ -152,6 +186,17 @@ def record_punch(*, employment, latitude=None, longitude=None,
             and not _mobile_punch_allowed(employment)):
         raise MobilePunchDisabled(
             "بصمة الجوال معطّلة لك — استخدم جهاز البصمة")
+
+    # ق-233: \u26a0\u26a0 **الموقع المزيَّف يُرفض دائمًا** (قرار جواد) — فتطبيقات
+    # تزييف الـGPS مجّانيّة، وموظفٌ في بيته كان يبصم «في الموقع».
+    # وأندرويد يُعلِم التطبيق بالتزييف؛ والمحاولة تُسجَّل بمن حاول.
+    if method == PunchMethod.MOBILE_GPS and mocked:
+        logger.warning("mock_location_rejected", extra={
+            "employment_id": employment.id, "company_id": employment.company_id})
+        raise GeofenceError(
+            "موقعك مزيَّف — أوقف تطبيق تزييف الموقع وحاول مجددًا",
+            code="mock_location",
+            en="Your location is spoofed — turn off the fake-location app and try again")
 
     site = None
     distance = None

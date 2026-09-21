@@ -1014,13 +1014,15 @@ def my_punch(request):
             longitude=request.data.get("longitude"),
             accuracy_m=request.data.get("accuracy"),
             method=PunchMethod.MOBILE_GPS,
-            direction=request.data.get("direction", ""))
+            direction=request.data.get("direction", ""),
+            mocked=request.data.get("mocked") in (True, "true", 1, "1"))
     except MobilePunchDisabled as e:
         return Response({"detail": str(e), "code": "mobile_punch_off"},
                         status=403)
     except GeofenceError as e:
-        return Response({"detail": str(e), "code": "outside_geofence"},
-                        status=400)
+        from apps.core.i18n import request_locale
+        return Response({"detail": e.en if request_locale(request) == "en" else str(e),
+                         "code": e.code}, status=400)
 
     from django.utils import timezone as tz
     return Response({
