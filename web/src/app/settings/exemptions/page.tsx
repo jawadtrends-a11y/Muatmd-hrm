@@ -5,6 +5,7 @@
  * عرضٌ وإلغاء — والإنشاء يمرّ بطلب معتمد لا بزرّ هنا: فإعفاء
  * موظف من البصمة قرار يوثَّق ويمرّ بمدير إدارته وموظف الموارد.
  */
+import DateField from "@/components/DateField";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
@@ -272,13 +273,11 @@ export default function ExemptionsPage() {
             <div className="row" style={{ gap: 10 }}>
               <div className="field" style={{ flex: 1 }}>
                 <label className="label">{L("fromT")}</label>
-                <input type="date" className="input" value={fFrom}
-                       onChange={(e) => setFFrom(e.target.value)} />
+                <DateField value={fFrom} onChange={setFFrom} />
               </div>
               <div className="field" style={{ flex: 1 }}>
                 <label className="label">{L("toT")}</label>
-                <input type="date" className="input" value={fTo}
-                       onChange={(e) => setFTo(e.target.value)} />
+                <DateField value={fTo} onChange={setFTo} min={fFrom} />
               </div>
             </div>
             <div className="field">

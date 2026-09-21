@@ -889,6 +889,21 @@ def _daily_wage(employment):
     return (st.gross_monthly or Decimal("0")) / Decimal("30")
 
 
+def _final_approver_person_id(req):
+    """
+    ق-229: **مانح الإعفاء = آخر من وافق** على الطلب.
+
+    \u26a0\u26a0 **وكان يُنسب للموظف نفسه** (`employment.person_id`) —
+    فالسجلّ يقول إنه **أعفى نفسه**. خلافُ «الفاعل يُنسب» (ق-80).
+    ⚠️ وبلا سجلّ موافقةٍ يبقى فارغًا: **فالفراغ صادق، والنسبة الخاطئة كاذبة**.
+    """
+    from apps.leaves.models import ApprovalDecision
+    last = (req.approvals.filter(decision=ApprovalDecision.APPROVED)
+            .select_related("approver_employment")
+            .order_by("-decided_at", "-step_order").first())
+    return last.approver_employment.person_id if last else None
+
+
 def _effect_attendance_exemption(req):
     """
     ينشئ سجلّ الإعفاء ساريًا (ق-104).
@@ -914,7 +929,7 @@ def _effect_attendance_exemption(req):
         ex = grant_exemption(
             employment=req.employment, start=start, end=end,
             reason=p.get("reason"), request=req,
-            by_person_id=getattr(req.employment, "person_id", None))
+            by_person_id=_final_approver_person_id(req))
     except ExemptionError as e:
         raise RequestError(str(e))
     return {"exemption_id": ex.id, "start_date": str(start),

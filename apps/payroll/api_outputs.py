@@ -49,7 +49,7 @@ def run_tab(request, run_id, tab):
     if run is None:
         return Response({"detail": "المسير غير موجود"}, status=404)
 
-    handler = rs.TABS.get(tab)
+    handler = rs.TABS.get(tab) or rs.PANELS.get(tab)
     if handler is None:
         return Response({"detail": f"تبويب غير معروف: {tab}",
                          "available": sorted(rs.TABS)}, status=400)

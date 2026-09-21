@@ -457,7 +457,6 @@ TABS = {
     "payslips": payslips_tab,
     "excluded": excluded_tab,
     "adjustments": adjustments_tab,
-    "comparison_summary": comparison_summary,
     "gosi": gosi_tab,
     "comparison": comparison_tab,
 }
@@ -471,3 +470,10 @@ def tab_counts(run):
         "adjustments": len(adjustments_tab(run)),
         "variances": run.variance_count,
     }
+
+
+# ق-230: \u26a0 **لوحاتٌ لا تبويبات** — تُجلب بالمسار نفسه ولا تُعدّ
+# تبويبًا: فالعقد ستة تبويبات يراها المستخدم، والخلاصة لوحُ رسومٍ فوقها.
+PANELS = {
+    "comparison_summary": comparison_summary,
+}
