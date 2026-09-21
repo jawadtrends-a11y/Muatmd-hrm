@@ -907,21 +907,16 @@ def _effect_attendance_exemption(req):
     start = date.fromisoformat(str(p["start_date"]))
     end = (date.fromisoformat(str(p["end_date"]))
            if p.get("end_date") else None)
-    if end and end < start:
-        raise RequestError("تاريخ النهاية قبل تاريخ البداية")
-
-    AttendanceExemption.objects.filter(
-        employment=req.employment, is_active=True
-    ).update(is_active=False, revoked_at=timezone.now())
-
-    ex = AttendanceExemption.objects.create(
-        account_id=req.account_id, company_id=req.company_id,
-        employment=req.employment,
-        start_date=start, end_date=end,
-        reason=str(p.get("reason") or "")[:255],
-        request=req,
-        granted_by_person_id=getattr(req.employment, "person_id", None),
-    )
+    # ق-229: موضعٌ واحدٌ للإنشاء — الطلب والزرّ اليدويّ معًا
+    from apps.attendance.services.exemptions import (
+        ExemptionError, grant_exemption)
+    try:
+        ex = grant_exemption(
+            employment=req.employment, start=start, end=end,
+            reason=p.get("reason"), request=req,
+            by_person_id=getattr(req.employment, "person_id", None))
+    except ExemptionError as e:
+        raise RequestError(str(e))
     return {"exemption_id": ex.id, "start_date": str(start),
             "end_date": str(end) if end else "غير محدّدة"}
 

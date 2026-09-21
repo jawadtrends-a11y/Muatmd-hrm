@@ -18,7 +18,7 @@ const T: Dict = {
     en: "Employees not required to punch — never marked absent",
   },
   howTo: {
-    ar: "يُضاف بطلب «إعفاء من البصمة» يعتمده مدير الإدارة ثم موظف الموارد",
+    ar: "يُضاف بطلب «إعفاء من البصمة» يعتمده مدير الإدارة ثم موظف الموارد — أو مباشرةً من مدير الموارد بزرّ «إعفاء موظف»",
     en: "Added via an exemption request approved by the department head then HR",
   },
   employee: { ar: "الموظف", en: "Employee" },
@@ -42,6 +42,17 @@ const T: Dict = {
   loading: { ar: "جارٍ التحميل…", en: "Loading…" },
   noAccess: { ar: "لا تملك صلاحية عرض الإعفاءات", en: "Not permitted" },
   done: { ar: "أُلغي الإعفاء", en: "Revoked" },
+  addBtn: { ar: "إعفاء موظف", en: "Exempt employee" },
+  addTitle: { ar: "إعفاء موظف من البصمة", en: "Exempt from attendance" },
+  employeeT: { ar: "الموظف", en: "Employee" },
+  pickEmp: { ar: "اختر موظفًا", en: "Select employee" },
+  fromT: { ar: "من", en: "From" },
+  toT: { ar: "إلى (فارغ = غير محدّدة)", en: "To (empty = open)" },
+  reasonReq: { ar: "السبب (إلزامي)", en: "Reason (required)" },
+  manual: { ar: "يدويّ", en: "Manual" },
+  granted: { ar: "أُضيف الإعفاء", en: "Exemption added" },
+  cancel: { ar: "إلغاء", en: "Cancel" },
+  save: { ar: "حفظ", en: "Save" },
 };
 
 type Row = {
@@ -54,6 +65,7 @@ type Row = {
   reason: string;
   is_active: boolean;
   request_no: string;
+  source?: string;
 };
 
 export default function ExemptionsPage() {
@@ -65,6 +77,38 @@ export default function ExemptionsPage() {
   const [revokeId, setRevokeId] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  // ق-229: الإعفاء اليدويّ من مدير الموارد
+  const [adding, setAdding] = useState(false);
+  const [emps, setEmps] = useState<{ id: number; name_ar: string;
+                                     employee_no: string }[]>([]);
+  const [fEmp, setFEmp] = useState("");
+  const [fFrom, setFFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [fTo, setFTo] = useState("");
+  const [fReason, setFReason] = useState("");
+  const [fErr, setFErr] = useState("");
+  const [fBusy, setFBusy] = useState(false);
+
+  const openAdd = async () => {
+    setFEmp(""); setFTo(""); setFReason(""); setFErr("");
+    setFFrom(new Date().toISOString().slice(0, 10));
+    setAdding(true);
+    if (emps.length === 0) {
+      try { setEmps(await apiGet("/employees/?all=1")); }
+      catch { /* القائمة فارغة لا مكسورة */ }
+    }
+  };
+
+  const saveAdd = async () => {
+    setFBusy(true); setFErr("");
+    try {
+      await apiPost("/attendance/exemptions/", {
+        employment_id: Number(fEmp), start_date: fFrom,
+        end_date: fTo || null, reason: fReason.trim() });
+      setAdding(false); setMsg(L("granted")); load(onlyActive);
+    } catch (e) {
+      setFErr(e instanceof ApiError ? e.message : String(e));
+    } finally { setFBusy(false); }
+  };
 
   const canView = perms.includes("attendance.view");
   const canEdit = perms.includes("attendance.edit");
@@ -137,6 +181,12 @@ export default function ExemptionsPage() {
                 onClick={() => setOnlyActive(true)}>{L("onlyActive")}</button>
         <button className={`btn btn-sm ${!onlyActive ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setOnlyActive(false)}>{L("all")}</button>
+        {canEdit && (
+          <button className="btn btn-sm btn-primary"
+                  style={{ marginInlineStart: "auto" }} onClick={openAdd}>
+            + {L("addBtn")}
+          </button>
+        )}
       </div>
 
       <div className="card" style={{ overflow: "hidden" }}>
@@ -167,7 +217,8 @@ export default function ExemptionsPage() {
                       <div style={{ fontWeight: 500 }}>{x.name}</div>
                       <div className="muted num" style={{ fontSize: ".76rem" }}>
                         {x.employee_no}
-                        {x.request_no && ` · ${x.request_no}`}
+                        {x.request_no ? ` · ${x.request_no}`
+                          : x.source === "manual" ? ` · ${L("manual")}` : ""}
                       </div>
                     </td>
                     <td className="truncate muted">{x.department || "—"}</td>
@@ -200,6 +251,55 @@ export default function ExemptionsPage() {
           </div>
         )}
       </div>
+
+      {adding && (
+        <div onClick={() => setAdding(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,.4)",
+          display: "grid", placeItems: "center", zIndex: 60, padding: 16 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()}
+               style={{ padding: 22, width: "100%", maxWidth: 480 }}>
+            <h3 style={{ margin: "0 0 14px" }}>{L("addTitle")}</h3>
+            <div className="field">
+              <label className="label">{L("employeeT")}</label>
+              <select className="input" value={fEmp}
+                      onChange={(e) => setFEmp(e.target.value)}>
+                <option value="">{L("pickEmp")}</option>
+                {emps.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.employee_no} — {x.name_ar}</option>))}
+              </select>
+            </div>
+            <div className="row" style={{ gap: 10 }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label className="label">{L("fromT")}</label>
+                <input type="date" className="input" value={fFrom}
+                       onChange={(e) => setFFrom(e.target.value)} />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label className="label">{L("toT")}</label>
+                <input type="date" className="input" value={fTo}
+                       onChange={(e) => setFTo(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label className="label">{L("reasonReq")}</label>
+              <textarea className="input" rows={3} value={fReason}
+                        onChange={(e) => setFReason(e.target.value)} />
+            </div>
+            {fErr && (
+              <div style={{ background: "var(--danger-soft)", color: "var(--danger)",
+                            padding: "8px 12px", borderRadius: "var(--radius-sm)",
+                            margin: "8px 0", fontSize: ".86rem" }}>{fErr}</div>
+            )}
+            <div className="row" style={{ gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+              <button className="btn" onClick={() => setAdding(false)}>{L("cancel")}</button>
+              <button className="btn btn-primary" onClick={saveAdd}
+                      disabled={fBusy || !fEmp || !fFrom || !fReason.trim()}>
+                {L("save")}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={revokeId !== null}

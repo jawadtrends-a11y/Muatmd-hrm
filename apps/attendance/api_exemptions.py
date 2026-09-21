@@ -27,14 +27,20 @@ def _serialize(x, locale="ar"):
         "reason": x.reason,
         "is_active": x.is_active,
         "request_no": x.request.request_no if x.request_id else "",
+        # ق-229: والمصدر ظاهر — بطلبٍ معتمد أو يدويًّا
+        "source": "request" if x.request_id else "manual",
+        "granted_by_person_id": x.granted_by_person_id,
     }
 
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def exemptions(request):
-    """قائمة المعفيّين — السارية أولًا."""
+    """قائمة المعفيّين — السارية أولًا. وPOST إعفاءٌ يدويّ (ق-229)."""
     from apps.core.i18n import request_locale
+
+    if request.method == "POST":
+        return _grant_manual(request)
 
     Gate.require(request.user, "attendance.view")
     qs = Gate.filter_queryset(
@@ -76,3 +82,46 @@ def revoke_exemption(request, exemption_id):
     x.revoked_at = timezone.now()
     x.save(update_fields=["is_active", "revoked_at", "updated_at"])
     return Response({"revoked": True, "id": x.id})
+
+
+def _grant_manual(request):
+    """
+    إعفاءٌ يدويّ من مدير الموارد (ق-229).
+
+    \u26a0\u26a0 **والتوثيق باقٍ — روح ق-104**: السبب إلزاميّ والفاعل
+    يُنسب. فالطريق صار اثنين، **والقرار ما زال يوثَّق**.
+    """
+    from datetime import date
+
+    from apps.attendance.services.exemptions import (
+        ExemptionError, grant_exemption)
+    from apps.core.i18n import request_locale
+    from apps.employees.models import Employment
+
+    Gate.require(request.user, "attendance.edit")
+    d = request.data
+    emp = Gate.filter_queryset(
+        request.user, "attendance.edit", Employment.objects.all()
+    ).filter(id=d.get("employment_id")).first()
+    if emp is None:
+        return Response({"detail": "الموظف غير موجود"},
+                        status=status.HTTP_404_NOT_FOUND)
+    reason = str(d.get("reason") or "").strip()
+    if not reason:
+        return Response({"detail": "سبب الإعفاء مطلوب"}, status=400)
+    try:
+        start = date.fromisoformat(str(d.get("start_date")))
+        end = (date.fromisoformat(str(d["end_date"]))
+               if d.get("end_date") else None)
+    except (TypeError, ValueError):
+        return Response({"detail": "التاريخ غير صحيح"}, status=400)
+
+    me = getattr(request.user, "person", None)
+    try:
+        ex = grant_exemption(employment=emp, start=start, end=end,
+                             reason=reason,
+                             by_person_id=me.id if me else None)
+    except ExemptionError as e:
+        return Response({"detail": str(e)}, status=400)
+    return Response(_serialize(ex, request_locale(request)),
+                    status=status.HTTP_201_CREATED)
