@@ -782,3 +782,9 @@ from apps.payroll.models_approval import (  # noqa: E402,F401
 from apps.payroll.models_gl import (  # noqa: E402,F401
     GLAccountMap, GLGrouping, GLTemplate,
 )
+
+
+# الاستبعاد اليدوي من المسير (ق-228)
+from apps.payroll.models_exclusion import (  # noqa: E402,F401
+    ExclusionScope, PayrollExclusion,
+)

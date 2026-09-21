@@ -44,6 +44,28 @@ const T: Dict = {
   excluded: { ar: "المستبعدون", en: "Excluded" },
   adjustments: { ar: "الحسومات والإضافات", en: "Adjustments" },
   gosi: { ar: "التأمينات", en: "GOSI" },
+  netSalary: { ar: "صافي الراتب", en: "Net salary" },
+  additions: { ar: "الإضافي", en: "Additions" },
+  netAmount: { ar: "صافي المبلغ", en: "Net amount" },
+  days: { ar: "الأيام", en: "Days" },
+  fullMonth: { ar: "شهر كامل", en: "Full month" },
+  opDetails: { ar: "تفاصيل العمليات", en: "Details" },
+  details: { ar: "تفاصيل", en: "Details" },
+  warningsT: { ar: "تنبيهات", en: "Warnings" },
+  noDed: { ar: "لا حسومات", en: "No deductions" },
+  close: { ar: "إغلاق", en: "Close" },
+  excludeT: { ar: "استبعاد", en: "Exclude" },
+  excludeFrom: { ar: "استبعاد من المسير", en: "Exclude from run" },
+  scopeRun: { ar: "هذا المسير فقط", en: "This run only" },
+  scopeUntil: { ar: "حتى يُعاد يدويًّا", en: "Until restored" },
+  reasonReq: { ar: "السبب (إلزامي)", en: "Reason (required)" },
+  restore: { ar: "إعادة", en: "Restore" },
+  byT: { ar: "بواسطة", en: "By" },
+  scopeT: { ar: "النطاق", en: "Scope" },
+  confirmT: { ar: "تأكيد", en: "Confirm" },
+  salaryLines: { ar: "بنود الراتب", en: "Salary items" },
+  noAdd: { ar: "لا إضافي", en: "No additions" },
+  summaryT: { ar: "الخلاصة", en: "Summary" },
   comparison: { ar: "المقارنة", en: "Comparison" },
   // الملخص
   netTotal: { ar: "صافي الأجور", en: "Net total" },
@@ -274,6 +296,12 @@ export default function RunDetailPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tab, setTab] = useState<Tab>("summary");
   const [deferring, setDeferring] = useState<number | null>(null);
+  const [slipInfo, setSlipInfo] = useState<Record<string, unknown> | null>(null);
+  const [excl, setExcl] = useState<Record<string, unknown> | null>(null);
+  const [exReason, setExReason] = useState("");
+  const [exScope, setExScope] = useState<"run" | "until_revoked">("run");
+  const [exErr, setExErr] = useState("");
+  const [exBusy, setExBusy] = useState(false);
   // ق-152: قوالب القيد — وإخفاق الجلب قائمةٌ فارغة لا شاشة مكسورة
   // ق-177: ⚠️⚠️ **والتنزيل يعرض سببه** (بلاغ جواد): فالمنع
   // صحيحٌ — **لكنّ صمتَه خطأ**: «لا يعمل» أسوأ من «كل الموظفين
@@ -307,12 +335,15 @@ export default function RunDetailPage() {
   }, [runId]);
 
   const loadTab = useCallback(async (t: Tab) => {
-    if (t === "summary") return;
+    // ق-227: ⚠⚠ **والتأمينات لها لوحتها** (`GosiPanel`): فجلبُها
+    // هنا ثانيةً **يضع كائنًا في `tabData`** — والتبويب التالي يُصيَّر
+    // به قبل جلبه، و`.map` على كائن **يُسقط الصفحة كاملة**.
+    if (t === "summary" || t === "gosi") return;
     setTabBusy(true);
     try {
       const res = await apiGet<{ data: Record<string, unknown>[] }>(
         `/payroll/runs/${runId}/tab/${t}/`);
-      setTabData(res.data || []);
+      setTabData(Array.isArray(res.data) ? res.data : []);
     } catch {
       setTabData([]);
     } finally {
@@ -331,36 +362,95 @@ export default function RunDetailPage() {
 
   const cols: Record<Tab, Col[]> = {
     summary: [],
+    // ق-227: \u26a0\u26a0 **والكشف كان رقمًا بلا تفصيل** (بلاغ جواد):
+    // فالحسومات بلا بنودها، والتنبيهات **في القسيمة ولا تُرى**،
+    // والتأجيل ينادي `r.id` **والصفّ لا يحمل إلا `payslip_id`**.
     payslips: [
-      { key: "employee_no", label: "#", numeric: true, width: 90 },
-      { key: "name", label: L("employee"), width: 210 },
-      { key: "basic", label: L("basic"), numeric: true, width: 120 },
-      { key: "gross", label: L("gross"), numeric: true, width: 130 },
-      { key: "deductions", label: L("deductions"), numeric: true, width: 130 },
-      { key: "net", label: L("net"), numeric: true, width: 130 },
-      { key: "in_wps", label: L("inWps"), width: 110,
+      { key: "name", label: L("employee"), width: 220,
         render: (r) => (
-          <span className={r.in_wps ? "badge badge-ok" : "badge"}>
-            {r.in_wps ? L("yes") : L("no")}
-          </span>
+          <div>
+            <div style={{ fontWeight: 600 }}>{String(r.name)}</div>
+            <div className="muted num" style={{ fontSize: ".78rem" }}>
+              {String(r.employee_no)}
+            </div>
+            {/* ق-227: والتنبيه بنصٍّ صريح تحت الاسم — فرقمٌ في عمودٍ
+                بلا عنوان **يُقرأ من العمود المجاور** (بلاغ جواد) */}
+            {Number(r.warnings_count) > 0 && (
+              <button className="btn btn-ghost btn-sm"
+                      onClick={() => setSlipInfo(r)}
+                      style={{ padding: 0, height: "auto", fontSize: ".74rem",
+                               color: "var(--copper)" }}>
+                ⚠ {L("warningsT")} ({String(r.warnings_count)})
+              </button>
+            )}
+          </div>
         ) },
-      { key: "has_variance", label: L("variance"), width: 90,
-        render: (r) => r.has_variance
-          ? <span className="badge badge-warn">!</span> : "—" },
-      // ق-136: تأجيل بندٍ من القسيمة — والراتب لا يُؤجَّل
-      { key: "defer", label: "", width: 90,
+      { key: "gross", label: L("gross"), numeric: true, width: 120 },
+      { key: "net_salary", label: L("netSalary"), numeric: true, width: 120 },
+      { key: "additions", label: L("additions"), numeric: true, width: 110,
         render: (r) => (
-          <button className="btn btn-sm btn-ghost"
-                  onClick={() => setDeferring(Number(r.id))}>
-            {L("defer")}
-          </button>
+          <span style={{ color: "var(--ok)" }}>{String(r.additions)}</span>
+        ) },
+      { key: "deductions", label: L("deductions"), numeric: true, width: 130,
+        render: (r) => {
+          const n = ((r.deduction_lines as unknown[]) || []).length;
+          return (
+            <div>
+              <div style={{ color: "var(--danger)" }}>{String(r.deductions)}</div>
+              {n > 0 && (
+                <button className="btn btn-ghost btn-sm"
+                        style={{ fontSize: ".72rem", padding: 0, height: "auto" }}
+                        onClick={() => setSlipInfo(r)}>
+                  {L("opDetails")}
+                </button>
+              )}
+            </div>
+          );
+        } },
+      { key: "net", label: L("netAmount"), numeric: true, width: 130,
+        render: (r) => <b className="num">{String(r.net)}</b> },
+      { key: "worked_days", label: L("days"), numeric: true, width: 90,
+        render: (r) => Number(r.worked_days) > 0
+          ? <span className="num">{String(r.worked_days)}</span>
+          : <span className="muted" style={{ fontSize: ".8rem" }}>{L("fullMonth")}</span> },
+      { key: "actions", label: "", width: 170,
+        render: (r) => (
+          <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+            <button className="btn btn-sm" onClick={() => setSlipInfo(r)}>
+              {L("details")}
+            </button>
+            <button className="btn btn-sm btn-ghost"
+                    onClick={() => setDeferring(Number(r.payslip_id))}>
+              {L("defer")}
+            </button>
+            <button className="btn btn-sm btn-ghost"
+                    style={{ color: "var(--danger)" }}
+                    onClick={() => { setExcl(r); setExReason("");
+                                     setExScope("run"); setExErr(""); }}>
+              {L("excludeT")}
+            </button>
+          </div>
         ) },
     ],
+    // ق-228: والمستبعَد يدويًّا يُعرض بسببه ونطاقه وفاعله — ويُعاد
     excluded: [
       { key: "employee_no", label: "#", numeric: true, width: 90 },
-      { key: "name", label: L("employee"), width: 220 },
-      { key: "status", label: L("type"), width: 140 },
-      { key: "reason", label: L("reason"), width: 380 },
+      { key: "name", label: L("employee"), width: 200 },
+      { key: "reason", label: L("reason"), width: 240 },
+      { key: "scope", label: L("scopeT"), width: 140,
+        render: (r) => r.scope ? String(r.scope) : "—" },
+      { key: "by", label: L("byT"), width: 110,
+        render: (r) => r.by ? String(r.by) : "—" },
+      { key: "restore", label: "", width: 100,
+        render: (r) => r.manual ? (
+          <button className="btn btn-sm" onClick={async () => {
+            try {
+              await apiPost(`/payroll/exclusions/${r.exclusion_id}/revoke/`,
+                            { run_id: runId });
+              window.location.reload();
+            } catch (e) { alert((e as ApiError).message); }
+          }}>{L("restore")}</button>
+        ) : null },
     ],
     adjustments: [
       { key: "employee_no", label: "#", numeric: true, width: 90 },
@@ -512,6 +602,155 @@ export default function RunDetailPage() {
 
       {/* ق-140: سلسلة الاعتماد — من ينتظر يعرف عند من وقف */}
       <ChainStrip runId={runId} L={L} />
+
+      {slipInfo && (() => {
+        type Ln = { name: string; amount: string; explanation: string;
+                    is_addition?: boolean };
+        const earn = (slipInfo.earning_lines as Ln[]) || [];
+        const fixed = earn.filter((x) => !x.is_addition);
+        const adds = earn.filter((x) => x.is_addition);
+        const deds = (slipInfo.deduction_lines as Ln[]) || [];
+        const warns = (slipInfo.warnings as string[]) || [];
+        const Section = ({ title, items, empty, color }: {
+          title: string; items: Ln[]; empty: string; color?: string }) => (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: ".95rem" }}>
+              {title}</div>
+            {items.length === 0 ? (
+              <div className="muted" style={{ fontSize: ".86rem" }}>{empty}</div>
+            ) : items.map((d, k) => (
+              <div key={k} className="spread" style={{
+                padding: "7px 0", borderBottom: "1px solid var(--line)" }}>
+                <div>
+                  <div>{d.name}</div>
+                  {d.explanation && (
+                    <div className="muted" style={{ fontSize: ".76rem" }}>
+                      {d.explanation}</div>)}
+                </div>
+                <span className="num" style={{ color }}>{d.amount}</span>
+              </div>
+            ))}
+          </div>
+        );
+        const Row = ({ k, v, strong }: { k: string; v: unknown;
+                                        strong?: boolean }) => (
+          <div className="spread" style={{ padding: "5px 0",
+                                           fontWeight: strong ? 700 : 400 }}>
+            <span>{k}</span><span className="num">{String(v)}</span>
+          </div>
+        );
+        return (
+          <div onClick={() => setSlipInfo(null)} style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,.4)",
+            display: "grid", placeItems: "center", zIndex: 60, padding: 16 }}>
+            <div className="card" onClick={(e) => e.stopPropagation()}
+                 style={{ padding: 24, width: "100%", maxWidth: 680,
+                          maxHeight: "88vh", overflowY: "auto" }}>
+              <div className="spread" style={{ marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>
+                    {String(slipInfo.name)}</div>
+                  <div className="muted num" style={{ fontSize: ".82rem" }}>
+                    {String(slipInfo.employee_no)}
+                    {slipInfo.department ? ` · ${String(slipInfo.department)}` : ""}
+                  </div>
+                </div>
+                <b className="num" style={{ fontSize: "1.2rem" }}>
+                  {String(slipInfo.net)}</b>
+              </div>
+
+              <Section title={L("salaryLines")} items={fixed} empty="—" />
+              <Section title={L("additions")} items={adds} empty={L("noAdd")}
+                       color="var(--ok)" />
+              <Section title={L("deductions")} items={deds} empty={L("noDed")}
+                       color="var(--danger)" />
+
+              <div style={{ background: "var(--paper-2)", borderRadius:
+                            "var(--radius-sm)", padding: "10px 14px",
+                            marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                  {L("summaryT")}</div>
+                <Row k={L("gross")} v={slipInfo.gross} />
+                <Row k={L("netSalary")} v={slipInfo.net_salary} />
+                <Row k={L("additions")} v={slipInfo.additions} />
+                <Row k={L("deductions")} v={slipInfo.deductions} />
+                <Row k={L("netAmount")} v={slipInfo.net} strong />
+              </div>
+
+              {warns.length > 0 && (
+                <div style={{ background: "var(--copper-soft)", borderRadius:
+                              "var(--radius-sm)", padding: "10px 14px",
+                              marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    {L("warningsT")}</div>
+                  <ul style={{ margin: 0, paddingInlineStart: 18,
+                               fontSize: ".86rem" }}>
+                    {warns.map((w, k) => <li key={k}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <button className="btn" onClick={() => setSlipInfo(null)}
+                      style={{ width: "100%" }}>{L("close")}</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {excl && (
+        <div onClick={() => setExcl(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,.4)",
+          display: "grid", placeItems: "center", zIndex: 60, padding: 16 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()}
+               style={{ padding: 22, width: "100%", maxWidth: 480 }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>
+              {L("excludeFrom")}</div>
+            <div className="muted" style={{ marginBottom: 14, fontSize: ".86rem" }}>
+              {String(excl.name)} · {String(excl.employee_no)}</div>
+
+            <div className="stack" style={{ gap: 8, marginBottom: 14 }}>
+              {(["run", "until_revoked"] as const).map((v) => (
+                <label key={v} className="row" style={{ gap: 8, cursor: "pointer" }}>
+                  <input type="radio" checked={exScope === v}
+                         onChange={() => setExScope(v)} />
+                  {v === "run" ? L("scopeRun") : L("scopeUntil")}
+                </label>
+              ))}
+            </div>
+
+            <label className="label">{L("reasonReq")}</label>
+            <textarea className="input" rows={3} value={exReason}
+                      onChange={(e) => setExReason(e.target.value)}
+                      style={{ width: "100%", marginBottom: 12 }} />
+
+            {exErr && (
+              <div style={{ background: "var(--danger-soft)", color: "var(--danger)",
+                            padding: "8px 12px", borderRadius: "var(--radius-sm)",
+                            marginBottom: 12, fontSize: ".86rem" }}>{exErr}</div>
+            )}
+
+            <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setExcl(null)}>
+                {L("close")}</button>
+              <button className="btn btn-primary"
+                      disabled={exBusy || !exReason.trim()}
+                      style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                      onClick={async () => {
+                        setExBusy(true); setExErr("");
+                        try {
+                          await apiPost(`/payroll/runs/${runId}/exclude/`, {
+                            employment_id: excl.employment_id,
+                            scope: exScope, reason: exReason.trim() });
+                          window.location.reload();
+                        } catch (e) {
+                          setExErr((e as ApiError).message);
+                        } finally { setExBusy(false); }
+                      }}>
+                {L("confirmT")}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deferring !== null && (
         <DeferDialog payslipId={deferring} L={L}

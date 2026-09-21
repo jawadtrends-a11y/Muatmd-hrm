@@ -94,31 +94,73 @@ def summary_tab(run):
 
 def payslips_tab(run, search=None):
     """قائمة القسائم — صف لكل موظف."""
-    slips = run.payslips.select_related(
-        "employment__person", "employment__department").order_by(
-        "employment__employee_no")
-    if search:
-        slips = slips.filter(
-            employment__person__family_name_ar__icontains=search)
+    from django.db.models import Q
+    from apps.employees.models import SalaryLine
 
-    return [
-        {
+    slips = run.payslips.select_related(
+        "employment__person", "employment__department").prefetch_related(
+        "lines").order_by("employment__employee_no")
+    if search:
+        # ق-227: \u26a0 **والبحث في كل ما يُعرف به الموظف** — لا في اسم
+        # العائلة وحده: فهي علّة ق-167 نفسها في شاشةٍ أخرى.
+        q = search.strip()
+        slips = slips.filter(
+            Q(employment__employee_no__icontains=q)
+            | Q(employment__person__first_name_ar__icontains=q)
+            | Q(employment__person__father_name_ar__icontains=q)
+            | Q(employment__person__family_name_ar__icontains=q)
+            | Q(employment__person__full_name_en__icontains=q)
+            | Q(employment__person__id_number__icontains=q))
+
+    # ق-227: \u26a0\u26a0 **والإضافيّ = استحقاقٌ خارج هيكل الراتب** — فلا
+    # تُصنَّف الرموز باليد: **الهيكل نفسه يُعرّف الثابت**. واستعلامٌ
+    # واحدٌ للشركة لا واحدٌ لكل موظف — فألفُ موظفٍ لا يعني ألفَ استعلام.
+    fixed_codes = set(SalaryLine.objects.filter(
+        structure__company_id=run.company_id).values_list(
+        "component__code", flat=True).distinct())
+
+    rows = []
+    for s in slips:
+        lines = list(s.lines.all())
+        additions = sum((l.amount for l in lines
+                         if l.line_type == "earning"
+                         and l.component_code not in fixed_codes),
+                        Decimal("0"))
+        gosi = s.gosi_employee_share or Decimal("0")
+        rows.append({
             "payslip_id": s.id,
+            "employment_id": s.employment_id,
             "employee_no": s.employment.employee_no,
             "name": s.employment.person.display_name,
             "department": (s.employment.department.name_ar
                            if s.employment.department else ""),
             "basic": _fmt(s.basic_salary),
             "gross": _fmt(s.gross_earnings),
+            # صافي الراتب: الإجمالي بعد حصة الموظف في التأمينات
+            "net_salary": _fmt((s.gross_earnings or Decimal("0")) - gosi),
+            "additions": _fmt(additions),
             "deductions": _fmt(s.total_deductions),
+            # ق-227: وبنود الراتب نفسها — **فالتفصيل لا يكتمل بالحسومات
+            # وحدها**: الثابت من الهيكل، والإضافي ما سواه.
+            "earning_lines": [
+                {"name": l.name_ar, "amount": _fmt(l.amount),
+                 "explanation": l.explanation,
+                 "is_addition": l.component_code not in fixed_codes}
+                for l in lines if l.line_type == "earning"],
+            # \u26a0 تفاصيل الحسومات — فرقمٌ بلا تفصيل لا يُراجَع
+            "deduction_lines": [
+                {"name": l.name_ar, "amount": _fmt(l.amount),
+                 "explanation": l.explanation}
+                for l in lines if l.line_type == "deduction"],
             "net": _fmt(s.net_pay),
-            "gosi_employee": _fmt(s.gosi_employee_share),
+            "gosi_employee": _fmt(gosi),
+            "worked_days": str(s.worked_days or 0),
             "in_wps": s.include_in_wps,
             "has_variance": s.has_variance,
             "warnings_count": len(s.warnings or []),
-        }
-        for s in slips
-    ]
+            "warnings": list(s.warnings or [])[:10],
+        })
+    return rows
 
 
 # ══════════ 3. الموظفون المستبعدون ══════════
@@ -131,12 +173,41 @@ def excluded_tab(run):
     """
     from apps.employees.models import Employment, EmploymentStatus
 
+    from django.db.models import Q as _Q
+    from apps.employees.models import Person
+    from apps.payroll.models_exclusion import ExclusionScope, PayrollExclusion
+
     included = set(run.payslips.values_list("employment_id", flat=True))
     rows = []
+
+    # ق-228: \u26a0\u26a0 **والمستبعَد يدويًّا يُعرض بسببه وفاعله** — وإلا
+    # وقع في آخر فرعٍ **فعُرض بسببٍ كاذب: «لا هيكل راتب ساري»**.
+    manual = {}
+    for x in PayrollExclusion.objects.filter(
+            company=run.company, revoked_at__isnull=True).filter(
+            _Q(scope=ExclusionScope.RUN, run=run)
+            | _Q(scope=ExclusionScope.UNTIL_REVOKED)):
+        manual[x.employment_id] = x
+    by_names = dict(Person.objects.filter(
+        id__in=[m.excluded_by_person_id for m in manual.values()
+                if m.excluded_by_person_id]).values_list("id", "first_name_ar"))
 
     for e in Employment.objects.filter(
             company=run.company).select_related("person"):
         if e.id in included:
+            continue
+        if e.id in manual:
+            m = manual[e.id]
+            rows.append({
+                "employee_no": e.employee_no,
+                "name": e.person.display_name,
+                "status": e.get_status_display(),
+                "reason": m.reason,
+                "manual": True,
+                "exclusion_id": m.id,
+                "scope": m.get_scope_display(),
+                "by": by_names.get(m.excluded_by_person_id, ""),
+            })
             continue
         if e.status == EmploymentStatus.TERMINATED and e.termination_date:
             if (e.termination_date.year, e.termination_date.month) != (

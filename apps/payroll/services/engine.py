@@ -96,6 +96,17 @@ def _eligible_employments(run):
                          termination_date__gte=start,
                          termination_date__lte=end)
 
+    # ق-228: \u26a0\u26a0 **والمستبعَد يدويًّا لا يدخل** — بنطاقيه:
+    # هذا المسير وحده، أو حتى يُعاد. **والمُعاد يعود** (revoked_at).
+    from django.db.models import Q as _Q
+    from apps.payroll.models_exclusion import ExclusionScope, PayrollExclusion
+    excluded_ids = PayrollExclusion.objects.filter(
+        company=run.company, revoked_at__isnull=True).filter(
+        _Q(scope=ExclusionScope.RUN, run=run)
+        | _Q(scope=ExclusionScope.UNTIL_REVOKED)).values_list(
+        "employment_id", flat=True)
+    qs = qs.exclude(id__in=list(excluded_ids))
+
     settings_obj = PayrollSettings.objects.filter(company=run.company).first()
     include_terminated = (settings_obj.terminated_pay_in_regular_run
                           if settings_obj else True)
@@ -342,7 +353,10 @@ def calculate_slip(*, run, employment, settings_obj):
         trace["gosi"] = {**g.breakdown, "borne_by_company": borne,
                          "employee_deduction": str(alloc.employee_deduction)}
     elif scheme is None and employment.is_gosi_registered:
-        warnings.append("مسجّل في التأمينات بلا نظام تأميني محدد")
+        # ق-227: \u26a0 **والتأمينات اختيارية** (قرار جواد) — فهذا
+        # التنبيه كان في **كل قسيمة**، **وتنبيهٌ في كل مكانٍ لا يُنبّه
+        # أحدًا**: يُغرق الحقيقيّ. فيُحفظ في سجلّ الاحتساب لا يُعرض.
+        trace["gosi_note"] = "مسجّل في التأمينات بلا نظام تأميني محدد"
 
     # ── 6. خصم الغياب والإجازة بلا أجر (ق-32: منفصلان) ──
     if absence_days > 0:

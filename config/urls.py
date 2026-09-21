@@ -7,6 +7,7 @@ from apps.core.api import access as access_api
 from apps.organization import api as org_api
 from apps.core.api import billing as billing_api
 from apps.payroll import api as payroll_api
+from apps.payroll import api_exclusion as exclusion_api
 from apps.payroll import api_allowances as allowances_api
 from apps.payroll import api_recurring as recurring_api
 from apps.payroll import api_expenses as expenses_api
@@ -409,6 +410,11 @@ urlpatterns = [
     path("api/payroll/retro/<int:adjustment_id>/decide/", payroll_api.retro_decide, name="retro-decide"),
     path("api/payroll/runs/", payroll_api.payroll_runs, name="payroll-runs"),
     path("api/payroll/runs/<int:run_id>/calculate/", payroll_api.run_calculate, name="run-calculate"),
+    # ق-228: الاستبعاد اليدوي — والإعادة
+    path("api/payroll/runs/<int:run_id>/exclude/",
+         exclusion_api.run_exclude, name="run-exclude"),
+    path("api/payroll/exclusions/<int:exclusion_id>/revoke/",
+         exclusion_api.exclusion_revoke, name="exclusion-revoke"),
     path("api/payroll/runs/<int:run_id>/submit/", payroll_api.run_submit, name="run-submit"),
     path("api/payroll/runs/<int:run_id>/approve/", payroll_api.run_approve, name="run-approve"),
     # الحضور الجماعي
