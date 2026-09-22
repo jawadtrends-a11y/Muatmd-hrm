@@ -311,6 +311,13 @@ def leave_requests(request):
     )
 
     emp_id = request.data.get("employment_id")
+    # ق-236: \u26a0\u26a0 **رقم ارتباط الموظف نفسه ليس نيابة** — وكان وجود الرقم وحده
+    # يطلب «إدارة الطلبات»، **فيُرفض طلب موظفٍ لنفسه** إن أرسلت واجهته رقمه (التطبيق).
+    if emp_id:
+        from apps.employees.models import Employment as _Emp
+        _me = getattr(request.user, "person", None)
+        if _me and _Emp.objects.filter(id=emp_id, person_id=_me.id).exists():
+            emp_id = None
     if emp_id:
         Gate.require(request.user, "leaves.manage")
         from apps.employees.models import Employment
@@ -627,6 +634,13 @@ def submit_request(request):
         return Response({"detail": "لا شركة نشطة"}, status=400)
 
     emp_id = request.data.get("employment_id")
+    # ق-236: \u26a0\u26a0 **رقم ارتباط الموظف نفسه ليس نيابة** — وكان وجود الرقم وحده
+    # يطلب «إدارة الطلبات»، **فيُرفض طلب موظفٍ لنفسه** إن أرسلت واجهته رقمه (التطبيق).
+    if emp_id:
+        from apps.employees.models import Employment as _Emp
+        _me = getattr(request.user, "person", None)
+        if _me and _Emp.objects.filter(id=emp_id, person_id=_me.id).exists():
+            emp_id = None
     if emp_id:
         Gate.require(request.user, "requests.manage")
         from apps.employees.models import Employment
