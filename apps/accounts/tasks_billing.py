@@ -4,6 +4,7 @@
 التجديد التلقائي خيار يفعّله العميل، وعند الفشل ثلاث محاولات
 (الاستحقاق، +12 ساعة، +24 ساعة) ثم إشعار صريح.
 """
+from apps.core.tenancy.platform import across_accounts, all_account_ids
 import logging
 from datetime import date, timedelta
 
@@ -25,8 +26,8 @@ def evaluate_subscriptions():
     from apps.core.tenancy.context import account_scope
 
     changed = 0
-    for sub_id, acc_id in AccountSubscription.objects.values_list(
-            "id", "account_id"):
+    for sub_id, acc_id in across_accounts(   # ق-234
+            lambda: AccountSubscription.objects.all(), "id", "account_id"):
         with account_scope(acc_id):
             sub = AccountSubscription.objects.filter(id=sub_id).first()
             if sub is None:
@@ -56,7 +57,7 @@ def send_renewal_alerts():
 
     sent = 0
     qs = AccountSubscription.objects.filter(state=SubscriptionState.ACTIVE)
-    for sub_id, acc_id in qs.values_list("id", "account_id"):
+    for sub_id, acc_id in across_accounts(lambda: qs.all(), "id", "account_id"):  # ق-234
         with account_scope(acc_id):
             sub = AccountSubscription.objects.filter(id=sub_id).first()
             if sub is None or not renewal_alert_due(sub):
@@ -96,7 +97,7 @@ def run_auto_renewals():
         next_billing_date__lte=today, saved_card__isnull=False)
 
     results = {"attempted": 0, "paid": 0, "failed": 0}
-    for sub_id, acc_id in due.values_list("id", "account_id"):
+    for sub_id, acc_id in across_accounts(lambda: due.all(), "id", "account_id"):  # ق-234
         with account_scope(acc_id):
             sub = AccountSubscription.objects.filter(id=sub_id).first()
             if sub is None or sub.saved_card is None:
@@ -189,7 +190,7 @@ def snapshot_headcount():
 
     today = date.today()
     count = 0
-    for acc_id in Account.objects.values_list("id", flat=True):
+    for acc_id in all_account_ids():   # ق-234: لا Account.objects بلا سياق
         with account_scope(acc_id):
             for comp_id in Company.objects.filter(
                     account_id=acc_id).values_list("id", flat=True):

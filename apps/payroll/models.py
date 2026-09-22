@@ -152,6 +152,13 @@ class PayrollSettings(CompanyScopedModel):
     merge_supplementary_into_regular = models.BooleanField(
         _("دمج مسير الإضافي مع العام"), default=True,
         help_text=_("الافتراض: مسير واحد. الفصل خيار الشركة"))
+    # ق-235: ⚠️⚠️ **مُفعَّلٌ افتراضيًّا** (قرار جواد): غائبٌ فور الدوام بلا بصمة ·
+    # والمسير يحتسب الحضور قبل الرواتب. **وموقوفٌ للشركة التي لا تبصم** —
+    # وإلا صار موظفوها «غائبين» كل يوم **فتُصفَّر رواتبهم**.
+    auto_attendance = models.BooleanField(
+        _("احتساب الحضور تلقائيًّا"), default=True,
+        help_text=_("موقوف: الحضور يُدخَل يدويًّا — للشركات التي لا تستعمل البصمة"))
+
     terminated_pay_in_regular_run = models.BooleanField(
         _("راتب أيام المنتهية خدمته في المسير العام"), default=True,
         help_text=_("إن أُطفئ، يُدمج راتب الأيام في مسير المستحقات"))

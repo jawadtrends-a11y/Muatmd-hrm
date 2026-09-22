@@ -171,6 +171,23 @@ def calculate_slip(*, run, employment, settings_obj):
     start, end = run_range(run)
     _cut = cutoff_day(run.company_id)
 
+    # ق-234: \u26a0\u26a0 **والحضور كان لا يُحتسب إلا بزرٍّ يدويّ** — فإن لم يضغطه
+    # أحد، **لا غياب يُخصم والمسير يصرف الشهر كاملًا للجميع**. فالمسير يحتسب
+    # أيام موظفه أولًا — ⚠️ **حتى أمس**: فلا غياب على أيامٍ لم تأتِ — ثم يُعيد
+    # بناء الخلاصة فلا تبقى قديمة. **والمعدَّل يدويًّا محفوظ** (force=False).
+    from apps.attendance.services.processing import (
+        build_monthly_summary, process_employment_days)
+    # ⚠️ **وللشركة التي أوقفته** يُقرأ ما أدخلته الموارد يدويًّا — كما كان
+    if settings_obj.auto_attendance:
+        _last = min(end, timezone.localdate() - timedelta(days=1))
+        if start <= _last:
+            process_employment_days(employment=employment, start_date=start,
+                                    end_date=_last)
+        if not _cut:
+            summary = build_monthly_summary(
+                employment=employment, year=run.period_year,
+                month=run.period_month, payroll_settings=settings_obj)
+
     if _cut:
         days = AttendanceDay.objects.filter(
             employment=employment,

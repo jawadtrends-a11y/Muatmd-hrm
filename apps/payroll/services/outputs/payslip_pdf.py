@@ -207,9 +207,13 @@ def build_payslip_pdf(data):
     # ── الحضور ──
     if att:
         story.append(Spacer(1, 10))
+        # ق-235: \u26a0\u26a0 **والحضور قائمةٌ لا قاموس** (payslip_doc يبنيه
+        # [{label, value}]) — فكانت القسيمة **تنهار لكلّ موظفٍ له حضورٌ محتسب**،
+        # ونامت العلّة لأن أحدًا لم يكن له حضورٌ محتسب قبل الاحتساب التلقائيّ.
+        rows = ([(a.get("label"), a.get("value")) for a in att]
+                if isinstance(att, list) else list(att.items()))
         story.append(_kv_table(
-            [(k, v) for k, v in att.items() if v not in (None, "")],
-            st))
+            [(k, v) for k, v in rows if v not in (None, "")], st))
 
     # ── الملاحظة ──
     if data.get("note"):

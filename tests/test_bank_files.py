@@ -40,6 +40,9 @@ def env(db):
     r = provision_account(slug="bnk-test", display_name_ar="حساب",
                           company_name_ar="شركة", is_sandbox=True)
     with account_scope(r.account_id):
+        # ق-235: الحضور هنا يُدخَل يدويًّا — فأرقامها المرجعية بلا غياب
+        from apps.payroll.models import PayrollSettings as _PS
+        _PS.objects.filter(company_id=r.company_id).update(auto_attendance=False)
         acc = Account.objects.get(id=r.account_id)
         comp = Company.objects.get(id=r.company_id)
         comps = {c.code: c for c in PayComponent.objects.filter(company=comp)}

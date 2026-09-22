@@ -88,6 +88,9 @@ def provision_account(
         comp = Company.objects.get(id=company_id)
         # مكوّنات الأجر وإعدادات الرواتب — الشركة تعدّلها بحرية (ق-9)
         provision_default_components(comp)
+        # ق-235: الفترة الافتراضية — وبدونها لا غياب ولا تأخير يُحسب لأحد
+        from apps.attendance.services.defaults import ensure_default_shift
+        ensure_default_shift(comp)
         PayrollSettings.objects.get_or_create(
             company=comp, defaults={"account_id": account_id})
         # أنواع الإجازات وسلاسل الاعتماد — تعدّلها الشركة بحرية (ق-32)

@@ -26,6 +26,17 @@ from apps.payroll.services.gosi_seed import sync_gosi_rates
 IBAN = "SA0380000000608010167519"
 
 
+def _manual_attendance(comp):
+    """
+    ق-235: \u26a0 **هذه الحرّاس تُدخل الحضور يدويًّا** (خلاصةٌ جاهزة) — أي شركةٌ
+    أوقفت الاحتساب التلقائيّ. فتُعلنه صراحةً، **وتبقى أرقامها المتوقَّعة كما هي**.
+    """
+    s = PayrollSettings.objects.get(company=comp)
+    s.auto_attendance = False
+    s.save(update_fields=["auto_attendance"])
+    return s
+
+
 @pytest.fixture
 def env(db):
     sync_gosi_rates()
@@ -63,7 +74,7 @@ def env(db):
 
         yield {"account_id": r.account_id, "acc": acc, "comp": comp,
                "comps": comps, "saudi": e1, "expat": e2, "person": p1,
-               "settings": PayrollSettings.objects.get(company=comp)}
+               "settings": _manual_attendance(comp)}
 
 
 def _run(env, year=2026, month=3):

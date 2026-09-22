@@ -52,7 +52,29 @@ def record_punch(*, employment, punched_at, source, device_id="",
         latitude=latitude, longitude=longitude,
         raw_payload=raw_payload or {},
     )
+    process_punch_day(punch)
     return punch, True
+
+
+def process_punch_day(punch):
+    """
+    ق-235: \u26a0\u26a0 **يُحتسب يوم البصمة فورًا** (قرار جواد: «الحضور يُحدَّث مباشرةً»).
+
+    وكان لا يُحتسب إلا بزرٍّ يدويّ — فلا يرى الموظف بصمته في جدوله، **ولا غياب
+    يُعرف**. \u26a0 **وفي نقطة حفظٍ مستقلّة**: فشل الاحتساب يُلغي نفسه وحده —
+    **والبصمة تبقى محفوظة** ولو كانت داخل معاملةٍ أكبر. والخطأ يُسجَّل لا يُبتلع.
+    """
+    import logging
+    from django.db import transaction
+    day = timezone.localtime(punch.punched_at).date()
+    try:
+        with transaction.atomic():
+            process_employment_days(employment=punch.employment,
+                                    start_date=day, end_date=day)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("muatmd.attendance").exception(
+            "punch_day_processing_failed",
+            extra={"employment_id": punch.employment_id, "day": str(day)})
 
 
 def _holidays_in(company, start, end):

@@ -1,6 +1,7 @@
 """
 مهام الطلبات الدورية.
 """
+from apps.core.tenancy.platform import across_accounts, all_account_ids
 from celery import shared_task
 
 
@@ -17,7 +18,7 @@ def escalate_overdue_task():
     from apps.leaves.services.approvals import escalate_overdue
 
     total = 0
-    for acc_id in Account.objects.values_list("id", flat=True):
+    for acc_id in all_account_ids():   # ق-234: لا Account.objects بلا سياق
         with account_scope(acc_id):
             total += escalate_overdue().get("escalated", 0)
     return {"escalated": total}

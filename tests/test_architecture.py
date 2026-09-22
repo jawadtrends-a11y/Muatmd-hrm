@@ -142,6 +142,10 @@ def test_all_celery_tasks_are_account_scoped():
                 body = ast.get_source_segment(src, node) or ""
                 if "account_scope(" in body:
                     continue      # معزولة بفتح النطاق صراحةً
+                # ق-234: **ونمطٌ ثالث**: تسرد الحسابات من app_platform_accounts
+                # **وتوزّع مهمّةً AccountTask لكلّ حساب** — فلا تلمس بيانات عميلٍ بنفسها
+                if "all_account_ids(" in body and "apply_async" in body:
+                    continue
                 offenders.append(f"{path.name}: {node.name}")
     assert not offenders, (
         "مهام Celery بلا AccountTask — تعمل بلا عزل:\n" + "\n".join(offenders)

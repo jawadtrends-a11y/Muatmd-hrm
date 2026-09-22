@@ -19,6 +19,22 @@ app.conf.task_default_queue = "maintenance"
 
 # ══ المهام المجدولة (ق-48، ق-49) ══
 app.conf.beat_schedule = {
+    # ق-234: احتساب أمس لكلّ موظف — **فيُنشئ الغياب لمن لم يبصم**.
+    # ⚠️ والتاريخ يُحسب داخل المهمّة بتوقيت الرياض — فأيًّا كان توقيت Celery
+    # تعمل بعد منتصف ليل الرياض.
+    # ق-235: «غائب» فور بداية الدوام بلا بصمة — كلّ ١٥ دقيقة (قرار جواد).
+    # والفحص يختار من بدأ دوامه ولا يومَ له — فهو خفيفٌ ولو كبر العملاء.
+    "attendance-absence-sweep": {
+        "task": "apps.attendance.tasks.absence_sweep",
+        "schedule": crontab(minute="*/15"),
+        "options": {"queue": "attendance"},
+    },
+    # والليليّ مراجعةٌ أخيرة لأمس: من بصم دخولًا ونسي الخروج يُحسم يومه.
+    "attendance-nightly-process": {
+        "task": "apps.attendance.tasks.nightly_process",
+        "schedule": crontab(hour=0, minute=30),
+        "options": {"queue": "attendance"},
+    },
     # تصعيد الطلبات المتأخرة كل ساعة (ق-87).
     #
     # المهل بالساعات: فحصها كل دقيقة إسراف، وكل يوم تأخير.

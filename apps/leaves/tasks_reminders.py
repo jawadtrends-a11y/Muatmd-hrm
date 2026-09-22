@@ -11,6 +11,7 @@
 وتعمل كل ربع ساعة: نافذة الساعتين تُفحص بدقّة تكفي، وفحصها كل
 دقيقة إسراف.
 """
+from apps.core.tenancy.platform import across_accounts, all_account_ids
 import logging
 from datetime import datetime, time, timedelta
 
@@ -77,7 +78,7 @@ def remind_pending_approvals():
     now_t = now.time()
     sent = 0
 
-    for acc_id in Account.objects.values_list("id", flat=True):
+    for acc_id in all_account_ids():   # ق-234: لا Account.objects بلا سياق
         with account_scope(acc_id):
             for emp in Employment.objects.filter(
                     status=EmploymentStatus.ACTIVE).select_related(

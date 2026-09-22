@@ -43,6 +43,8 @@ def env(db):
             salary_lines=[(basic, Decimal("12000"))])
 
         st = PayrollSettings.objects.filter(company=comp).first()
+        st.auto_attendance = False   # ق-235: الحضور هنا يُدخَل يدويًّا
+        st.save(update_fields=["auto_attendance"])
 
         yield {"account_id": r.account_id, "comp": comp, "emp": emp,
                "settings": st}

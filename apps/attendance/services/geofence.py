@@ -244,4 +244,7 @@ def record_punch(*, employment, latitude=None, longitude=None,
         "employment_id": employment.id, "method": method,
         "site": site.code if site else ""})
 
+    # ق-235: ويومها يُحتسب فورًا — فيظهر في جدول الموظف قبل أن يغلق الشاشة
+    from apps.attendance.services.processing import process_punch_day
+    process_punch_day(punch)
     return punch, site, distance

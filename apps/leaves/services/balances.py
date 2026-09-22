@@ -254,6 +254,12 @@ def consume(employment, leave_type, days, year=None):
         bal.save()
         return bal
 
+    # ق-235: \u26a0 **والمستحقّ يُحسب حتى اليوم قبل الحكم** — فلا يرى الموظف ٢١
+    # يومًا ثم يُرفض بـ«رصيدك صفر» لأن الحساب لم يُجرَ منذ التعيين.
+    if yr == date.today().year:
+        accrue(employment, leave_type)
+        bal.refresh_from_db()
+
     if amount > bal.available:
         raise LeaveError(
             f"الرصيد المتاح {r2(bal.available)} يومًا "
@@ -296,6 +302,17 @@ def carry_forward(employment, leave_type, from_year):
 def balance_summary(employment, year=None):
     """ملخص أرصدة الموظف — لشاشة «رصيدي»."""
     yr = year or date.today().year
+    # ق-235: \u26a0\u26a0 **والرصيد كان لا يُحسب إلا بزرٍّ يدويّ** — فموظفٌ منذ ٢٠٢٣
+    # **بلا سجلّ رصيد**، ولا تظهر له «السنوية» أصلًا. فيُحسب هنا لحظيًّا — لأنواع
+    # الرصيد وحدها (المناسبات لا رصيد لها) — و`accrue` تُعيد الحساب من الصفر فتكراره آمن.
+    if yr == date.today().year:
+        from apps.leaves.models import LeaveType
+        qs = LeaveType.objects.filter(accrual_method__in=[
+            AccrualMethod.DAILY, AccrualMethod.MONTHLY, AccrualMethod.ANNUAL])
+        if any(f.name == "company" for f in LeaveType._meta.fields):
+            qs = qs.filter(company_id=employment.company_id)
+        for lt in qs:
+            accrue(employment, lt)
     return [
         {
             "leave_type": b.leave_type.name_ar,
