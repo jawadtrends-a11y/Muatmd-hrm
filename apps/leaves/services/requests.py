@@ -713,6 +713,22 @@ def _pre_checks(employment, request_type, payload):
         if target in ("out", "both") and not payload.get("last_out"):
             raise RequestError("حدّد وقت الانصراف")
 
+        # ق-237: \u26a0\u26a0 **وكان يُقبل انصرافٌ قبل الحضور** (١٤:٤٧ ← ٠٥:٤٧) — فيُعتمد
+        # فيُحتسب يومٌ مقلوب. ⚠️ **إلا لفترةٍ تعبر منتصف الليل** — فهناك هو الصحيح.
+        if target == "both":
+            def _mins(t):
+                h, m = str(t).split(":")[:2]
+                return int(h) * 60 + int(m)
+            try:
+                fi, lo = _mins(payload["first_in"]), _mins(payload["last_out"])
+            except (ValueError, KeyError):
+                raise RequestError("صيغة الوقت غير صحيحة — اكتبه ساعةً:دقيقة")
+            from apps.attendance.services.rules import effective_shift
+            sh = effective_shift(employment, work_date)
+            if lo <= fi and not (sh and sh.crosses_midnight):
+                raise RequestError(
+                    "وقت الانصراف قبل وقت الحضور — راجع الوقتين")
+
     elif request_type == RequestType.OVERTIME:
         # ق-59: من وقت إلى وقت — تُحتسب بالدقيقة
         try:
