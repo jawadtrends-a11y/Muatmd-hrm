@@ -238,7 +238,7 @@ def calculate_slip(*, run, employment, settings_obj):
             "code": comp.code, "name_ar": comp.name_ar,
             "name_en": comp.name_en, "name_ur": comp.name_ur,
             "amount": amount,
-            "explanation": "مبلغ ثابت شهري", "order": comp.display_order,
+            "explanation": "مبلغ ثابت شهري", "explanation_en": "Fixed monthly amount", "order": comp.display_order,
         })
         gross += amount
         if comp.code == "BASIC":
@@ -358,6 +358,7 @@ def calculate_slip(*, run, employment, settings_obj):
             entry = {"code": line["code"], "name_ar": line["name_ar"],
                      "amount": line["amount"],
                      "explanation": f"{scheme} — أجر خاضع {r2(declared)}",
+                     "explanation_en": f"{scheme} — contributory wage {r2(declared)}",
                      "order": 100}
             if line["type"] == "deduction":
                 deductions.append(entry)
@@ -384,6 +385,8 @@ def calculate_slip(*, run, employment, settings_obj):
             "code": "ABSENCE", "name_ar": "خصم غياب", "amount": amt,
             "explanation": (f"{r2(absence_days)} يوم × "
                             f"{r2(daily_rate(absence_base, days_per_month))} ريال"),
+            "explanation_en": (f"{r2(absence_days)} days × "
+                               f"{r2(daily_rate(absence_base, days_per_month))} SAR"),
             "order": 110})
 
     if unpaid_leave > 0:
@@ -396,6 +399,9 @@ def calculate_slip(*, run, employment, settings_obj):
             "explanation": (f"{r2(unpaid_leave)} يوم × "
                             f"{r2(daily_rate(absence_base, days_per_month))} ريال "
                             "— إجازة مأذونة لا غياب"),
+            "explanation_en": (f"{r2(unpaid_leave)} days × "
+                               f"{r2(daily_rate(absence_base, days_per_month))} SAR "
+                               "— approved leave, not absence"),
             "order": 120})
 
     # ── 7. أقساط السلف (ق-41) ──
@@ -418,6 +424,10 @@ def calculate_slip(*, run, employment, settings_obj):
                     "explanation": (
                         f"المبلغ {r2(adv.amount)} — المسدَّد "
                         f"{r2(adv.repaid_amount)} — المتبقي بعد هذا القسط "
+                        f"{r2(adv.outstanding - due)}"),
+                    "explanation_en": (
+                        f"Amount {r2(adv.amount)} — repaid "
+                        f"{r2(adv.repaid_amount)} — remaining after this installment "
                         f"{r2(adv.outstanding - due)}"),
                     "order": 130})
                 advance_deductions.append((adv, due))
@@ -453,6 +463,9 @@ def calculate_slip(*, run, employment, settings_obj):
             "explanation": (
                 (rec.reason or "بند مكرّر")
                 + (f" — يتبقّى {left - 1} قسطًا" if left else "")),
+            "explanation_en": (
+                (rec.reason or "Recurring item")
+                + (f" — {left - 1} installments left" if left else "")),
             "order": 140,
         }
         if rec.kind == RecurringKind.DEDUCTION:
@@ -493,6 +506,8 @@ def calculate_slip(*, run, employment, settings_obj):
             "amount": abs(act_total),
             "explanation": (f"{len(acts)} نشاطًا مراجَعًا — "
                             f"{'مكافأة' if act_total > 0 else 'حسم'}"),
+            "explanation_en": (f"{len(acts)} reviewed activities — "
+                               f"{'bonus' if act_total > 0 else 'deduction'}"),
             "order": 145,
         }
         if act_total > 0:
@@ -548,6 +563,7 @@ def calculate_slip(*, run, employment, settings_obj):
                        f"{d.from_year}-{d.from_month:02d})",
             "name_en": "", "amount": d.amount,
             "explanation": d.reason or "بند مؤجَّل",
+            "explanation_en": d.reason or "Deferred item",
             "order": 150,
         }
         if d.line_type == PayslipLineType.DEDUCTION:
@@ -570,7 +586,7 @@ def calculate_slip(*, run, employment, settings_obj):
             deductions.append({
                 "code": comp.code, "name_ar": comp.name_ar,
                 "name_en": comp.name_en, "name_ur": comp.name_ur,
-                "amount": amount, "explanation": "استقطاع ثابت",
+                "amount": amount, "explanation": "استقطاع ثابت", "explanation_en": "Fixed deduction",
                 "order": comp.display_order})
 
     # ── 7ب. التسويات الرجعية (ق-69) ──
@@ -590,6 +606,9 @@ def calculate_slip(*, run, employment, settings_obj):
             "explanation": (adj.reason_ar
                             or f"فرق عن {adj.period_year}/"
                                f"{adj.period_month:02d}"),
+            "explanation_en": (getattr(adj, "reason_en", "") or adj.reason_ar
+                               or f"Difference for {adj.period_year}/"
+                                  f"{adj.period_month:02d}"),
             "order": 90,
         }
         if adj.amount >= ZERO:
@@ -660,6 +679,7 @@ def calculate_slip(*, run, employment, settings_obj):
                 name_ur=e.get("name_ur", ""),
                 line_type=ltype,
                 amount=r2(e["amount"]), explanation=e["explanation"],
+                explanation_en=e.get("explanation_en", ""),
                 display_order=e.get("order", 50)))
     PayslipLine.objects.bulk_create(bulk)
 

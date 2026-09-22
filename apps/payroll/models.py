@@ -615,6 +615,9 @@ class PayslipLine(models.Model):
     explanation = models.CharField(
         _("شرح الاحتساب"), max_length=300, blank=True,
         help_text=_("مثال: 3 أيام × 400 ريال"))
+    # ق-238: الشرح بالإنجليزية — كالاسم (name_en). يُكتب لحظة الاحتساب
+    explanation_en = models.CharField(
+        _("شرح الاحتساب بالإنجليزية"), max_length=300, blank=True, default="")
     display_order = models.IntegerField(_("الترتيب"), default=0)
 
     class Meta:

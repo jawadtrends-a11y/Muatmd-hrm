@@ -183,7 +183,8 @@ def build_payslip_document(slip, locale=None, settings_obj=None):
         elif loc == "ur" and line.name_ur:
             name = line.name_ur
         entry = {"name": name, "amount": _fmt(line.amount),
-                 "explanation": line.explanation}
+                 "explanation": ((line.explanation_en or line.explanation)
+                                 if loc == "en" else line.explanation)}
         if line.line_type == "earning":
             doc.earnings.append(entry)
         elif line.line_type == "deduction":
