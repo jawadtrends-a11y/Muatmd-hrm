@@ -283,7 +283,11 @@ def payslip_detail(request, payslip_id):
                 {"detail": "القسيمة لا تُعرض قبل اعتماد المسير",
                  "code": "run_not_approved"}, status=409)
 
-    locale = request.GET.get("locale")
+    # ق-238: \u26a0 **والقسيمة كانت تتجاهل لغة الواجهة** — `locale` في الرابط وحده، وإلا
+    # لغة ملف الموظف: فالتطبيق بالإنجليزية يعرضها عربية. ولغة الطلب (الترويسة) تُحترم
+    # الآن — والويب والجوال يضبطانها بلغة واجهتهما. **والـPDF يمرّ من هنا فيطابقها.**
+    from apps.core.i18n import request_locale
+    locale = request.GET.get("locale") or request_locale(request)
     doc = build_payslip_document(slip, locale=locale)
     return Response(to_dict(doc))
 
