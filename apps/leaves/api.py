@@ -778,13 +778,15 @@ def my_leaves_detail(request):
     coded = {b["code"] for b in balances}
     event_types = [
         {"code": t.code, "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""),
-         "days_per_event": str(t.days_per_event),
+         "days_per_event": str(t.days_per_event) if t.days_per_event else "",
          "is_paid": t.is_paid,
          "requires_attachment": t.requires_attachment,
          "once_per_service": t.once_per_service}
         for t in LeaveType.objects.filter(
             company_id=emp.company_id, is_active=True)
-        if t.code not in coded and t.days_per_event
+        # ق-240: ⚠️ **وكلّ نوعٍ ليس في الأرصدة يُعرض** — وكان الشرط يطلب
+        # `days_per_event`، **فـ«إجازة بلا أجر» (بلا حدّ) تختفي ولا تُطلب إطلاقًا**.
+        if t.code not in coded
     ]
 
     # ── التاريخ: السابقة والمستقبلية ──
