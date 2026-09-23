@@ -347,6 +347,45 @@ def _template_json(t):
     }
 
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_payslips(request, employment_id):
+    """
+    قسائم موظفٍ بعينه — لملفّه في التطبيق والويب.
+
+    ⚠️ **بنفس بوّابات ق-٢٣٩**: قسيمته هو + ما تُتيحه صلاحيّته — فالمشرف يرى
+    قسائم مرؤوسيه **وقسيمته معها**، ولا يُحرم أحدٌ من قسيمته بسبب صلاحيّة.
+    ⚠️ **والمعتمَد والمصروف وحدهما** — كالقائمة الذاتية: فلا يُعرض رقمٌ قد يتغيّر.
+    """
+    company_id = _company_id(request)
+    person = getattr(request.user, "person", None)
+    qs = Payslip.objects.filter(company_id=company_id,
+                                run__status__in=["approved", "paid"])
+    own = qs.filter(employment__person=person) if person else qs.none()
+    if Gate.check(request.user, "payslips.view_all").allowed:
+        scoped = Gate.filter_queryset(request.user, "payslips.view_all", qs) | own
+    elif Gate.check(request.user, "payslips.view_team").allowed:
+        scoped = Gate.filter_queryset(request.user, "payslips.view_team", qs) | own
+    else:
+        Gate.require(request.user, "payslips.view_own")
+        scoped = own
+
+    slips = (scoped.filter(employment_id=employment_id)
+             .select_related("run", "company")
+             .order_by("-run__period_year", "-run__period_month")[:24])
+    return Response([
+        {
+            "payslip_id": s.id,
+            "period": f"{s.run.period_year}-{s.run.period_month:02d}",
+            "net_pay": str(s.net_pay),
+            "payment_date": (str(s.run.payment_date)
+                             if s.run.payment_date else None),
+            "company": s.company.legal_name_ar,
+        }
+        for s in slips
+    ])
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def bank_template_create(request):

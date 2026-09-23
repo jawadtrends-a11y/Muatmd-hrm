@@ -234,6 +234,8 @@ urlpatterns = [
          name="payslip-pdf"),
     path("api/payslips/<int:payslip_id>/", outputs_api.payslip_detail, name="payslip-detail"),
     path("api/me/payslips/", outputs_api.my_payslips, name="my-payslips"),
+    path("api/employees/<int:employment_id>/payslips/", outputs_api.employee_payslips,
+         name="employee-payslips"),
     # ق-134: كتالوج المخصّصات المصروفة
     path("api/allowances/", allowances_api.allowances, name="allowances"),
     path("api/allowances/<int:allowance_id>/",
