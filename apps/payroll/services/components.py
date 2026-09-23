@@ -78,6 +78,35 @@ DEFAULT_COMPONENTS = [
         "is_wps_subject": True,
         "is_system": True, "order": 40,
     },
+    # ق-٢٤٤: ⚠️⚠️ **رموزٌ يولّدها المحرّك بلا مكوّن** — فحين تظهر **لا تستطيع
+    # الشركة ربطها في قالب القيد، فيبقى القيد المحاسبيّ عالقًا بلا حلّ**.
+    {
+        "code": "UNPAID_LEAVE", "name_ar": "خصم إجازة بلا أجر",
+        "name_en": "Unpaid Leave Deduction", "name_ur": "بلا معاوضہ رخصت کٹوتی",
+        "type": ComponentType.DEDUCTION,
+        "is_gosi_subject": False, "is_eosb_subject": False,
+        "is_overtime_base": False, "is_wps_subject": False,
+        "is_system": True, "order": 120,
+    },
+    {
+        # ⚠️ **استحقاقٌ لا حسم**: ردُّ ما تجاوز سقف الحسم النظاميّ (لا يُحسم من
+        # الأجر أكثر من نصفه) — فهو يُعاد للموظف.
+        "code": "DED_CAP", "name_ar": "ردّ ما تجاوز سقف الحسم",
+        "name_en": "Deduction Cap Refund", "name_ur": "کٹوتی کی حد کی واپسی",
+        "type": ComponentType.EARNING,
+        "is_gosi_subject": False, "is_eosb_subject": False,
+        "is_overtime_base": False, "is_wps_subject": True,
+        "is_system": True, "order": 45,
+    },
+    {
+        # ⚠️ **يحمل الإشارتين**: مكافأة الأنشطة أو حسمها — والمحرّك يضعه في جانبه
+        "code": "ACTIVITY", "name_ar": "الأنشطة المراجَعة",
+        "name_en": "Reviewed Activities", "name_ur": "جائزہ شدہ سرگرمیاں",
+        "type": ComponentType.DEDUCTION,
+        "is_gosi_subject": False, "is_eosb_subject": False,
+        "is_overtime_base": False, "is_wps_subject": False,
+        "is_system": True, "order": 145,
+    },
 ]
 
 
