@@ -590,6 +590,16 @@ def create_request(*, employment, request_type, payload, note="",
                 code=payload.get("leave_type_code", "")).first()
             if lt is None:
                 raise RequestError("نوع إجازة غير معروف")
+            # ق-240: \u26a0\u26a0 **والإلزام كان وهميًّا**: `requires_attachment` مضبوطٌ
+            # في الأنواع **ولا يُفحص عند الإرسال** — فإجازةٌ مرضيّة بلا تقرير تُقبل
+            # وتُعتمد. (نمطٌ رأيناه: حقلٌ يُستقبل ولا يُستعمل.)
+            # ⚠️ والمرفق يصل **معاملًا مستقلًّا أو في المحتوى** — فيُقرأ الاثنان،
+            # وإلا رُفض من أرسله بالطريقة الأصليّة (علّةٌ صنعها الفحص نفسه)
+            if lt.requires_attachment and not (
+                    str(attachment_url or "").strip()
+                    or str(payload.get("attachment_url") or "").strip()):
+                raise RequestError(
+                    f"«{lt.name_ar}» تتطلّب إرفاق مستند — أرفقه ثم أرسل الطلب")
             calc = compute_days_between(
                 company=employment.company, leave_type=lt,
                 start_date=start,

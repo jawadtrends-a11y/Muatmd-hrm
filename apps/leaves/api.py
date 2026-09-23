@@ -656,6 +656,11 @@ def submit_request(request):
 
     rtype = request.data.get("request_type", "")
     payload = request.data.get("payload") or {}
+    # ق-240: ⚠️⚠️ **والمرفق كان يضيع في الطريق**: `attachment_url` معاملٌ مستقلّ في
+    # `create_request` **خارج payload** — والمسار يقرأ payload وحده فيبقى فارغًا.
+    # **فالإجازات الست إلزاميّة المرفق لا يمكن طلبها إطلاقًا** (ولا من الويب).
+    attachment_url = str(request.data.get("attachment_url")
+                         or payload.get("attachment_url") or "").strip()
 
     # LeaveError يُلتقط مع RequestError: التحقق النظامي للإجازات
     # (المرفق الإلزامي، الرصيد، الشرائح) يرفعه — وخروجه خامًا يعني
@@ -679,7 +684,7 @@ def submit_request(request):
         res = create_request(
             employment=emp, request_type=rtype, payload=payload,
             note=request.data.get("note", ""),
-            attachment_url=request.data.get("attachment_url", ""))
+            attachment_url=attachment_url)   # ق-240: من الأعلى أو من payload
     except (RequestError, LeaveError) as e:
         return Response({"detail": str(e), "code": "invalid_request"},
                         status=400)
