@@ -253,8 +253,14 @@ def employee_detail(request, employment_id):
     """
     Gate.require(request.user, "employees.view")
     company_id = _company_id(request)
+    # ق-٢٤٢: ⚠️⚠️ **وملفّه هو كان يختفي عنه** — كق-٢٣٩: من له view_team يُصفَّى
+    # بفريقه **وهو ليس فيه**، فلا يفتح ملفّ نفسه. **وكلّما كبرت صلاحيّته ضاق ما
+    # يراه لنفسه.** فما يراه = **ملفّه + ما تُتيحه صلاحيّته**.
+    _me = getattr(request.user, "person", None)
     qs = Gate.filter_queryset(request.user, "employees.view",
                               Employment.objects.all())
+    if _me is not None:
+        qs = qs | Employment.objects.filter(person=_me)
     emp = qs.filter(id=employment_id,
                     company_id=company_id).select_related("person").first()
     if emp is None:
