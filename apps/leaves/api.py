@@ -763,6 +763,8 @@ def my_leaves_detail(request):
             "code": lt.code,
             "name_ar": lt.name_ar, "name_en": getattr(lt, "name_en", ""),
             "is_paid": lt.is_paid,
+            # ق-240: ليُنبّه التطبيق **قبل** الإرسال لا بعده
+            "requires_attachment": lt.requires_attachment,
             "days_per_year": str(lt.days_per_year),
             "opening": str(b.opening_balance),
             "accrued": str(b.accrued),
@@ -778,6 +780,7 @@ def my_leaves_detail(request):
         {"code": t.code, "name_ar": t.name_ar, "name_en": getattr(t, "name_en", ""),
          "days_per_event": str(t.days_per_event),
          "is_paid": t.is_paid,
+         "requires_attachment": t.requires_attachment,
          "once_per_service": t.once_per_service}
         for t in LeaveType.objects.filter(
             company_id=emp.company_id, is_active=True)
