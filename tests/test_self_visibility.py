@@ -13,7 +13,7 @@ from pathlib import Path
 # مساراتٌ تعرض شيئًا يخصّ شخصًا بعينه: يجب أن تضمّ صاحبها
 WATCHED = {
     "apps/payroll/api_outputs.py": ["payslip_detail", "employee_payslips"],
-    "apps/employees/api.py": ["employee_detail"],
+    "apps/employees/api.py": ["employee_detail", "job_changes"],
 }
 SELF_MARKS = ("| own", "|own", "person=_me", "person=person", "employment__person=person",
               "_me", "own)")

@@ -1351,10 +1351,16 @@ def job_changes(request, employment_id):
     from apps.organization.models import Department
 
     Gate.require(request.user, "employees.view")
-    emp = Gate.filter_queryset(
-        request.user, "employees.view", Employment.objects.all()
-    ).filter(id=employment_id,
-             company_id=_company_id(request)).select_related(
+    # ق-٢٤٣: ⚠️⚠️ **وتاريخه هو كان يختفي عنه** — ثالث موضعٍ من نمط ق-٢٣٩/٢٤٢:
+    # من له صلاحيّة فريق يُصفَّى بفريقه **وهو ليس فيه**. فما يراه = **ملفّه + ما
+    # تُتيحه صلاحيّته** — والغريب يبقى ٤٠٤.
+    _me = getattr(request.user, "person", None)
+    _qs = Gate.filter_queryset(
+        request.user, "employees.view", Employment.objects.all())
+    if _me is not None:
+        _qs = _qs | Employment.objects.filter(person=_me)
+    emp = _qs.filter(id=employment_id,
+                     company_id=_company_id(request)).select_related(
         "person", "department").first()
     if emp is None:
         return Response({"detail": "الموظف غير موجود"}, status=404)
