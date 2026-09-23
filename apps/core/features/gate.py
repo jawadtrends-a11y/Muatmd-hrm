@@ -127,11 +127,52 @@ class Features:
             return default
 
     @classmethod
+    def upgrade_hint(cls, feature_key: str) -> dict:
+        """
+        ق-٢٤٧: ⚠️ **«غير متاحة» وحدها لا تكفي** — فالعميل لا يعرف **أيّ باقةٍ
+        يشتري**. (قرار جواد: التجربة على الأساسية، والأعلى **يظهر ويطلب الترقية
+        للباقة الأدنى المناسبة**.) فيُستنتج أدنى باقةٍ تُتيح الميزة من `tier_order`.
+        """
+        from apps.accounts.models_billing import Feature, Plan, PlanFeature
+        name = feature_key
+        try:
+            f = Feature.objects.filter(feature_key=feature_key).first()
+            if f and getattr(f, "name_ar", ""):
+                name = f.name_ar
+        except Exception:  # noqa: BLE001
+            pass
+        plan = None
+        try:
+            # ⚠️ `feature_key` نصٌّ مباشر لا علاقة · و`value` نصٌّ ("true" أو حدّ)
+            pf = (PlanFeature.objects
+                  .filter(feature_key=feature_key)
+                  .exclude(value__in=["false", "0", ""])
+                  .select_related("plan")
+                  .order_by("plan__tier_order").first())
+            plan = pf.plan if pf else None
+        except Exception:  # noqa: BLE001
+            plan = None
+        if plan is None:
+            return {"detail": f"«{name}» غير متاحة في باقتكم الحالية",
+                    "feature_name": name, "required_plan": "",
+                    "required_plan_name": ""}
+        return {
+            "detail": f"«{name}» متاحة في {plan.name_ar} فما فوق",
+            "feature_name": name,
+            "required_plan": plan.code,
+            "required_plan_name": plan.name_ar,
+        }
+
+    @classmethod
     def require(cls, company_id: int, feature_key: str):
         if not cls.enabled(company_id, feature_key):
+            info = cls.upgrade_hint(feature_key)
             raise FeatureNotInPlan({
-                "detail": "هذه الميزة غير متاحة في باقتكم الحالية",
+                "detail": info["detail"],
                 "feature": feature_key,
+                "feature_name": info["feature_name"],
+                "required_plan": info["required_plan"],
+                "required_plan_name": info["required_plan_name"],
                 "upgrade_url": "/settings/subscription",
             })
         return True
