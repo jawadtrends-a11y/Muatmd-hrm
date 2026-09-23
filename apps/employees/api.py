@@ -593,7 +593,9 @@ def upload_attachment(request):
     }, status=201)
 
 
-@api_view(["GET"])
+# ق-٢٤٦: و`HEAD` معيارٌ في HTTP — كل مسارٍ يُعطي GET يجب أن يُعطيه،
+# فمن يفحص نوع الملف قبل تنزيله (تطبيقٌ أو تكامل) لا يُردّ بـ405.
+@api_view(["GET", "HEAD"])
 @permission_classes([IsAuthenticated])
 def serve_file(request, file_id):
     """
