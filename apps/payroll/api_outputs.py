@@ -264,10 +264,13 @@ def payslip_detail(request, payslip_id):
     qs = Payslip.objects.filter(company_id=company_id)
     own = qs.filter(employment__person=person) if person else qs.none()
 
+    # ق-239: ⚠️⚠️ **وقسيمته هو كانت تختفي عنه** — فالمشرف بـview_team يُصفَّى
+    # بقسائم **فريقه**، وهو ليس في فريقه: **القائمة تعرضها والتفاصيل تقول «غير
+    # موجودة»**. فما يراه = **قسيمته + ما تُتيحه صلاحيّته** لا أحدهما.
     if Gate.check(request.user, "payslips.view_all").allowed:
-        scoped = Gate.filter_queryset(request.user, "payslips.view_all", qs)
+        scoped = Gate.filter_queryset(request.user, "payslips.view_all", qs) | own
     elif Gate.check(request.user, "payslips.view_team").allowed:
-        scoped = Gate.filter_queryset(request.user, "payslips.view_team", qs)
+        scoped = Gate.filter_queryset(request.user, "payslips.view_team", qs) | own
     else:
         Gate.require(request.user, "payslips.view_own")
         scoped = own
