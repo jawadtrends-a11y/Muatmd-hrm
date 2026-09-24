@@ -111,8 +111,21 @@ def compute_day(*, work_date, punches, shift=None, is_holiday=False,
         expected = int((scheduled_end - scheduled_start).total_seconds() // 60) \
             - shift.break_minutes
         overtime = max(0, worked - expected)
-        return DayComputation(work_date, DayStatus.PRESENT, first_in, last_out,
-                              worked, 0, 0, overtime, count,
+        # ⚠️⚠️ ق-٢٥١: **النقص كان يُهمَل** — فمن بصم ودخل وخرج بعد ساعتين
+        # يُردّ PRESENT ونقصًا صفرًا، **فيأخذ أجر يومٍ كامل**. والمرن
+        # **لا يعني بلا حساب**: وقتُ الحضور حرّ، **وإكمال الساعات لازم**.
+        # والنقص يُسجَّل في `early_out_minutes` — فهو مكانه الطبيعيّ:
+        # في الثابت نقصٌ في آخر اليوم، وهنا نقصٌ في إجماليه، **ويحسمه
+        # المسير بنفس القاعدة بلا تغييرٍ فيه**.
+        shortfall = max(0, expected - worked)
+        status = DayStatus.PRESENT
+        if shortfall:
+            notes.append(f"نقص {shortfall} دقيقة عن {expected}")
+            # بصمةٌ واحدة أو نقصٌ يتجاوز السماح ← يومٌ جزئيّ لا كامل
+            if count == 1 or shortfall > shift.grace_out_minutes:
+                status = DayStatus.PARTIAL
+        return DayComputation(work_date, status, first_in, last_out,
+                              worked, 0, shortfall, overtime, count,
                               notes + ["دوام مرن"])
 
     late = max(0, int((first_in - scheduled_start).total_seconds() // 60))
