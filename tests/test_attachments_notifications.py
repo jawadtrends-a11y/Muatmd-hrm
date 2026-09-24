@@ -92,7 +92,10 @@ def test_sick_leave_requires_attachment(env):
     }), content_type="application/json")
 
     assert r.status_code == 400, "مرّت الإجازة المرضية بلا مرفق"
-    assert "مرفق" in r.content.decode(), (
+    # ⚠️ يُفحص **المعنى** لا لفظٌ بعينه — فرسالة ق-٢٤٠ تقول «إرفاق مستند»
+    # و«أرفقه»، والمطابقة الحرفية على «مرفق» أسقطت حارسًا والنظام سليم.
+    _msg = r.content.decode()
+    assert any(w in _msg for w in ("مرفق", "إرفاق", "أرفق")), (
         "الرسالة لا تخبر بما يُفعل — والمستخدم لا يعرف ما ينقصه")
 
 
