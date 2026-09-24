@@ -743,8 +743,11 @@ function DeductionsTab({ L, canEdit }: {
 
   const load = useCallback(() => {
     setBusy(true);
+    // ⚠️ **البحث في الخادم لا في الصفحة** — فمن بحث عن موظفٍ في الصفحة
+    // العاشرة كان لا يجده أبدًا، ويظنّ أنه غير موجود.
     const p = new URLSearchParams({ year: String(year), month: String(month),
                                     limit: String(limit), page: String(page) });
+    if (q.trim()) p.set("q", q.trim());
     if (status) p.set("status", status);
     if (kind) p.set("kind", kind);
     apiGet<{ rows: DedRow[]; totals: Record<string, number>;
@@ -757,10 +760,10 @@ function DeductionsTab({ L, canEdit }: {
       })
       .catch(() => { setRows([]); setTotals({}); setMeta({ count: 0, pages: 1 }); })
       .finally(() => setBusy(false));
-  }, [year, month, status, kind, limit, page]);
+  }, [year, month, status, kind, limit, page, q]);
 
   // ⚠️ تغييرُ فلترٍ يعيد للصفحة الأولى — وإلا وقف المستخدم على صفحةٍ لا وجود لها
-  useEffect(() => { setPage(1); }, [year, month, status, kind, limit]);
+  useEffect(() => { setPage(1); }, [year, month, status, kind, limit, q]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -777,8 +780,7 @@ function DeductionsTab({ L, canEdit }: {
     }
   }
 
-  const shown = rows.filter((r) =>
-    !q || r.name_ar.includes(q) || r.employee_no.includes(q));
+  const shown = rows;
 
   return (
     <>

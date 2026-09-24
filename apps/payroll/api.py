@@ -737,6 +737,20 @@ def attendance_deductions(request):
         if v:
             qs = qs.filter(**{field: v})
 
+    # ⚠️⚠️ **البحث في الخادم لا في الصفحة**: كان يصفّي ما وصل من صفوف — فمن
+    # بحث عن موظفٍ في الصفحة العاشرة **لا يجده أبدًا**، ويظنّ أنه غير موجود.
+    q = (request.query_params.get("q") or "").strip()
+    if q:
+        from django.db.models import Q
+
+        # ⚠️ لا حقل اسمٍ كامل — فيُبحث في الأربعة والإنجليزيّ والرقم
+        qs = qs.filter(Q(employment__employee_no__icontains=q)
+                       | Q(employment__person__first_name_ar__icontains=q)
+                       | Q(employment__person__father_name_ar__icontains=q)
+                       | Q(employment__person__grandfather_name_ar__icontains=q)
+                       | Q(employment__person__family_name_ar__icontains=q)
+                       | Q(employment__person__full_name_en__icontains=q))
+
     rows = [{
         "id": d.id,
         "employment_id": d.employment_id,
