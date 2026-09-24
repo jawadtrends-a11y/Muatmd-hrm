@@ -13,12 +13,40 @@ import DateField from "@/components/DateField";
 import { IcAlert, IcCheck, IcDoc } from "@/components/Icons";
 
 const T: Dict = {
+  tabDeductions: { ar: "الخصومات", en: "Deductions" },
+  dedTitle: { ar: "خصومات البصمات", en: "Attendance deductions" },
+  dedHint: {
+    ar: "النظام يحسب الغياب والتأخير ونقص الساعات — والقرار لكم: خصم أو إعفاء. وضع الاحتساب (آليّ أو يدويّ) يُضبط في قواعد المسير.",
+    en: "The system computes absence, lateness and shortfall — the decision is yours: deduct or waive. The mode is set in payroll rules.",
+  },
+  dedMonth: { ar: "الشهر", en: "Month" },
+  dedStatus: { ar: "الحالة", en: "Status" },
+  dedKind: { ar: "النوع", en: "Type" },
+  dedSearch: { ar: "بحث بالاسم أو الرقم", en: "Search name or no." },
+  dedAll: { ar: "الكل", en: "All" },
+  dedPending: { ar: "بانتظار القرار", en: "Pending" },
+  dedApplied: { ar: "مخصوم", en: "Deducted" },
+  dedWaived: { ar: "معفى", en: "Waived" },
+  dedApply: { ar: "خصم", en: "Deduct" },
+  dedWaive: { ar: "إعفاء", en: "Waive" },
+  dedUndo: { ar: "إلغاء الخصم", en: "Undo" },
+  dedReason: { ar: "سبب الإعفاء", en: "Reason for waiving" },
+  dedReasonRequired: { ar: "اكتب سبب الإعفاء", en: "Reason is required" },
+  dedEmpty: { ar: "لا خصومات في هذه الفترة", en: "No deductions in this period" },
+  dedRecalc: {
+    ar: "⚠️ أعد احتساب المسير ليأخذ القرار مفعوله",
+    en: "Recalculate the payroll run to apply this decision",
+  },
+  dedQty: { ar: "المقدار", en: "Qty" },
+  dedDay: { ar: "اليوم", en: "Day" },
+  dedLimit: { ar: "عدد الصفوف", en: "Rows" },
+  dedAmount: { ar: "المبلغ", en: "Amount" },
   title: { ar: "الجزاءات", en: "Penalties" },
   sub: {
     ar: "مخالفات لم يُوقَّع عليها — راجعها ووقّع ما تراه",
     en: "Unsigned violations — review and apply",
   },
-  tabBoard: { ar: "المقترحة", en: "Pending" },
+  tabBoard: { ar: "الجزاءات", en: "Penalties" },
   tabRegister: { ar: "صحيفة الجزاءات", en: "Register" },
   from: { ar: "من", en: "From" },
   to: { ar: "إلى", en: "To" },
@@ -109,7 +137,10 @@ const monthStart = () => {
 
 export default function PenaltiesPage() {
   const { L } = useT(T);
-  const [tab, setTab] = useUrlTab<"board" | "register">(["board", "register"], "board");
+  // ⚠️⚠️ ق-٢٥٣: **الخصومات قبل الجزاءات** — فالجزاء لا معنى له إن لم
+  // يُطبَّق الخصم أصلًا. والخصم يُحسب آليًّا **ويُقرَّر بشرًا**.
+  const [tab, setTab] = useUrlTab<"deductions" | "board" | "register">(
+    ["deductions", "board", "register"], "deductions");
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState<Row[]>([]);
@@ -118,6 +149,9 @@ export default function PenaltiesPage() {
   const [perms, setPerms] = useState<string[]>([]);
   const [busy, setBusy] = useState(true);
   const [acting, setActing] = useState(false);
+  const [bStatus, setBStatus] = useState("");
+  const [bLimit, setBLimit] = useState(25);
+  const [bQ, setBQ] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [dlg, setDlg] = useState<Row | null>(null);
@@ -203,11 +237,18 @@ export default function PenaltiesPage() {
       </div>}
 
       <div className="row" style={{ gap: 6 }}>
+        <button className={`btn btn-sm ${tab === "deductions" ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setTab("deductions")}>{L("tabDeductions")}</button>
         <button className={`btn btn-sm ${tab === "board" ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setTab("board")}>{L("tabBoard")}</button>
         <button className={`btn btn-sm ${tab === "register" ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setTab("register")}>{L("tabRegister")}</button>
       </div>
+
+      {/* ⚠️ الخصم صلاحية مسير (`payroll.create`) لا صلاحية موظفين */}
+      {tab === "deductions" && (
+        <DeductionsTab L={L} canEdit={perms.includes("payroll.create")} />
+      )}
 
       {tab === "board" && (
         <>
@@ -222,6 +263,31 @@ export default function PenaltiesPage() {
                 <label className="label">{L("to")}</label>
                 <DateField value={to} onChange={setTo} />
               </div>
+              {/* ⚠️ ق-٢٥٣: نفس فلاتر الخصومات — فالتبويبان صفحةٌ واحدة،
+                  واختلافُ الفلاتر بينهما يُربك من ينتقل بينهما. */}
+              <label className="field" style={{ minWidth: 150 }}>
+                <span className="label">{L("dedStatus")}</span>
+                <select className="input" value={bStatus}
+                        onChange={(e) => setBStatus(e.target.value)}>
+                  <option value="">{L("dedAll")}</option>
+                  <option value="proposed">{L("dedPending")}</option>
+                  <option value="applied">{L("dedApplied")}</option>
+                </select>
+              </label>
+              <label className="field" style={{ minWidth: 110 }}>
+                <span className="label">{L("dedLimit")}</span>
+                <select className="input" value={String(bLimit)}
+                        onChange={(e) => setBLimit(Number(e.target.value))}>
+                  {[10, 25, 50, 100, 250, 500].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field grow" style={{ minWidth: 180 }}>
+                <span className="label">{L("dedSearch")}</span>
+                <input className="input" value={bQ}
+                       onChange={(e) => setBQ(e.target.value)} />
+              </label>
             </div>
           </div>
 
@@ -246,7 +312,12 @@ export default function PenaltiesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => (
+                    {rows
+                      .filter((r) => !bQ || r.name.includes(bQ)
+                                     || r.employee_no.includes(bQ))
+                      .filter((r) => !bStatus || r.state === bStatus)
+                      .slice(0, bLimit)
+                      .map((r, i) => (
                       <tr key={`${r.employment_id}-${r.date}-${i}`}>
                         <td>
                           <div style={{ fontWeight: 500 }}>{r.name}</div>
@@ -626,5 +697,268 @@ function CancelPenaltyDialog({ row, L, onClose, onDone }: {
         </div>
       </div>
     </div>
+  );
+}
+
+
+/* ═══ الخصومات (ق-٢٥٣) ═══════════════════════════════════════
+ *
+ * ⚠️⚠️ **الحساب ليس قرارًا.** كان المسير يقرأ أيام الغياب من الحضور
+ * **ويحسمها مباشرةً** — فبلغ الخصم في أول مسيرٍ حقيقيّ **٥٩٪ من الرواتب**،
+ * لأن البصم ناقصٌ لا لأن الموظفين غابوا. والبصمة تنقص لعطلٍ في الجهاز، أو
+ * مهمةٍ خارج الموقع، أو نسيان — **والغياب في النظام ليس غيابًا في الواقع**.
+ *
+ * فوضعان في قواعد المسير:
+ *   **آليّ**  — يُخصم، وللموارد **إلغاء** خصمٍ بعينه (خطأ أو استثناء)
+ *   **يدويّ** — لا يُخصم شيء حتى تُقرَّر كلُّ حالة: **خصم أو إعفاء**
+ * ⚠️ **والإعفاء يُعلَّل** — فالمراجع يعرف لماذا سقط خصمٌ مستحَقّ.
+ */
+type DedRow = {
+  id: number; employee_no: string; name_ar: string; period: string;
+  kind: string; kind_label: string; quantity: string; amount: string;
+  work_date: string; quantity_label: string;
+  explanation: string; status: string; status_label: string;
+  decision_note: string;
+};
+
+function DeductionsTab({ L, canEdit }: {
+  L: (k: string) => string;
+  canEdit: boolean;
+}) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [status, setStatus] = useState("");
+  const [kind, setKind] = useState("");
+  const [q, setQ] = useState("");
+  const [limit, setLimit] = useState(25);
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ count: 0, pages: 1 });
+  const [rows, setRows] = useState<DedRow[]>([]);
+  const [totals, setTotals] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [waiving, setWaiving] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    setBusy(true);
+    const p = new URLSearchParams({ year: String(year), month: String(month),
+                                    limit: String(limit), page: String(page) });
+    if (status) p.set("status", status);
+    if (kind) p.set("kind", kind);
+    apiGet<{ rows: DedRow[]; totals: Record<string, number>;
+             count: number; pages: number }>(
+      `/payroll/attendance-deductions/?${p}`)
+      .then((d) => {
+        setRows(d.rows || []);
+        setTotals(d.totals || {});
+        setMeta({ count: d.count ?? 0, pages: d.pages ?? 1 });
+      })
+      .catch(() => { setRows([]); setTotals({}); setMeta({ count: 0, pages: 1 }); })
+      .finally(() => setBusy(false));
+  }, [year, month, status, kind, limit, page]);
+
+  // ⚠️ تغييرُ فلترٍ يعيد للصفحة الأولى — وإلا وقف المستخدم على صفحةٍ لا وجود لها
+  useEffect(() => { setPage(1); }, [year, month, status, kind, limit]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function decide(id: number, decision: string, reason = "") {
+    setErr("");
+    try {
+      await apiPost(`/payroll/attendance-deductions/${id}/decide/`,
+                    { decision, note: reason });
+      setWaiving(null);
+      setNote("");
+      load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    }
+  }
+
+  const shown = rows.filter((r) =>
+    !q || r.name_ar.includes(q) || r.employee_no.includes(q));
+
+  return (
+    <>
+      <div className="card" style={{ padding: 16 }}>
+        <strong style={{ fontSize: ".95rem" }}>{L("dedTitle")}</strong>
+        <p style={{ margin: "6px 0 14px", fontSize: ".85rem",
+                    color: "var(--ink-3)" }}>{L("dedHint")}</p>
+
+        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <label className="field" style={{ minWidth: 110 }}>
+            <span className="label">{L("dedMonth")}</span>
+            <select className="input" value={String(month)}
+                    onChange={(e) => setMonth(Number(e.target.value))}>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field" style={{ minWidth: 110 }}>
+            <span className="label">&nbsp;</span>
+            <input className="input num" type="number" value={String(year)}
+                   onChange={(e) => setYear(Number(e.target.value))} />
+          </label>
+          <label className="field" style={{ minWidth: 150 }}>
+            <span className="label">{L("dedStatus")}</span>
+            <select className="input" value={status}
+                    onChange={(e) => setStatus(e.target.value)}>
+              <option value="">{L("dedAll")}</option>
+              <option value="pending">{L("dedPending")}</option>
+              <option value="applied">{L("dedApplied")}</option>
+              <option value="waived">{L("dedWaived")}</option>
+            </select>
+          </label>
+          <label className="field" style={{ minWidth: 140 }}>
+            <span className="label">{L("dedKind")}</span>
+            <select className="input" value={kind}
+                    onChange={(e) => setKind(e.target.value)}>
+              <option value="">{L("dedAll")}</option>
+              <option value="absence">غياب</option>
+              <option value="late">تأخير</option>
+              <option value="shortfall">نقص ساعات</option>
+            </select>
+          </label>
+          <label className="field" style={{ minWidth: 110 }}>
+            <span className="label">{L("dedLimit")}</span>
+            <select className="input" value={String(limit)}
+                    onChange={(e) => setLimit(Number(e.target.value))}>
+              {[10, 25, 50, 100, 250, 500].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field grow" style={{ minWidth: 180 }}>
+            <span className="label">{L("dedSearch")}</span>
+            <input className="input" value={q}
+                   onChange={(e) => setQ(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="row" style={{ gap: 18, marginTop: 14,
+                                      fontSize: ".85rem" }}>
+          <span>{L("dedPending")}: <b>{(totals.pending ?? 0).toFixed(2)}</b></span>
+          <span>{L("dedApplied")}: <b>{(totals.applied ?? 0).toFixed(2)}</b></span>
+          <span>{L("dedWaived")}: <b>{(totals.waived ?? 0).toFixed(2)}</b></span>
+        </div>
+      </div>
+
+      {err && <div className="alert-error" style={{ marginTop: 12 }}>{err}</div>}
+
+      <div className="card" style={{ marginTop: 12, overflow: "hidden" }}>
+        {busy ? null : shown.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center",
+                        color: "var(--ink-3)" }}>{L("dedEmpty")}</div>
+        ) : (
+          <table style={{ width: "100%", fontSize: ".88rem" }}>
+            <thead>
+              <tr style={{ color: "var(--ink-3)" }}>
+                <th style={{ textAlign: "start", padding: "10px 12px" }}>
+                  {L("dedSearch")}</th>
+                <th style={{ textAlign: "start" }}>{L("dedDay")}</th>
+                <th style={{ textAlign: "start" }}>{L("dedKind")}</th>
+                <th style={{ textAlign: "start" }}>{L("dedQty")}</th>
+                <th style={{ textAlign: "start" }}>{L("dedAmount")}</th>
+                <th style={{ textAlign: "start" }}>{L("dedStatus")}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "10px 12px" }}>
+                    <div>{r.name_ar}</div>
+                    <small style={{ color: "var(--ink-3)" }}>{r.employee_no}</small>
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.work_date}</td>
+                  <td>{r.kind_label}</td>
+                  <td>
+                    {r.quantity_label || r.quantity}
+                    {r.explanation && (
+                      <div><small style={{ color: "var(--ink-3)" }}>
+                        {r.explanation}</small></div>
+                    )}
+                  </td>
+                  <td><b>{r.amount}</b></td>
+                  <td>
+                    <span style={{
+                      color: r.status === "applied" ? "var(--danger)"
+                           : r.status === "waived" ? "var(--ink-3)"
+                           : "var(--warn, var(--ink-2))" }}>
+                      {r.status_label}
+                    </span>
+                    {r.decision_note && (
+                      <div><small style={{ color: "var(--ink-3)" }}>
+                        {r.decision_note}</small></div>
+                    )}
+                  </td>
+                  <td style={{ textAlign: "end", padding: "8px 12px" }}>
+                    {canEdit && waiving === r.id ? (
+                      <div className="row" style={{ gap: 6,
+                                                    justifyContent: "flex-end" }}>
+                        <input className="input" style={{ maxWidth: 200 }}
+                               placeholder={L("dedReason")}
+                               value={note}
+                               onChange={(e) => setNote(e.target.value)} />
+                        <button className="btn btn-sm btn-primary"
+                                disabled={!note.trim()}
+                                onClick={() => decide(r.id, "waived", note)}>
+                          {L("dedWaive")}
+                        </button>
+                        <button className="btn btn-sm btn-ghost"
+                                onClick={() => { setWaiving(null); setNote(""); }}>
+                          ✕
+                        </button>
+                      </div>
+                    ) : canEdit ? (
+                      <div className="row" style={{ gap: 6,
+                                                    justifyContent: "flex-end" }}>
+                        {r.status !== "applied" && (
+                          <button className="btn btn-sm"
+                                  onClick={() => decide(r.id, "applied")}>
+                            {L("dedApply")}
+                          </button>
+                        )}
+                        {r.status !== "waived" && (
+                          <button className="btn btn-sm btn-ghost"
+                                  onClick={() => setWaiving(r.id)}>
+                            {r.status === "applied" ? L("dedUndo") : L("dedWaive")}
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {meta.pages > 1 && (
+        <div className="row" style={{ gap: 8, marginTop: 12,
+                                      alignItems: "center",
+                                      justifyContent: "center" }}>
+          <button className="btn btn-sm" disabled={page <= 1}
+                  onClick={() => setPage(1)}>«</button>
+          <button className="btn btn-sm" disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}>‹</button>
+          <span style={{ fontSize: ".85rem", color: "var(--ink-3)" }}>
+            {page} / {meta.pages} — {meta.count}
+          </span>
+          <button className="btn btn-sm" disabled={page >= meta.pages}
+                  onClick={() => setPage(page + 1)}>›</button>
+          <button className="btn btn-sm" disabled={page >= meta.pages}
+                  onClick={() => setPage(meta.pages)}>»</button>
+        </div>
+      )}
+
+      <p style={{ marginTop: 10, fontSize: ".82rem", color: "var(--ink-3)" }}>
+        {L("dedRecalc")}
+      </p>
+    </>
   );
 }

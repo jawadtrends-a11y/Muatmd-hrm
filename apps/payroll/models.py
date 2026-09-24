@@ -191,6 +191,39 @@ class PayrollSettings(CompanyScopedModel):
     #
     # ⚠️ **وصفرٌ يعني الشهر التقويميّ** — وهو الافتراض، فمن لم
     # يضبطه لا يتغيّر عليه شيء.
+    #: ق-٢٥٣: ⚠️⚠️ **وضع خصم البصمات.**
+    #
+    # `auto` — يُحسب ويُحسم مباشرةً (وتبقى للموارد إلغاءُ خصمٍ بعينه: خطأٌ
+    #          في البصمة أو استثناءٌ لغرض).
+    # `manual` — يُحسب **ويُعرض بلا حسم**، والموارد تختار لكلٍّ: **خصم أو
+    #          إعفاء**. فالبصمة قد تنقص لعطلٍ في الجهاز أو مهمةٍ خارجية،
+    #          **والغياب في النظام ليس غيابًا في الواقع**.
+    #
+    # ⚠️ وفي أول مسيرٍ حقيقيّ (١٤ موظفًا) بلغ خصم الغياب **٥٩٪ من الرواتب**
+    # لأن البصم ناقص — **قرارٌ إداريٌّ لا حسابيّ، فلا يُترك للآلة وحدها**.
+    attendance_deduction_mode = models.CharField(
+        _("خصم البصمات"), max_length=10, default="auto",
+        choices=[("auto", _("آليّ")), ("manual", _("يدويّ — بقرار الموارد"))])
+
+    #: ق-٢٥٢: ⚠️⚠️ **أول شهرٍ يُصرف من هذا النظام.**
+    #
+    # العميل الذي ينتقل من نظامٍ آخر **صرف شهوره السابقة هناك** — وبلا هذا
+    # الحدّ **يقبل المحرّك مسيرًا لأي شهرٍ مضى**، فيُصرف الشهر مرتين:
+    # مرةً من القديم ومرةً من الجديد. وقد نُقلت بصمات أربعة أشهر لسدرة
+    # البنيان، **وكلها كانت قابلة لأن تُحوَّل مسيرًا**.
+    #
+    # ⚠️ **وما قبله تاريخٌ للعلم لا للصرف**: الحضور محسوبٌ ومعروض،
+    # والتقارير تراه، **والمسير وحده ممنوع**.
+    #
+    # ⭐ **ويُسأل عند التأسيس** — لا يُترك ليُكتشف بعد صرفٍ مزدوج.
+    # وصفرٌ يعني بلا حدّ (لحساباتٍ بدأت من النظام نفسه).
+    payroll_start_year = models.PositiveSmallIntegerField(
+        _("سنة أول مسير"), default=0,
+        help_text=_("٠ = بلا حدّ · وإلا فلا مسير قبل هذا الشهر"))
+    payroll_start_month = models.PositiveSmallIntegerField(
+        _("شهر أول مسير"), default=0,
+        validators=[MaxValueValidator(12)])
+
     payroll_cutoff_day = models.PositiveSmallIntegerField(
         _("يوم الاقتطاع"), default=0,
         validators=[MaxValueValidator(28)],
@@ -798,3 +831,72 @@ from apps.payroll.models_gl import (  # noqa: E402,F401
 from apps.payroll.models_exclusion import (  # noqa: E402,F401
     ExclusionScope, PayrollExclusion,
 )
+
+
+class AttendanceDeductionStatus(models.TextChoices):
+    PENDING = "pending", _("بانتظار القرار")
+    APPLIED = "applied", _("مخصوم")
+    WAIVED = "waived", _("معفى")
+
+
+class AttendanceDeduction(CompanyScopedModel):
+    """
+    خصم بصمةٍ محتسَبٌ **وقراره منفصل** (ق-٢٥٣).
+
+    ⚠️⚠️ **الحساب ليس قرارًا.** كان المسير يقرأ أيام الغياب من الحضور
+    **ويحسمها مباشرةً** — فبلغ الخصم في أول مسيرٍ حقيقيّ **٥٩٪ من الرواتب**،
+    لأن البصم ناقصٌ لا لأن الموظفين غابوا. والبصمة تنقص لعطلٍ في الجهاز،
+    أو مهمةٍ خارج الموقع، أو نسيان — **والغياب في النظام ليس غيابًا في الواقع**.
+
+    فيُسجَّل كل خصمٍ صفًّا مستقلًّا بقراره:
+      - **آليّ**: يُنشأ `applied` — وللموارد إلغاؤه (خطأ أو استثناء)
+      - **يدويّ**: يُنشأ `pending` — ولا يُحسم حتى يُقرَّر
+
+    ⚠️ **والمسير يقرأ `applied` وحدها** — فما لم يُقرَّر لا يُحسم.
+    """
+
+    employment = models.ForeignKey(
+        "employees.Employment", on_delete=models.CASCADE,
+        related_name="attendance_deductions", verbose_name=_("الموظف"))
+    period_year = models.PositiveSmallIntegerField(_("السنة"))
+    period_month = models.PositiveSmallIntegerField(_("الشهر"))
+    #: ⚠️⚠️ **صفٌّ لكل يوم لا لكل شهر.** «أعفِ ثلاثة أيام غياب» قرارٌ أعمى —
+    #: فقد يكون يومٌ منها عطلَ جهاز والثاني تغيّبًا حقيقيًّا. **ولكلٍّ سببه**.
+    work_date = models.DateField(_("اليوم"), db_index=True)
+
+    KIND = [("absence", _("غياب")), ("late", _("تأخير")),
+            ("shortfall", _("نقص ساعات"))]
+    kind = models.CharField(_("النوع"), max_length=12, choices=KIND)
+
+    #: أيامٌ للغياب · دقائق للتأخير والنقص — كلٌّ بوحدته، فالعرض يُفهم
+    quantity = models.DecimalField(_("المقدار"), max_digits=9,
+                                   decimal_places=2, default=0)
+    amount = models.DecimalField(_("المبلغ"), max_digits=12,
+                                 decimal_places=2, default=0)
+    explanation = models.CharField(_("البيان"), max_length=255, blank=True)
+
+    status = models.CharField(_("الحالة"), max_length=12,
+                              choices=AttendanceDeductionStatus.choices,
+                              default=AttendanceDeductionStatus.PENDING,
+                              db_index=True)
+    #: ⚠️ سببُ الإعفاء يُكتب — فالمراجع يعرف لماذا سقط خصمٌ مستحَق
+    decision_note = models.CharField(_("سبب القرار"), max_length=255, blank=True)
+    decided_by_person_id = models.BigIntegerField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("خصم بصمة")
+        verbose_name_plural = _("خصومات البصمات")
+        ordering = ["-work_date", "employment_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employment", "work_date", "kind"],
+                name="uq_attendance_deduction_per_day"),
+        ]
+        indexes = [
+            models.Index(fields=["company", "period_year", "period_month",
+                                 "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.employment_id} {self.period_month}/{self.period_year} {self.kind}"

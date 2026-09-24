@@ -49,7 +49,8 @@ const T: Dict = {
   advances: { ar: "السلف", en: "Advances" },
   assets: { ar: "العهد", en: "Assets" },
   payroll: { ar: "الرواتب", en: "Payroll" },
-  penalties: { ar: "الجزاءات", en: "Penalties" },
+  // ⚠️ ق-٢٥٣: الصفحة صارت تبويبين — **والخصومات أولهما وأكثرهما استعمالًا**
+  penalties: { ar: "الخصومات والجزاءات", en: "Deductions & penalties" },
   settlement: { ar: "نهاية الخدمة", en: "End of service" },
   eosbCalc: { ar: "حاسبة المكافأة", en: "EOSB calculator" },
   policies: { ar: "السياسات", en: "Policies" },

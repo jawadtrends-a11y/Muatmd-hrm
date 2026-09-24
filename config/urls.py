@@ -95,6 +95,12 @@ urlpatterns = [
     path("api/payroll/components/", payroll_api.components, name="pay-components"),
     path("api/payroll/components/<int:component_id>/", payroll_api.component_detail, name="pay-component-detail"),
     path("api/payroll/settings/", payroll_api.payroll_settings, name="payroll-settings"),
+    # ق-٢٥٣: خصومات البصمات — تُعرض وتُقرَّر (خصم أو إعفاء)
+    path("api/payroll/attendance-deductions/",
+         payroll_api.attendance_deductions, name="attendance-deductions"),
+    path("api/payroll/attendance-deductions/<int:deduction_id>/decide/",
+         payroll_api.decide_attendance_deduction,
+         name="attendance-deduction-decide"),
     # بيانات المنشأة — قراءة بـcompany.view وتعديل بـcompany.edit
     # ق-108: الباقات والاشتراك — ما يراه العميل
     # ق-113: التسجيل الذاتيّ والاستعادة — عامّة بلا توثيق

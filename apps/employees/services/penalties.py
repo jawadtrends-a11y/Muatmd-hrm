@@ -489,6 +489,25 @@ def pending_board(company, start, end, employment_ids=None):
         status__in=[PenaltyStatus.ISSUED, PenaltyStatus.OBJECTED],
     ).values_list("employment_id", "occurred_on"))
 
+    # ⚠️⚠️ ق-٢٥٣: **لا جزاء على يومٍ أُعفي خصمه.** الجزاء التأديبيّ يقوم على
+    # **مخالفةٍ ثابتة** — وإعفاءُ الموارد للخصم يعني أنها **لم تثبت**: عطلُ
+    # جهازٍ أو مهمةٌ خارج الموقع، لا تغيّبًا. فمعاقبةُ من أُعفي خصمُه **ظلمٌ
+    # ومناقضةٌ لقرارٍ اتُّخذ للتوّ**. (والمعلّق كذلك: قرارُه لم يُتّخذ بعد.)
+    #
+    # ⚠️ **وهذا في الوضع اليدويّ وحده** — ففي الآليّ كل خصمٍ مطبَّقٌ ما لم
+    # يُلغَ، ولا صفوف قبل احتساب المسير، فلا تُحجب المخالفات عن لوحةٍ فارغة.
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus, PayrollSettings)
+
+    _st = PayrollSettings.objects.filter(company=company).first()
+    not_established = set()
+    if getattr(_st, "attendance_deduction_mode", "auto") == "manual":
+        not_established = set(
+            AttendanceDeduction.objects
+            .filter(company=company, work_date__gte=start, work_date__lte=end)
+            .exclude(status=AttendanceDeductionStatus.APPLIED)
+            .values_list("employment_id", "work_date"))
+
     # ق-122: **الغياب هو الأصل** — ويوم عملٍ بلا سجلّ غيابٌ لا
     # فراغ. فبلا هذا لا يظهر إلا من له سجلٌّ محفوظ، ومن لم يبصم
     # قطُّ لا يُحاسَب أبدًا.
@@ -511,6 +530,9 @@ def pending_board(company, start, end, employment_ids=None):
         if not (late or early or absent):
             continue
         if (d.employment_id, d.work_date) in signed:
+            continue
+        # ⚠️ لا جزاء على يومٍ أُعفي خصمُه أو لم يُقرَّر — فالمخالفة لم تثبت
+        if (d.employment_id, d.work_date) in not_established:
             continue
 
         emp = d.employment
@@ -553,7 +575,8 @@ def pending_board(company, start, end, employment_ids=None):
         for emp_id, state in _calendar_status(day, company.id, emps).items():
             if state != DayStatus.ABSENT:
                 continue
-            if (emp_id, day) in have or (emp_id, day) in signed:
+            if (emp_id, day) in have or (emp_id, day) in signed \
+                    or (emp_id, day) in not_established:
                 continue
             emp = by_emp.get(emp_id)
             if emp is None or (emp.join_date and day < emp.join_date):

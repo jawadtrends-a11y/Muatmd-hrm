@@ -53,6 +53,11 @@ const T: Dict = {
     ar: "⚠️ أجر اليوم = الراتب ÷ هذا العدد — وتغييره يمسّ كل احتساب",
     en: "Daily wage = salary ÷ this",
   },
+  startMonth: { ar: "أول شهر مسير", en: "First payroll month" },
+  startMonthHint: {
+    ar: "لا يُنشأ مسير قبل هذا الشهر — فالشهور السابقة صُرفت من نظامكم السابق. واترك الحقلين فارغين إن كان النظام هو الأول.",
+    en: "No payroll run before this month — earlier months were paid by your previous system. Leave empty if this is your first system.",
+  },
   cutoff: { ar: "يوم اقتطاع المسير", en: "Payroll cutoff day" },
   cutoffHint: {
     ar: "ما بعده يدخل الشهر التالي — و31 يعني نهاية الشهر",
@@ -78,6 +83,8 @@ type S = {
   allow_overtime_rate_choice: boolean;
   overtime_basis_x2: string;
   payroll_days_per_month: number;
+  payroll_start_year: number;
+  payroll_start_month: number;
   payroll_cutoff_day: number;
   variance_threshold_percent: number;
 };
@@ -186,6 +193,29 @@ export default function PayrollRulesPage() {
                    value={String(data.payroll_days_per_month ?? 30)}
                    onChange={(e) => set("payroll_days_per_month",
                                         Number(e.target.value))} />
+          </SettingRow>
+
+          {/* ⚠️⚠️ ق-٢٥٢: **أول شهرٍ يُصرف من النظام.** العميل المنتقل من
+              نظامٍ آخر صرف شهوره السابقة هناك — وبلا هذا الحدّ **يُصرف الشهر
+              مرتين**. وما قبله تاريخٌ للعلم: الحضور محسوبٌ ومعروض، والمسير
+              وحده ممنوع. ويُضبط عند التأسيس بشهره، ويُعدَّل هنا. */}
+          <SettingRow label={L("startMonth")} hint={L("startMonthHint")}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select className="input" style={{ maxWidth: 130 }}
+                      value={String(data.payroll_start_month ?? 0)}
+                      onChange={(e) => set("payroll_start_month",
+                                           Number(e.target.value))}>
+                <option value="0">—</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                ))}
+              </select>
+              <input className="input num" type="number" min={0} max={2100}
+                     style={{ maxWidth: 110 }} placeholder="—"
+                     value={String(data.payroll_start_year ?? 0)}
+                     onChange={(e) => set("payroll_start_year",
+                                          Number(e.target.value))} />
+            </div>
           </SettingRow>
 
           <SettingRow label={L("cutoff")} hint={L("cutoffHint")}>

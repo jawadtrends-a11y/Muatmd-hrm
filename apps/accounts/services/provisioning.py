@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 
 from django.db import connection, transaction
+from django.utils import timezone
 
 from apps.accounts.models import Account, Company
 from apps.core.tenancy.context import account_scope
@@ -91,6 +92,10 @@ def provision_account(
         # ق-235: الفترة الافتراضية — وبدونها لا غياب ولا تأخير يُحسب لأحد
         from apps.attendance.services.defaults import ensure_default_shift
         ensure_default_shift(comp)
+        # ق-٢٥٢: ⚠️ **أول شهرٍ يُصرف يُترك للعميل** — لا يُفرَض بشهر التأسيس.
+        # فمن ينتقل من نظامٍ آخر يحدّده ليمنع **صرف الشهر مرتين**، ومن يبدأ
+        # من هنا يتركه فارغًا، **ومن أسّس متأخرًا قد يحتاج شهرًا سابقًا فعلًا**.
+        # (جُرّب فرضُه بشهر التأسيس فمنع الحسابات الجديدة من كل ماضيها.)
         PayrollSettings.objects.get_or_create(
             company=comp, defaults={"account_id": account_id})
         # أنواع الإجازات وسلاسل الاعتماد — تعدّلها الشركة بحرية (ق-32)

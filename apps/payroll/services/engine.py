@@ -53,6 +53,18 @@ def create_run(*, company, run_type, year, month, accrual_date=None,
     from calendar import monthrange
     acc_date = accrual_date or date(year, month, monthrange(year, month)[1])
 
+    # ⚠️⚠️ ق-٢٥٢: **لا مسير قبل أول شهرٍ في النظام.** العميل المنتقل صرف
+    # شهوره السابقة في نظامه القديم — وبلا هذا الحدّ يُصرف الشهر **مرتين**.
+    # (وحضور تلك الشهور يبقى محسوبًا ومعروضًا — **للعلم لا للصرف**.)
+    from apps.payroll.models import PayrollSettings
+    _st = PayrollSettings.objects.filter(company=company).first()
+    if _st and _st.payroll_start_year:
+        _start = (_st.payroll_start_year, _st.payroll_start_month or 1)
+        if (year, month) < _start:
+            raise PayrollError(
+                f"لا مسير قبل {_start[1]:02d}/{_start[0]} — "
+                f"وهو أول شهرٍ يُصرف من النظام. وما قبله يُصرف من نظامكم السابق")
+
     existing = PayrollRun.objects.filter(
         company=company, run_type=run_type, period_year=year,
         period_month=month,
@@ -377,17 +389,45 @@ def calculate_slip(*, run, employment, settings_obj):
         trace["gosi_note"] = "مسجّل في التأمينات بلا نظام تأميني محدد"
 
     # ── 6. خصم الغياب والإجازة بلا أجر (ق-32: منفصلان) ──
-    if absence_days > 0:
-        amt = calculate_absence_deduction(
-            unpaid_days=absence_days, monthly_wage=absence_base,
-            days_per_month=days_per_month)
+    #
+    # ⚠️⚠️ ق-٢٥٣: **الحساب ليس قرارًا.** كان الغياب يُحسم مباشرةً — فبلغ في
+    # أول مسيرٍ حقيقيّ **٥٩٪ من الرواتب**، لأن البصم ناقصٌ لا لأن الموظفين
+    # غابوا. فيُسجَّل الخصم صفًّا بقراره (`AttendanceDeduction`):
+    #   **آليّ** ← `applied` ويُحسم (وللموارد إلغاؤه لخطأٍ أو استثناء)
+    #   **يدويّ** ← `pending` ولا يُحسم حتى تقرّره الموارد
+    # ⚠️ **والمسير يقرأ القرار لا الحساب** — فإعفاءٌ سابقٌ يبقى معفى.
+    # ⚠️ **يومًا يومًا**: كل يومٍ صفٌّ بقراره، والمجموع هو **المخصوم فعلًا**
+    _ded, _qty = sync_attendance_deductions(
+        run=run, employment=employment, settings_obj=settings_obj,
+        start=start, end=end, absence_base=absence_base,
+        days_per_month=days_per_month,
+        fallback_absence_days=absence_days)
+    trace["attendance_deductions"] = {
+        k: {"amount": str(v), "qty": str(_qty[k])} for k, v in _ded.items()}
+
+    if _ded["absence"] > 0:
         deductions.append({
-            "code": "ABSENCE", "name_ar": "خصم غياب", "amount": amt,
-            "explanation": (f"{r2(absence_days)} يوم × "
+            "code": "ABSENCE", "name_ar": "خصم غياب",
+            "amount": _ded["absence"],
+            "explanation": (f"{r2(_qty['absence'])} يوم × "
                             f"{r2(daily_rate(absence_base, days_per_month))} ريال"),
-            "explanation_en": (f"{r2(absence_days)} days × "
+            "explanation_en": (f"{r2(_qty['absence'])} days × "
                                f"{r2(daily_rate(absence_base, days_per_month))} SAR"),
             "order": 110})
+    if _ded["late"] > 0:
+        deductions.append({
+            "code": "LATE", "name_ar": "خصم تأخير", "amount": _ded["late"],
+            "explanation": f"{r2(_qty['late'])} دقيقة تأخير",
+            "explanation_en": f"{r2(_qty['late'])} late minutes",
+            "order": 111})
+    if _ded["shortfall"] > 0:
+        # ⚠️ نقص الساعات في الدوام المرن — يُحسم مع التأخير، فكلاهما وقتٌ لم يُعمل
+        deductions.append({
+            "code": "LATE", "name_ar": "خصم نقص ساعات",
+            "amount": _ded["shortfall"],
+            "explanation": f"{r2(_qty['shortfall'])} دقيقة نقص عن الساعات المطلوبة",
+            "explanation_en": f"{r2(_qty['shortfall'])} shortfall minutes",
+            "order": 112})
 
     if unpaid_leave > 0:
         amt = calculate_absence_deduction(
@@ -1008,3 +1048,128 @@ def _mark_retro_merged(run, rows):
     RetroAdjustment.objects.filter(id__in=[a.id for a in rows]).update(
         status=RetroStatus.MERGED, merged_run=run,
         decided_at=timezone.now())
+
+
+def sync_attendance_deductions(*, run, employment, settings_obj,
+                               start, end, absence_base, days_per_month,
+                               fallback_absence_days=None):
+    """
+    يسجّل خصم كل يومٍ صفًّا بقراره، ويُرجع مجموع **المخصوم فعلًا**.
+
+    ⚠️⚠️ **صفٌّ لكل يوم لا لكل شهر**: «أعفِ ثلاثة أيام غياب» قرارٌ أعمى —
+    فقد يكون يومٌ منها عطلَ جهاز والثاني تغيّبًا حقيقيًّا. **ولكلٍّ سببه**.
+    ⚠️ **والقرار القائم لا يُعاد ضبطه**: إعادة احتساب المسير لا تُلغي إعفاءً
+    قرّرته الموارد — وإلا صار القرار بلا معنى.
+    """
+    from apps.attendance.models import AttendanceDay, DayStatus
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus)
+    from apps.payroll.services.calculations import (calculate_absence_deduction,
+                                                    calculate_late_deduction)
+
+    manual = getattr(settings_obj, "attendance_deduction_mode",
+                     "auto") == "manual"
+    default_status = (AttendanceDeductionStatus.PENDING if manual
+                      else AttendanceDeductionStatus.APPLIED)
+    rate = daily_rate(absence_base, days_per_month)
+    applied_total = {"absence": ZERO, "late": ZERO, "shortfall": ZERO}
+    # ⚠️ **البيان يُبنى من المعتمد فعلًا** — فالموظف يقرأ «٣ يوم × ٣٧٥ ريال»
+    # لا «أيام الغياب المعتمد خصمها». ورقمٌ بلا بيانٍ لا يُراجَع ولا يُصدَّق.
+    applied_qty = {"absence": ZERO, "late": ZERO, "shortfall": ZERO}
+
+    # ⚠️⚠️ **ومن لا يبصم لا أيّام له**: الشركة التي تُدخل الغياب يدويًّا
+    # (`auto_attendance=False`) خلاصتُها الشهرية مصدرُها، **ولا سجلّ يوميّ لها**.
+    # فقراءةُ الأيام وحدها **تُسقط خصمها كلَّه** — وهو أخطر من الخصم الأعمى.
+    # فيُسجَّل لها صفٌّ شهريٌّ واحد بأيامها، ويُقرَّر كسائر الصفوف.
+    days = list(AttendanceDay.objects.filter(
+        employment=employment, work_date__gte=start, work_date__lte=end))
+
+    if not days and fallback_absence_days and fallback_absence_days > 0:
+        amt = r2(rate * Decimal(fallback_absence_days))
+        dec, created = AttendanceDeduction.objects.get_or_create(
+            employment=employment, work_date=end, kind="absence",
+            defaults={"account_id": run.account_id,
+                      "company_id": run.company_id,
+                      "period_year": run.period_year,
+                      "period_month": run.period_month,
+                      "quantity": Decimal(fallback_absence_days), "amount": amt,
+                      "explanation": (f"{r2(fallback_absence_days)} يوم × "
+                                      f"{r2(rate)} ريال — من الخلاصة الشهرية"),
+                      "status": default_status})
+        if not created and dec.amount != amt:
+            dec.quantity = Decimal(fallback_absence_days)
+            dec.amount = amt
+            dec.save(update_fields=["quantity", "amount"])
+        if dec.status == AttendanceDeductionStatus.APPLIED:
+            applied_total["absence"] += dec.amount
+            applied_qty["absence"] += dec.quantity
+        return applied_total, applied_qty
+
+    for d in days:
+        rows = []
+        if d.status == DayStatus.ABSENT:
+            rows.append(("absence", Decimal("1"), r2(rate),
+                         f"غياب يوم — {r2(rate)} ريال"))
+        if (d.late_minutes or 0) > 0:
+            amt = calculate_late_deduction(
+                late_minutes=d.late_minutes, monthly_wage=absence_base,
+                days_per_month=days_per_month)
+            rows.append(("late", Decimal(d.late_minutes), r2(amt),
+                         f"تأخير {d.late_minutes} دقيقة"))
+        if (d.early_out_minutes or 0) > 0:
+            # ⚠️ نقص الساعات يُحسب بأجر الدقيقة كالتأخير — فكلاهما وقتٌ لم يُعمل
+            amt = calculate_late_deduction(
+                late_minutes=d.early_out_minutes, monthly_wage=absence_base,
+                days_per_month=days_per_month)
+            rows.append(("shortfall", Decimal(d.early_out_minutes), r2(amt),
+                         f"نقص {d.early_out_minutes} دقيقة"))
+
+        for kind, qty, amt, expl in rows:
+            dec, created = AttendanceDeduction.objects.get_or_create(
+                employment=employment, work_date=d.work_date, kind=kind,
+                defaults={"account_id": run.account_id,
+                          "company_id": run.company_id,
+                          "period_year": run.period_year,
+                          "period_month": run.period_month,
+                          "quantity": qty, "amount": amt,
+                          "explanation": expl, "status": default_status})
+            if not created and (dec.amount != amt or dec.quantity != qty):
+                dec.quantity, dec.amount, dec.explanation = qty, amt, expl
+                dec.save(update_fields=["quantity", "amount", "explanation"])
+            if dec.status == AttendanceDeductionStatus.APPLIED:
+                applied_total[kind] += dec.amount
+                applied_qty[kind] += dec.quantity
+
+    return applied_total, applied_qty
+
+
+def _attendance_decision(*, run, employment, kind, quantity, amount,
+                         explanation, settings_obj):
+    """
+    يسجّل خصم البصمة بقراره، ويُرجع (أيُحسم؟، الصفّ).
+
+    ⚠️ **الصفّ القائم لا يُعاد ضبطه**: إعادةُ احتساب المسير **لا تُلغي
+    إعفاءً قرّرته الموارد** — وإلا صار القرار بلا معنى. ويُحدَّث مقداره
+    فحسب، فقد تغيّرت البصمات بعد تصحيح.
+    """
+    from django.utils import timezone as _tz
+
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus)
+
+    manual = getattr(settings_obj, "attendance_deduction_mode",
+                     "auto") == "manual"
+    default_status = (AttendanceDeductionStatus.PENDING if manual
+                      else AttendanceDeductionStatus.APPLIED)
+
+    dec, created = AttendanceDeduction.objects.get_or_create(
+        employment=employment, period_year=run.period_year,
+        period_month=run.period_month, kind=kind,
+        defaults={"account_id": run.account_id, "company_id": run.company_id,
+                  "quantity": quantity, "amount": amount,
+                  "explanation": explanation, "status": default_status})
+    if not created and (dec.amount != amount or dec.quantity != quantity):
+        dec.quantity, dec.amount, dec.explanation = quantity, amount, explanation
+        dec.save(update_fields=["quantity", "amount", "explanation"])
+
+    return dec.status == AttendanceDeductionStatus.APPLIED, dec

@@ -108,7 +108,9 @@ def payroll_settings(request):
 
     if request.method == "PUT":
         # ق-157: تاريخ الاقتطاع — ويُقيَّد بـ٢٨ في النموذج
-        for field in ("payroll_days_per_month", "payroll_cutoff_day",
+        # ق-٢٥٢: أول شهرٍ يُصرف — يُقرأ ويُحفظ مع بقية قواعد المسير
+        for field in ("payroll_start_year", "payroll_start_month",
+                      "payroll_days_per_month", "payroll_cutoff_day",
                       "working_hours_per_day",
                       "ramadan_hours_per_day", "overtime_basis",
                       # ق-137: معامِل الإضافي — الخيار وأساسه
@@ -139,6 +141,8 @@ def payroll_settings(request):
 
     return Response({
         "payroll_days_per_month": s.payroll_days_per_month,
+        "payroll_start_year": s.payroll_start_year,
+        "payroll_start_month": s.payroll_start_month,
         "payroll_cutoff_day": s.payroll_cutoff_day,
         "working_hours_per_day": str(s.working_hours_per_day),
         "ramadan_hours_per_day": str(s.ramadan_hours_per_day),
@@ -695,3 +699,109 @@ def component_detail(request, component_id):
         "is_system": c.is_system, "is_active": c.is_active,
         "display_order": c.display_order,
     })
+
+
+# ── خصومات البصمات: العرض والقرار (ق-٢٥٣) ────────────────────
+#
+# ⚠️⚠️ **الحساب ليس قرارًا.** النظام يحسب الغياب والتأخير والنقص،
+# **والموارد تقرّر**: خصمٌ أو إعفاء. فالبصمة تنقص لعطلٍ في الجهاز أو
+# مهمةٍ خارج الموقع أو نسيان — **والغياب في النظام ليس غيابًا في الواقع**.
+# (في أول مسيرٍ حقيقيّ بلغ الخصم الآليّ **٥٩٪ من الرواتب**.)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def attendance_deductions(request):
+    """سرد خصومات البصمات — بفلاتر الشهر والحالة والنوع والموظف."""
+    from apps.payroll.models import AttendanceDeduction
+
+    Gate.require(request.user, "payroll.view")
+    qs = Gate.filter_queryset(
+        request.user, "payroll.view",
+        AttendanceDeduction.objects.select_related("employment__person"))
+
+    # ⚠️⚠️ **الحدّ بلا صفحاتٍ يُخفي البيانات لا يُنظّمها**: من اختار عشرة صفوف
+    # لا يرى الأقدم أبدًا. فيُرجَع العدد الكلّيّ ورقم الصفحة معه.
+    try:
+        limit = min(max(int(request.query_params.get("limit") or 25), 1), 500)
+    except ValueError:
+        limit = 25
+    try:
+        page = max(int(request.query_params.get("page") or 1), 1)
+    except ValueError:
+        page = 1
+
+    for param, field in (("year", "period_year"), ("month", "period_month"),
+                         ("status", "status"), ("kind", "kind"),
+                         ("employment_id", "employment_id")):
+        v = request.query_params.get(param)
+        if v:
+            qs = qs.filter(**{field: v})
+
+    rows = [{
+        "id": d.id,
+        "employment_id": d.employment_id,
+        "employee_no": d.employment.employee_no,
+        "name_ar": d.employment.person.display_name,
+        "period": f"{d.period_year}-{d.period_month:02d}",
+        "work_date": str(d.work_date),
+        "kind": d.kind, "kind_label": d.get_kind_display(),
+        # ⚠️ **الوحدة تختلف بالنوع**: الغياب أيامٌ والتأخير والنقص دقائق —
+        # ورقمٌ بلا وحدة يُقرأ خطأً («٣» أيام أم دقائق؟). فتُلحق هنا.
+        "quantity": str(d.quantity),
+        "quantity_label": (f"{d.quantity:.10g} يوم" if d.kind == "absence"
+                           else f"{d.quantity:.10g} دقيقة"),
+        "amount": str(d.amount),
+        "explanation": d.explanation,
+        "status": d.status, "status_label": d.get_status_display(),
+        "decision_note": d.decision_note,
+        "decided_at": d.decided_at,
+    } for d in qs.order_by("-work_date", "employment__employee_no")[
+        (page - 1) * limit: page * limit]]
+
+    # ⚠️ المجاميع على **كل الصفوف** لا الصفحة — فالصفحة نافذةٌ لا حقيقة
+    totals = {"pending": 0, "applied": 0, "waived": 0}
+    for d in qs:
+        totals[d.status] = totals.get(d.status, 0) + float(d.amount)
+    total_rows = qs.count()
+    return Response({
+        "rows": rows, "totals": totals, "count": total_rows,
+        "page": page, "limit": limit,
+        "pages": max(1, (total_rows + limit - 1) // limit)})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def decide_attendance_deduction(request, deduction_id):
+    """خصمٌ أو إعفاء — ويُكتب السبب."""
+    from django.utils import timezone as _tz
+
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus)
+
+    # ⚠️ `payroll.create` — «إنشاء المسير واحتسابه»، وقرار الخصم من جنسها.
+    # (جُرّب `payroll.manage` وليست في الكتالوج، فرفعت الحارسُ خطأً.)
+    Gate.require(request.user, "payroll.create")
+    d = Gate.filter_queryset(
+        request.user, "payroll.create",
+        AttendanceDeduction.objects.all()).filter(id=deduction_id).first()
+    if d is None:
+        return Response({"detail": "خصم غير معروف"}, status=404)
+
+    decision = (request.data.get("decision") or "").strip()
+    if decision not in ("applied", "waived"):
+        return Response({"detail": "القرار: خصم أو إعفاء"}, status=400)
+
+    # ⚠️ **الإعفاء يُعلَّل** — فالمراجع يعرف لماذا سقط خصمٌ مستحَقّ
+    note = (request.data.get("note") or "").strip()
+    if decision == AttendanceDeductionStatus.WAIVED and not note:
+        return Response({"detail": "اكتب سبب الإعفاء"}, status=400)
+
+    d.status = decision
+    d.decision_note = note
+    d.decided_at = _tz.now()
+    d.decided_by_person_id = getattr(
+        getattr(request.user, "person", None), "id", None)
+    d.save(update_fields=["status", "decision_note", "decided_at",
+                          "decided_by_person_id"])
+    return Response({"id": d.id, "status": d.status,
+                     "note": "⚠️ أعد احتساب المسير ليأخذ القرار مفعوله"})
