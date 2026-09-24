@@ -2578,9 +2578,12 @@ function ShiftSection({ empId, canEdit, L }: {
             <span style={{ fontSize: ".8rem", color: "var(--ink-3)" }}>
               {L("shiftFrom")}
             </span>
-            <input type="date" value={form.effective_from}
-                   onChange={(e) =>
-                     setForm({ ...form, effective_from: e.target.value })} />
+            {/* ⚠️ حقل التاريخ الأصلي للمتصفح ممنوع (المعماريّ): تقويمه
+                إنجليزيٌّ بصيغة MM/DD/YYYY — فيُقرأ ٠٨/٢٥/٢٠٢٦ يومًا ثامنًا من
+                شهرٍ خامسٍ وعشرين. و`DateField` يعرض DD/MM/YYYY بأسماء عربية. */}
+            <DateField value={form.effective_from || ""}
+                       onChange={(v: string) =>
+                         setForm({ ...form, effective_from: v })} />
           </label>
           <button className="btn btn-primary" onClick={submit}>
             {L("save")}
