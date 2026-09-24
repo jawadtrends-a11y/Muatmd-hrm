@@ -77,6 +77,14 @@ const T: Dict = {
   },
   leaving: { ar: "إنهاء قيد الإنجاز", en: "Leaving" },
   audit: { ar: "السجل الوظيفي", en: "Activity" },
+  shiftCurrent: { ar: "الفترة الحالية", en: "Current shift" },
+  shiftHistory: { ar: "سجل الإسنادات", en: "Assignment history" },
+  shiftAssign: { ar: "إسناد فترة", en: "Assign shift" },
+  shiftFrom: { ar: "سريان من", en: "Effective from" },
+  shiftTo: { ar: "إلى", en: "Until" },
+  shiftFlexible: { ar: "مرنة", en: "Flexible" },
+  shiftNone: { ar: "لا إسناد — يتبع فترة الشركة الافتراضية",
+               en: "No assignment — follows company default" },
   jcType: { ar: "النوع", en: "Type" },
   jcFrom: { ar: "يسري من", en: "Effective" },
   jcStatus: { ar: "الحالة", en: "Status" },
@@ -544,7 +552,7 @@ type JobChangeRow = {
 
 const TABS = [
   "personal", "job", "contract", "salary", "gosi", "bank",
-  "dependents", "contact", "documents", "files", "changes", "audit",
+  "dependents", "contact", "shift", "documents", "files", "changes", "audit",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -1405,6 +1413,7 @@ function ProfileInner({
     personal: IcUser, job: IcOrg, contract: IcDoc, salary: IcPayroll,
     gosi: IcCheck, bank: IcWallet, dependents: IcUsers, contact: IcUser,
     documents: IcDoc, files: IcDoc, changes: IcOrg, audit: IcClock,
+    shift: IcClock,
   };
 
   return (
@@ -1625,14 +1634,32 @@ function ProfileInner({
             { key: "primary_site_id", label: L("site"), kind: "select",
               options: sites.map((x: any) => ({
                 value: String(x.id), label: x.name_ar })) },
-            { key: "direct_manager_id", label: L("manager"),
+            // ⚠️ ق-٢٤٩: ثلاث علل في حقلٍ واحد — **الموظف يظهر خيارًا لنفسه**
+            // (فيصير مدير نفسه وتنكسر سلسلة الاعتماد)، **ولا خيار لإفراغه**،
+            // و`employment_id` الناقص كان يُرسَل `undefined` فيرفضه الخادم:
+            // «Field 'id' expected a number but got 'undefined'».
+            // ⚠️⚠️ **المفتاح `manager_id` لا `direct_manager_id`**: الخادم
+            // يُرسل `job.manager_id` (والاسم في `job.manager`)، فكان الحقل
+            // **يعرض «—» أبدًا وإن حُفظ المدير** — يظنّ المستخدم أن الحفظ فشل.
+            // وهي ثالث علّة اليوم من نوعها: الواجهة تقرأ مفتاحًا والخادم يُرسل
+            // آخر — والتسمية في العقد **جزءٌ من العقد**.
+            { key: "manager_id", label: L("manager"),
               kind: "select",
-              options: peers2.map((x: any) => ({
-                value: String(x.employment_id),
-                label: `${x.employee_no} — ${x.name_ar}` })) },
-            { key: "shift_id", label: L("shift"), kind: "select",
-              options: shifts.map((x: any) => ({
-                value: String(x.id), label: x.name_ar })) },
+              options: [
+                { value: "", label: "—" },
+                // ⚠️ `/employees/?all=1` يُرجع المعرّف باسم **`id`** لا
+                // `employment_id` — فكانت القيمة `"undefined"` نصًّا، ويرفضها
+                // الخادم: «Field 'id' expected a number but got 'undefined'».
+                ...peers2
+                  .filter((x: any) => x?.id != null
+                                      && String(x.id) !== String(employmentId))
+                  .map((x: any) => ({
+                    value: String(x.id),
+                    label: `${x.employee_no} — ${x.name_ar}` })),
+              ] },
+            // ⚠️ ق-٢٤٩: **أُزيل من هنا** — `Employment` لا يملك `shift_id`،
+            // والإسناد جدولٌ بتاريخ سريان (`ShiftAssignment`). وله الآن قسمه
+            // «فترة العمل»، الذي يسأل عن تاريخ السريان كما ينبغي.
             { key: "cost_center_id", label: L("costCenter"),
               kind: "select",
               options: costCenters.map((x: any) => ({
@@ -1895,6 +1922,10 @@ function ProfileInner({
           contacts={data.emergency_contacts} L={L} onChanged={load}
           savingContact={saving}
           onSaveContact={(d) => save("contact", d)} />
+      )}
+
+      {tab === "shift" && (
+        <ShiftSection empId={empId} canEdit={!data.is_own} L={L} />
       )}
 
       {tab === "documents" && (
@@ -2453,6 +2484,158 @@ function SalaryDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * قسم فترة العمل (ق-٢٤٩).
+ *
+ * ⚠️⚠️ كان `shift_id` حقلًا في «بيانات الوظيفة» — **و`Employment` لا يملكه**:
+ * الإسناد جدولٌ مستقل (`ShiftAssignment`) **بتاريخ سريان**، بلا API ولا شاشة.
+ * فكان الحفظ يُردّ ٤٠٠ «لا حقول قابلة للتعديل»، **وكل الموظفين على فترةٍ واحدة**.
+ *
+ * **وتاريخ السريان ليس تفصيلًا**: تغييرُ الفترة اليوم لا يُعيد كتابة حضور
+ * الشهر الماضي — فالماضي يبقى محسوبًا بفترته، والقسائم المعتمدة لا تتبدّل.
+ */
+function ShiftSection({ empId, canEdit, L }: {
+  empId: number | string;
+  canEdit: boolean;
+  L: (k: string) => string;
+}) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [err, setErr] = useState("");
+  const [form, setForm] = useState({
+    shift_id: "",
+    effective_from: new Date().toISOString().slice(0, 10),
+  });
+
+  const load = useCallback(() => {
+    setBusy(true);
+    apiGet<any[]>(`/employees/${empId}/shifts/`)
+      .then((d) => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]))
+      .finally(() => setBusy(false));
+  }, [empId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    apiGet<any[]>("/attendance/shifts/")
+      .then((d) => setShifts(Array.isArray(d) ? d : []))
+      .catch(() => setShifts([]));
+  }, []);
+
+  async function submit() {
+    setErr("");
+    if (!form.shift_id) { setErr(L("shiftAssign")); return; }
+    try {
+      await apiPost(`/employees/${empId}/shifts/`, form);
+      setAdding(false);
+      load();
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+    }
+  }
+
+  const current = rows.find((r) => r.is_current);
+
+  return (
+    <div className="card" style={{ padding: 20 }}>
+      <div style={{ display: "flex", alignItems: "center",
+                    justifyContent: "space-between", marginBottom: 16 }}>
+        <strong style={{ fontSize: ".95rem" }}>{L("shift")}</strong>
+        {canEdit && !adding && (
+          <button className="btn" onClick={() => setAdding(true)}>
+            {L("shiftAssign")}
+          </button>
+        )}
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 12 }}>{err}</div>}
+
+      {adding && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap",
+                      alignItems: "end", marginBottom: 18,
+                      padding: 14, background: "var(--bg-2)",
+                      borderRadius: "var(--radius-sm)" }}>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: ".8rem", color: "var(--ink-3)" }}>
+              {L("shift")}
+            </span>
+            <select value={form.shift_id}
+                    onChange={(e) => setForm({ ...form, shift_id: e.target.value })}>
+              <option value="">—</option>
+              {shifts.map((x) => (
+                <option key={x.id} value={x.id}>{x.name_ar}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: ".8rem", color: "var(--ink-3)" }}>
+              {L("shiftFrom")}
+            </span>
+            <input type="date" value={form.effective_from}
+                   onChange={(e) =>
+                     setForm({ ...form, effective_from: e.target.value })} />
+          </label>
+          <button className="btn btn-primary" onClick={submit}>
+            {L("save")}
+          </button>
+          <button className="btn" onClick={() => { setAdding(false); setErr(""); }}>
+            {L("cancel")}
+          </button>
+        </div>
+      )}
+
+      {busy ? null : current ? (
+        <div style={{ marginBottom: 18, padding: 14,
+                      background: "var(--teal-soft)",
+                      borderRadius: "var(--radius-sm)" }}>
+          <div style={{ fontSize: ".8rem", color: "var(--ink-3)", marginBottom: 4 }}>
+            {L("shiftCurrent")}
+          </div>
+          <strong>{current.shift_name}</strong>
+          <span style={{ color: "var(--ink-3)", marginInlineStart: 10 }}>
+            {current.is_flexible
+              ? L("shiftFlexible")
+              : `${current.start_time?.slice(0, 5)} – ${current.end_time?.slice(0, 5)}`}
+          </span>
+        </div>
+      ) : (
+        <div style={{ padding: 20, textAlign: "center", color: "var(--ink-3)" }}>
+          {L("shiftNone")}
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <>
+          <div style={{ fontSize: ".85rem", color: "var(--ink-3)", marginBottom: 8 }}>
+            {L("shiftHistory")}
+          </div>
+          <table style={{ width: "100%", fontSize: ".88rem" }}>
+            <thead>
+              <tr style={{ color: "var(--ink-3)", textAlign: "start" }}>
+                <th style={{ textAlign: "start", padding: "6px 0" }}>{L("shift")}</th>
+                <th style={{ textAlign: "start" }}>{L("shiftFrom")}</th>
+                <th style={{ textAlign: "start" }}>{L("shiftTo")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "8px 0" }}>{r.shift_name}</td>
+                  <td>{r.effective_from}</td>
+                  <td>{r.effective_to || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }

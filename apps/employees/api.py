@@ -988,6 +988,13 @@ def _apply_role(emp, role_id, actor):
 
     m = getattr(getattr(emp.person, "user", None),
                 "account_membership", None)
+    # ⚠️⚠️ ق-٢٤٩: **موظفٌ بلا حساب دخول لا عضوية له** — فكانت `m` تصير None
+    # ويُدرَج إسنادٌ بعضويةٍ فارغة، فترفضه سياسة العزل (تشترط أن تكون العضوية
+    # من نفس الحساب) **وينهار الطلب بخطأ قاعدة بيانات لا يفهمه أحد**:
+    # «new row violates row-level security policy». والصواب رسالةٌ تقول ما يُفعل.
+    if m is None:
+        raise ValueError(
+            "لا يمكن إسناد دورٍ لموظفٍ بلا حساب دخول — ادعُه للنظام أولًا")
 
     emp.role_assignments.all().delete()
     RoleAssignment.objects.create(
@@ -1045,6 +1052,8 @@ def update_employee_profile(request, employment_id):
 
     EMPLOYMENT_FIELDS = {
         "job_title_id", "department_id", "branch_id", "primary_site_id",
+        # ⚠️ ق-٢٤٩: الردّ يُسمّيه `manager_id` والحفظ كان يقبل
+        # `direct_manager_id` وحده — **اسمان لشيءٍ واحد**، فيُقبل الاثنان.
         "direct_manager_id", "job_grade_id", "job_step_id",
         "employment_type", "work_ratio",
         "contract_type", "contract_start_date", "contract_end_date",
@@ -1084,7 +1093,9 @@ def update_employee_profile(request, employment_id):
             setattr(p, key, value if value != "" else None
                     if key.endswith("_date") else value)
             changed.append(key)
-        elif key in EMPLOYMENT_FIELDS:
+        elif key == "manager_id" or key in EMPLOYMENT_FIELDS:
+            if key == "manager_id":
+                key = "direct_manager_id"
             if key == "allow_mobile_punch":
                 setattr(emp, key, _tri(value))
             else:
@@ -1096,6 +1107,16 @@ def update_employee_profile(request, employment_id):
     # ق-115: الدور — لا يُسنده إلا المالك أو الموارد، ولا يُسند
     # أعلى من دور المسنِد. ويُعالَج قبل الحفظ فيُردّ الرفض كاملًا.
     role_name = None
+    # ⚠️⚠️ ق-٢٤٩: **حفظُ حقلٍ كان يمحو دور الموظف**. الواجهة ترسل قسمًا كاملًا
+    # فيمرّ `system_role_id` فارغًا وإن لم يُقصد، و`_apply_role` أول ما يفعل
+    # `role_assignments.all().delete()` — **فمن عدّل المدير المباشر محا الدور**.
+    # فلا يُمسّ الدور إلا إن اختلف فعلًا عمّا هو مسنَدٌ الآن.
+    if "system_role_id" in d:
+        _cur = emp.role_assignments.first()
+        _cur_id = str(_cur.role_id) if _cur else ""
+        _new_id = str(d.get("system_role_id") or "")
+        if _cur_id == _new_id:
+            d.pop("system_role_id")
     if "system_role_id" in d:
         try:
             role_name = _apply_role(emp, d.get("system_role_id"),

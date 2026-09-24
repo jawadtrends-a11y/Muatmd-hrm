@@ -6,6 +6,7 @@ API الحضور والانصراف.
 """
 from datetime import date, datetime, timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -1421,3 +1422,79 @@ def my_overtime_for_date(request):
         "first_in": day.first_in,
         "last_out": day.last_out,
     })
+
+
+# ── إسناد فترة العمل لموظف (ق-٢٤٩) ─────────────────────────────
+#
+# ⚠️⚠️ النموذج موجودٌ منذ البداية **بلا API ولا شاشة** — فالمحرّك يقرؤه
+# (`presence.is_within_shift` و`rules.py`) ويقع على الفترة الافتراضية
+# للشركة حين لا يجد إسنادًا. فكان **كل الموظفين على فترةٍ واحدة**، ولا
+# سبيل لإعطاء موقعٍ دوامًا يخالف آخر.
+#
+# **والإسناد بتاريخ سريان لا حقلٌ بسيط**: تغييرُ الفترة اليوم **لا يُعيد
+# كتابة حضور الشهر الماضي** — فالماضي يبقى محسوبًا بفترته.
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def employment_shifts(request, employment_id):
+    """إسنادات فترة العمل لموظف — سردًا وإنشاءً."""
+    from datetime import date as _date
+
+    from apps.attendance.models import Shift, ShiftAssignment
+    from apps.employees.models import Employment
+
+    emp = _get_employment(request, employment_id, "attendance.view")
+    # ⚠️ تُرجع None لا تَرفع — فبلا هذا الفحص ينهار الطلب بـAttributeError
+    if emp is None:
+        return Response({"detail": "موظف غير معروف"}, status=404)
+
+    if request.method == "GET":
+        rows = (ShiftAssignment.objects
+                .filter(employment=emp).select_related("shift")
+                .order_by("-effective_from"))
+        return Response([{
+            "id": a.id, "shift_id": a.shift_id,
+            "shift_name": a.shift.name_ar,
+            "is_flexible": a.shift.is_flexible,
+            "start_time": str(a.shift.start_time),
+            "end_time": str(a.shift.end_time),
+            "effective_from": str(a.effective_from),
+            "effective_to": str(a.effective_to) if a.effective_to else None,
+            "is_current": a.effective_from <= _date.today()
+                          and (a.effective_to is None
+                               or a.effective_to >= _date.today()),
+        } for a in rows])
+
+    Gate.require(request.user, "attendance.shifts")
+
+    shift_id = request.data.get("shift_id")
+    eff = request.data.get("effective_from") or str(_date.today())
+    if not shift_id:
+        return Response({"detail": "اختر فترة العمل"}, status=400)
+    shift = Shift.objects.filter(company_id=emp.company_id,
+                                 id=shift_id, is_active=True).first()
+    if shift is None:
+        return Response({"detail": "فترة عمل غير معروفة"}, status=400)
+
+    try:
+        eff_date = _date.fromisoformat(eff)
+    except ValueError:
+        return Response({"detail": f"تاريخ غير صالح: {eff}"}, status=400)
+
+    with transaction.atomic():
+        # ⚠️ **الإسناد السابق يُغلق يومًا قبل الجديد** — فلا يوم بفترتين
+        prev = (ShiftAssignment.objects
+                .filter(employment=emp, effective_from__lt=eff_date)
+                .order_by("-effective_from").first())
+        if prev and (prev.effective_to is None or prev.effective_to >= eff_date):
+            prev.effective_to = eff_date - timedelta(days=1)
+            prev.save(update_fields=["effective_to"])
+        a, created = ShiftAssignment.objects.update_or_create(
+            employment=emp, effective_from=eff_date,
+            defaults={"account_id": emp.account_id,
+                      "company_id": emp.company_id, "shift": shift,
+                      "effective_to": None})
+    return Response({"id": a.id, "created": created,
+                     "shift_name": shift.name_ar,
+                     "effective_from": str(eff_date)},
+                    status=201 if created else 200)

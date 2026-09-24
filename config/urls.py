@@ -205,6 +205,9 @@ urlpatterns = [
     path("api/me/overtime/", attendance_api.my_overtime_for_date,
          name="my-overtime"),
     path("api/attendance/shifts/", attendance_api.shifts, name="shifts"),
+    # ق-٢٤٩: إسناد فترة عملٍ لموظفٍ بعينه — بتاريخ سريان
+    path("api/employees/<int:employment_id>/shifts/",
+         attendance_api.employment_shifts, name="employment-shifts"),
     path("api/attendance/shifts/<int:shift_id>/", attendance_api.shift_detail, name="shift-detail"),
     # أجهزة البصمة
     # استقبال البصمات من الأجهزة (ق-84) — يصادق بمفتاح الجهاز
