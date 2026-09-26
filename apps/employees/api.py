@@ -1093,9 +1093,11 @@ def update_employee_profile(request, employment_id):
             setattr(p, key, value if value != "" else None
                     if key.endswith("_date") else value)
             changed.append(key)
-        elif key == "manager_id" or key in EMPLOYMENT_FIELDS:
-            if key == "manager_id":
-                key = "direct_manager_id"
+        elif key in ("manager_id", "site_id") or key in EMPLOYMENT_FIELDS:
+            # ⚠️ الردّ يُسمّيهما `manager_id` و`site_id`، والحفظ يعرف
+            # `direct_manager_id` و`primary_site_id` — **اسمان لشيءٍ واحد**
+            key = {"manager_id": "direct_manager_id",
+                   "site_id": "primary_site_id"}.get(key, key)
             if key == "allow_mobile_punch":
                 setattr(emp, key, _tri(value))
             else:

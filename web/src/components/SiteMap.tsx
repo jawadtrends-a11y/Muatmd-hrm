@@ -164,8 +164,18 @@ export default function SiteMap({
       return;
     }
     const { map } = mapRef.current;
-    if (map.getZoom() < 12) {
-      map.flyTo({ center: [longitude, latitude], zoom: 16 });
+    // ⚠️⚠️ ق-٢٥٧: كان الانتقال مشروطًا بـ`getZoom() < 12` — فتنتقل الخريطة مرّةً
+    // واحدة عند أول رقم، **ثم لا تتحرّك أبدًا** (فالتقريب صار ١٦). فمن يكتب
+    // الإحداثيات رقمًا رقمًا يرى خريطةً واقفةً على موضعٍ خاطئ — ورأى جوادُ
+    // **رومانيا ثم بحر قزوين** وإحداثياتُه رياضيّةٌ صحيحة، فظنّ الحفظ معكوسًا.
+    // ⚠️ **وهو مربكٌ بما يكفي ليُفسد الإعداد**: قد يُبدّل المستخدم القيمتين
+    // ليُصلح ما يراه، **فتنعكسان فعلًا** وتُرفض بصمات موظفيه كلّها.
+    const c = map.getCenter();
+    const moved = Math.abs(c.lat - latitude) > 1e-6
+                  || Math.abs(c.lng - longitude) > 1e-6;
+    if (moved) {
+      map.flyTo({ center: [longitude, latitude],
+                  zoom: Math.max(map.getZoom(), 16) });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, latitude, longitude]);

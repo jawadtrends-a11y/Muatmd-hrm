@@ -1631,7 +1631,10 @@ function ProfileInner({
               kind: "select",
               options: depts2.map((x: any) => ({
                 value: String(x.id), label: x.name_ar })) },
-            { key: "primary_site_id", label: L("site"), kind: "select",
+            // ⚠️ **`site_id` لا `primary_site_id`**: الخادم يُرسل `job.site_id`
+            // (والاسم في `job.site`) — فكان موقع العمل **يُحفظ ولا يظهر أبدًا**،
+            // كالمدير المباشر قبله. والتسمية في العقد **جزءٌ من العقد**.
+            { key: "site_id", label: L("site"), kind: "select",
               options: sites.map((x: any) => ({
                 value: String(x.id), label: x.name_ar })) },
             // ⚠️ ق-٢٤٩: ثلاث علل في حقلٍ واحد — **الموظف يظهر خيارًا لنفسه**
