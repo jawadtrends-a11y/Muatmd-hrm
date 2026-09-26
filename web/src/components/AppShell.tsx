@@ -1,5 +1,7 @@
 "use client";
 
+import AuthImage from "@/components/AuthImage";
+
 /**
  * هيكل التطبيق: قائمة جانبية فاتحة + شريط علوي.
  *
@@ -100,7 +102,11 @@ const T: Dict = {
   renew: { ar: "تجديد", en: "Renew" },
 };
 
+type ActiveCompany = { id: number; name_ar: string;
+                       logo_url?: string | null };
+
 type Workspace = {
+  active_company?: ActiveCompany | null;
   person: {
     display_name: string;
     first_name?: string;
@@ -574,12 +580,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           padding: "0 20px", borderBottom: "1px solid var(--line)",
           fontWeight: 600, fontSize: "1.05rem", color: "var(--teal)",
         }}>
-          معتمد
-          <span className="muted" style={{
-            fontSize: ".78rem", fontWeight: 500, marginInlineStart: 8,
-          }}>
-            HR
-          </span>
+          {/* ⚠️ **النظام يُباع لشركات — وكلٌّ يرى هويّته لا هوية المزوّد.**
+              فشعارُ الشركة يتصدّر قائمتها إن رفعته، ويبقى «معتمد HR» لمن
+              لم يرفع. وكان الشعار يُرفع ويُحفظ **ولا يُعرض في أي موضع**. */}
+          {ws?.active_company?.logo_url ? (
+            <>
+              {/* ⚠️ `<img>` عاديّة تُطلب بلا رمز فتردّ ٤٠١ — فتُجلب بالرمز */}
+              <AuthImage
+                src={ws.active_company.logo_url}
+                alt={ws.active_company.name_ar}
+                style={{ height: 30, maxWidth: 130, objectFit: "contain" }}
+              />
+              <span className="muted" style={{
+                fontSize: ".74rem", fontWeight: 500, marginInlineStart: 8,
+              }}>
+                HR
+              </span>
+            </>
+          ) : (
+            <>
+              معتمد
+              <span className="muted" style={{
+                fontSize: ".78rem", fontWeight: 500, marginInlineStart: 8,
+              }}>
+                HR
+              </span>
+            </>
+          )}
         </div>
 
         <nav style={{ padding: 12, flex: 1, overflowY: "auto" }}>

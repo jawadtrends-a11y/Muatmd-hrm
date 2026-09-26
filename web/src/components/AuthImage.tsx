@@ -1,51 +1,56 @@
 "use client";
 
-/**
- * صورة محمية بالمصادقة.
- *
- * وسم img لا يرسل ترويسة Authorization، فرابط /api/files/3/ يُردّ
- * 401 وتظهر الصورة مكسورة. فنجلبها بالرمز ونعرضها من الذاكرة.
- *
- * والبديل — رابط موقّت أو كوكي — يفتح الملف لمن يعرف المسار،
- * وق-61 ينصّ: من يعرف المسار لا يصل، ومن له حق الوصول يصل.
- */
 import { useEffect, useState } from "react";
 
-import { API_BASE, getToken } from "@/lib/api";
+import { getToken } from "@/lib/api";
 
+/**
+ * صورةٌ من مسارٍ محميّ.
+ *
+ * ⚠️⚠️ **`<img src>` لا يُرسل رأس `Authorization` أبدًا.** والمصادقة عندنا
+ * برمز `Bearer`، فكل صورةٍ من `/api/files/<id>/` تُطلب **بلا رمز** فيردّ
+ * الخادم ٤٠١ — **وتظهر مكسورة**. وهي علّةٌ تمسّ كل صورة: الشعار وصور
+ * الموظفين والوثائق.
+ *
+ * فتُجلب هنا بـ`fetch` (ومعها الرمز)، وتُحوّل إلى `blob:` يقرؤه المتصفح.
+ * ⚠️ **ويُحرَّر العنوان عند الخروج** — وإلا تسرّبت الذاكرة مع كل تنقّل.
+ */
 export default function AuthImage({
-  src, alt = "", style, className,
+  src, alt, style, className,
 }: {
-  /** مسار الملف كما يرسله الخادم — مثل /files/3/ */
-  src: string | null | undefined;
-  alt?: string;
+  src: string;
+  alt: string;
   style?: React.CSSProperties;
   className?: string;
 }) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!src) { setUrl(null); return; }
+    let revoked: string | null = null;
     let alive = true;
-    let objectUrl: string | null = null;
 
-    const headers: Record<string, string> = {};
-    const t = getToken();
-    if (t) headers["Authorization"] = `Bearer ${t}`;
-
-    fetch(src.startsWith("http") ? src : `${API_BASE}${src}`,
-          { headers, credentials: "include" })
-      .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
-      .then((b) => {
+    (async () => {
+      try {
+        const base = process.env.NEXT_PUBLIC_API_BASE || "/api";
+        const path = src.startsWith("/api/") ? src.slice(4) : src;
+        const t = getToken();
+        const res = await fetch(`${base}${path}`, {
+          headers: t ? { Authorization: `Bearer ${t}` } : {},
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
         if (!alive) return;
-        objectUrl = URL.createObjectURL(b);
-        setUrl(objectUrl);
-      })
-      .catch(() => { if (alive) setUrl(null); });
+        revoked = URL.createObjectURL(blob);
+        setUrl(revoked);
+      } catch {
+        /* تُترك فارغةً — ولا تُكسر الصفحة */
+      }
+    })();
 
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (revoked) URL.revokeObjectURL(revoked);
     };
   }, [src]);
 

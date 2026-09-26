@@ -117,9 +117,16 @@ def workspace(request):
             "status": account.status,
             "locale": account.default_locale,
         },
+        # ⚠️ **الشعار جزءٌ من هوية الشركة في الواجهة** — وكان الردّ يحمل الاسم
+        # وحده، فلا سبيل للواجهة إلى شعارٍ رفعه العميل. ويُقدَّم برابط
+        # `/api/files/<id>/` لا بمسار القرص: فالملفّات محميّةٌ بالصلاحية.
         "active_company": (
-            {"id": active.id, "name_ar": active.legal_name_ar} if active else None
+            {"id": active.id, "name_ar": active.legal_name_ar,
+             "logo_url": (f"/api/files/{active.logo_id}/"
+                          if active.logo_id else None)}
+            if active else None
         ),
+        # ⚠️ وقائمة الشركات كذلك — فمن يُبدّل شركته يرى شعارها
         "companies": [
             {"id": c.id, "name_ar": c.legal_name_ar, "code": c.code}
             for c in account.companies.filter(id__in=allowed_ids)
