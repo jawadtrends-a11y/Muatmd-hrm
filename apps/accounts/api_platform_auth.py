@@ -25,7 +25,11 @@ def _client_ip(request):
 def _set_session_cookie(response, token, hours):
     response.set_cookie(
         auth.COOKIE_NAME, token, max_age=hours * 3600,
-        httponly=True, secure=SECURE_COOKIE, samesite="Strict",
+        # ⚠️⚠️ **`Strict` يمنع إرسال الكوكي بعد أيّ تنقّلٍ من خارج الصفحة** —
+        # فيدخل المستخدم، ثم يُحوّله التطبيق للوحة، **فلا يُرسل الكوكي**
+        # ويُطرد فورًا لصفحة الدخول. و`Lax` يحمي من CSRF بالقدر نفسه
+        # لطلبات POST، ويسمح بالتنقّل العاديّ.
+        httponly=True, secure=SECURE_COOKIE, samesite="Lax",
         path="/")
     return response
 
