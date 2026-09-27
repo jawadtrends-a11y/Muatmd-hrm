@@ -29,6 +29,11 @@ BASIC_FEATURES = [
     "payroll", "pay_additions", "pay_deductions",
     "attendance_deductions", "wps_export", "payroll_types",
     "custom_dashboards", "reports_basic", "support_basic",
+    # ⚠️⚠️ ق-٢٧٢: **مواقع العمل أساسٌ للبصمة لا ميزةَ تتبّع.** و`mobile_punch`
+    # في الباقات الأربع — فمن اشترى الأساسية بلا `work_sites` **اشترى بصمةً
+    # لا تعمل**: `verify_location` يرفض بلا إسناد، ولا شاشةَ تُسند.
+    # (و`employee_tracking` تبقى للتتبّع الحيّ في المؤسسية فأعلى.)
+    "work_sites",
 ]
 
 PREMIUM_FEATURES = BASIC_FEATURES + [
