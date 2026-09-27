@@ -1166,6 +1166,37 @@ def decide_delegation_view(request, delegation_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def revoke_leave_view(request, request_id):
+    """
+    ⚠️ إلغاء إجازةٍ **معتمدة** — بسببٍ إلزاميّ.
+
+    ⚠️ **والصلاحية `leaves.approve_all` لا `leaves.manage`**: الثانية مقيَّدة
+    بميزةٍ مدفوعة (أنواع الإجازات المخصّصة)، **وإلغاءُ إجازةٍ تصحيحٌ لازم لا
+    ميزةٌ تُباع**. ومن يعتمد لكل المنشأة يملك إلغاء ما اعتُمد.
+    (والموظف يُلغي المعلَّق وحده عبر `cancel_request_view`.)
+    """
+    from apps.leaves.services.balances import LeaveError
+    from apps.leaves.services.leave_requests import revoke_approved_leave
+
+    Gate.require(request.user, "leaves.approve_all")
+    r = Gate.filter_queryset(
+        request.user, "leaves.approve_all", Request.objects.all()
+    ).filter(id=request_id).first()
+    if r is None:
+        return Response({"detail": "الطلب غير موجود"}, status=404)
+    person = getattr(request.user, "person", None)
+    try:
+        out = revoke_approved_leave(
+            request_obj=r, by_person=person,
+            reason=request.data.get("reason", ""))
+    except LeaveError as e:
+        return Response({"detail": str(e), "code": "cannot_revoke"},
+                        status=400)
+    return Response(out)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def cancel_request_view(request, request_id):
     """
     إلغاء طلب — لمقدّمه وحده، وما لم يقرّر فيه معتمِد.

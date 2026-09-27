@@ -604,6 +604,10 @@ urlpatterns = [
     path("api/delegations/<int:delegation_id>/decide/", leaves_api.decide_delegation_view, name="delegation-decide"),
     # إلغاء الطلب — لمقدّمه قبل أول قرار (ق-81)
     path("api/requests/<int:request_id>/cancel/", leaves_api.cancel_request_view, name="request-cancel"),
+    # ⚠️ ق-٢٦٧: إلغاء إجازةٍ **معتمدة** — للموارد، بسببٍ إلزاميّ.
+    # (و`cancel` أعلاه لمقدّم الطلب وما دام معلَّقًا وحده.)
+    path("api/requests/<int:request_id>/revoke/",
+         leaves_api.revoke_leave_view, name="request-revoke"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

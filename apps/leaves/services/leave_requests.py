@@ -339,3 +339,105 @@ def unpaid_leave_days_in_period(employment, year, month):
                     total += 1
                 cur += timedelta(days=1)
     return total
+
+
+# ══════════ إلغاء إجازةٍ معتمدة (ق-٢٦٧) ══════════
+
+@transaction.atomic
+def revoke_approved_leave(*, request_obj, by_person, reason):
+    """
+    إلغاء إجازةٍ **معتمدةٍ ومطبَّقة** — للموارد البشرية.
+
+    ⚠️⚠️ **لم يكن لها سبيل.** `cancel_request` لمقدّم الطلب وما دام معلَّقًا
+    فقط، ولا شاشةَ لتسوية الرصيد — **فإجازةٌ اعتُمدت لا رجعةَ فيها**. وهي
+    حالةٌ واقعيّةٌ يوميّة: الموظف يعود مبكّرًا، أو تستدعيه الشركة لضرورة،
+    أو يمرض فتتحوّل لمرضيّة. **ورصيدُه مخصومٌ وأيّامه مسجّلةٌ إجازةً.**
+
+    ⭐ **قرار جواد: إلغاءٌ كامل** — ويُقدَّم طلبٌ جديد على الجزء المرغوب إن
+    كانت أكثر من يوم. **وما صُرف في مسيرٍ مغلق لا يُمسّ، والفرق يُسوّى في
+    المسير التالي** (ق-٢٦٦).
+
+    والعكس يمسّ ثلاثة:
+      ١ **الرصيد** يُردّ — عكس `consume` بالضبط
+      ٢ ⭐ **`applied=False`** — وهو المفتاح: `leave_dates_in_range` تشترطه،
+        فبدونه تبقى الأيّام إجازةً مهما فعلنا
+      ٣ **الأيّام تُعاد** — وإشارة ق-٢٦٢ تكفلها عند الحفظ
+    """
+    from apps.leaves.services.balances import ensure_balance
+
+    if request_obj.request_type != RequestType.LEAVE:
+        raise LeaveError("ليس طلب إجازة")
+    if request_obj.status != RequestStatus.APPROVED:
+        raise LeaveError(
+            f"الطلب {request_obj.get_status_display()} — لا يُلغى هنا")
+    if not str(reason or "").strip():
+        # ⚠️ **الإلغاء يُعلَّل**: قرارٌ يمسّ رصيدًا ومالًا، فيُراجَع
+        raise LeaveError("اكتب سبب الإلغاء")
+
+    payload = dict(request_obj.payload or {})
+    employment = request_obj.employment
+    restored = "0"
+
+    if payload.get("applied"):
+        leave_type = LeaveType.objects.get(
+            company=request_obj.company, code=payload["leave_type"])
+        start = date.fromisoformat(payload["start_date"])
+        days = Decimal(str(payload["days"]))
+        bal = ensure_balance(employment, leave_type, start.year)
+        bal.consumed -= days
+        bal.save(update_fields=["consumed", "updated_at"])
+        restored = str(days)
+
+    _revoke_retro(request_obj, by_person, reason)
+
+    payload["applied"] = False
+    payload["revoked_at"] = timezone.now().isoformat()
+    payload["revoke_reason"] = str(reason).strip()
+    request_obj.payload = payload
+    request_obj.status = RequestStatus.CANCELLED
+    request_obj.closed_at = timezone.now()
+    request_obj.save(update_fields=["payload", "status", "closed_at",
+                                    "updated_at"])
+
+    from apps.core.services.audit import log_action
+    log_action(
+        instance=request_obj, action="update", actor=by_person,
+        label=request_obj.request_no,
+        summary=f"ألغت الموارد إجازةً معتمدة — {reason}", channel="web")
+
+    return {"restored_days": restored, "status": request_obj.status}
+
+
+def _revoke_retro(request_obj, by_person, reason):
+    """
+    ⚠️⚠️ **وللإجازة أثرٌ ماليٌّ ثانٍ**: `_retro_leave` (ق-٦٩) تُنشئ تسويةً
+    تردّ للموظف خصمَ أيّامٍ كانت محسوبةً غيابًا في مسيرٍ **أُغلق** قبل اعتماد
+    إجازته. فإلغاء الإجازة بلا عكسها **يترك الموظف قابضًا تعويضًا عن إجازةٍ
+    لم تعد قائمة**.
+
+    والعكس يختلف بحالها:
+      ⭐ **معلَّقةٌ لم تُصرف** → تُلغى (`CANCELLED`) — أنظف، ولا أثر ماليّ
+      ⚠️ **مُدرجةٌ في مسيرٍ صُرف** → **قيدٌ مضادّ** لا حذف: فالمصروف لا يُمحى،
+        والفرق يُسترد في المسير التالي (ق-٢٦٦).
+    """
+    from apps.payroll.models_retro import (RetroAdjustment, RetroSource,
+                                           RetroStatus)
+    from apps.payroll.services.retro import record_adjustment
+
+    for adj in RetroAdjustment.objects.filter(
+            source_request=request_obj, source=RetroSource.LEAVE):
+        if adj.status in (RetroStatus.PENDING, RetroStatus.SELECTED,
+                          RetroStatus.DEFERRED):
+            adj.status = RetroStatus.CANCELLED
+            adj.reason_ar = (f"{adj.reason_ar} — أُلغيت بإلغاء الإجازة")[:200]
+            adj.save(update_fields=["status", "reason_ar", "updated_at"])
+        elif adj.status == RetroStatus.MERGED:
+            # ⚠️ صُرفت فعلًا — قيدٌ مضادّ يستردّها في المسير التالي
+            record_adjustment(
+                employment=adj.employment,
+                year=adj.period_year, month=adj.period_month,
+                source=RetroSource.LEAVE,
+                amount_before=adj.amount, amount_after=Decimal("0"),
+                reason_ar=(f"استرداد تسوية إجازة {request_obj.request_no} "
+                           f"— أُلغيت: {reason}")[:200],
+                source_request=request_obj, actor=by_person)
