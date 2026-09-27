@@ -328,6 +328,12 @@ def admin_activate(request, account_id):
             # ق-٢٧١: نهايةٌ صريحةٌ للاتفاق اليدويّ — تُهمَل إن لم تُرسَل
             period_end=_opt_date(request.data.get("period_end")))
 
+    # ⚠️⚠️ ق-٢٧٣: **حزمة المزايا مخزّنة ٥ دقائق** — فتفعيلُ اشتراكٍ بلا
+    # إبطالها **لا يظهر أثره**: العميل يدفع ويبقى محجوبًا، ومن فعّل من
+    # اللوحة يظنّ التفعيل فشل. والاشتراك للحساب فتُمسح **كل شركاته**.
+    from apps.core.features.gate import Features as _F
+    _F.invalidate_account(acc.id)
+
     _log(request, "subscription.activate", account=acc,
          detail={"plan": plan.code, "cycle": cycle,
                  "until": str(sub.current_period_end),

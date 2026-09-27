@@ -165,6 +165,12 @@ def plan_detail(request, plan_id):
             PlanFeature.objects.update_or_create(
                 plan=p, feature_key=k, defaults={"value": v})
 
+    # ⚠️⚠️ ق-٢٧٣: **تعديلُ باقةٍ يمسّ كل مشتركيها** — لا شركةً بعينها،
+    # **ولا سبيل لمعرفتهم من الذاكرة**. فمن غيّر مزايا الأساسية غيّر ما
+    # يراه كل عملائها، **ويبقى التغيير بلا أثرٍ خمس دقائق** بلا مسحٍ شامل.
+    from apps.core.features.gate import Features as _F
+    _F.invalidate_all()
+
     return Response(_plan_json(p))
 
 
@@ -267,6 +273,9 @@ def admin_feature_detail(request, feature_id):
     # ⚠️ is_implemented و guarded_at لا يُعدَّلان من اللوحة —
     # فالحراسة من الكود، وادّعاؤها بضغطة زرّ يبيع وهمًا.
     f.save()
+    # ⚠️ ق-٢٧٣: تعديلُ ميزةٍ يمسّ كل من يعتمدها — فالمسح شامل
+    from apps.core.features.gate import Features as _F
+    _F.invalidate_all()
     _log(request, "feature.update", detail={"key": f.feature_key})
     return Response({"id": f.id, "feature_key": f.feature_key})
 
@@ -285,5 +294,8 @@ def admin_features_sync(request):
     from apps.accounts.services.plans import sync_feature_registry
 
     out = sync_feature_registry()
+    # ⚠️ ق-٢٧٣: مزامنةُ السجلّ قد تُضيف ميزةً أو تُغيّرها — والمسح شامل
+    from apps.core.features.gate import Features as _F
+    _F.invalidate_all()
     _log(request, "feature.sync", detail=out)
     return Response(out)

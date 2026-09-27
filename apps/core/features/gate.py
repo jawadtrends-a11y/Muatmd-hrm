@@ -108,6 +108,35 @@ class Features:
         cache.delete(cls._cache_key(company_id))
 
     @classmethod
+    def invalidate_account(cls, account_id: int):
+        """
+        ⚠️⚠️ ق-٢٧٣: **الاشتراك للحساب والذاكرة للشركة.** فتفعيلُ اشتراكٍ
+        يغيّر مزايا **كل شركات الحساب**، ومسحُ واحدةٍ يترك البقيّة على
+        باقتها القديمة حتى تنقضي المهلة (٥ دقائق).
+        """
+        from apps.accounts.models import Company
+
+        for cid in Company.objects.filter(
+                account_id=account_id).values_list("id", flat=True):
+            cache.delete(cls._cache_key(cid))
+
+    @classmethod
+    def invalidate_all(cls):
+        """
+        ⚠️⚠️ **تعديلُ باقةٍ أو ميزةٍ يمسّ كل عملائها** — لا شركةً بعينها.
+        فمن غيّر مزايا الباقة الأساسية غيّر ما يراه كل مشتركيها، **ولا
+        سبيل لمعرفتهم من الذاكرة**. والمسح الشامل مقبول: الحزمة تُبنى
+        باستعلامٍ واحدٍ رخيص، والتغيير نادر.
+        """
+        try:
+            cache.clear()
+        except Exception:  # noqa: BLE001
+            # ⚠️ فشلُ المسح لا يُسقط الحفظ — والمهلة تُصلحه خلال ٥ دقائق
+            import logging
+            logging.getLogger("muatmd.features").exception(
+                "features_cache_clear_failed")
+
+    @classmethod
     def value(cls, company_id: int, feature_key: str):
         if feature_key not in FEATURE_KEYS:
             raise UnknownFeature(f"ميزة غير مسجّلة: {feature_key}")
