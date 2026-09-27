@@ -207,3 +207,47 @@ def absence_sweep(self):
     for acc in ids:
         process_account_absences.apply_async(kwargs={"account_id": acc})
     return {"accounts": len(ids)}
+
+
+# ══════════ إعادة الاحتساب بأثرٍ رجعيّ (ق-٢٦٢) ══════════
+
+@shared_task(base=AccountTask, bind=True, max_retries=2, default_retry_delay=60)
+def recompute_employment_days(self, *, account_id, employment_id,
+                              start_date, end_date):
+    """
+    ⚠️ تُستدعى حين يُدخَل ما يمسّ الماضي: إجازةٌ تُعتمد بعد أيام، أو إعفاء.
+    وفي الخلفية لا في الطلب — فقد تشمل شهرًا كاملًا.
+    """
+    from datetime import date as _d
+
+    from apps.attendance.services.recompute import recompute_employment
+    from apps.employees.models import Employment
+
+    emp = Employment.objects.filter(id=employment_id).first()
+    if emp is None:
+        return {"skipped": "no_employment"}
+    recompute_employment(
+        employment=emp,
+        start_date=_d.fromisoformat(str(start_date)),
+        end_date=_d.fromisoformat(str(end_date)))
+    return {"employment_id": employment_id}
+
+
+@shared_task(base=AccountTask, bind=True, max_retries=2, default_retry_delay=60)
+def recompute_company_days(self, *, account_id, company_id,
+                           start_date, end_date, branch_id=None):
+    """⚠️ عطلةٌ تُضاف أو تُعدَّل → كل موظفي الشركة (أو الفرع) في مداها."""
+    from datetime import date as _d
+
+    from apps.accounts.models import Company
+    from apps.attendance.services.recompute import recompute_company
+
+    comp = Company.objects.filter(id=company_id).first()
+    if comp is None:
+        return {"skipped": "no_company"}
+    n = recompute_company(
+        company=comp,
+        start_date=_d.fromisoformat(str(start_date)),
+        end_date=_d.fromisoformat(str(end_date)),
+        branch_id=branch_id)
+    return {"company_id": company_id, "count": n}

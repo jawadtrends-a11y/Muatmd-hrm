@@ -60,17 +60,28 @@ def compute_day(*, work_date, punches, shift=None, is_holiday=False,
     if is_on_leave:
         return DayComputation(work_date, DayStatus.LEAVE, None, None,
                               0, 0, 0, 0, count, ["في إجازة"])
-    # الإجازة تسبقه: من في إجازة بلا أجر يبقى LEAVE فلا يُدفع له.
-    # والعطلة بعده: المعفيّ لا يُطالَب أصلًا فلا معنى لتمييزها.
+    # ⚠️⚠️ ق-٢٦٣: **العطلة والإجازة تُطبعان فوق الإعفاء** (قرار جواد).
+    # كان الإعفاء يسبق العطلة بحجّة أن المعفيّ لا يُطالَب أصلًا — لكنّ
+    # **الإعفاء إعفاءٌ من البصمة لا حالةُ تواجد**: فمعفيٌّ في عطلةٍ رسميّة
+    # كان يظهر «معفيّ»، فلا يعرف أحدٌ أين هو ولا تظهر العطلة في سجلّه.
+    # والأثر الماليّ واحد (لا خصم في الحالتين)، **لكنّ التقرير يصير صادقًا**.
+    if is_holiday:
+        return DayComputation(work_date, DayStatus.HOLIDAY, None, None,
+                              0, 0, 0, 0, count, ["عطلة"])
     if is_exempt:
+        # ⚠️ **والراحة الأسبوعيّة كالعطلة**: تُطبع فوق الإعفاء ليظهر سجلّ
+        # المعفيّ متّسقًا مع بقيّة الموظفين. ومن لا فترة عمل له لا راحةَ
+        # تُحتسب له، فيبقى «معفيّ» — وهو الصحيح.
+        if shift is not None and shift.working_days:
+            _wd = (work_date.weekday() + 1) % 7      # 0=الأحد
+            if _wd not in shift.working_days and not punches:
+                return DayComputation(work_date, DayStatus.WEEKEND, None,
+                                      None, 0, 0, 0, 0, 0, ["راحة أسبوعية"])
         return DayComputation(work_date, DayStatus.EXEMPT,
                               punches[0] if punches else None,
                               punches[-1] if punches else None,
                               _worked_minutes(punches), 0, 0, 0, count,
                               ["معفيّ من البصمة"])
-    if is_holiday:
-        return DayComputation(work_date, DayStatus.HOLIDAY, None, None,
-                              0, 0, 0, 0, count, ["عطلة"])
 
     if shift is None:
         status = DayStatus.PRESENT if punches else DayStatus.NOT_SCHEDULED
