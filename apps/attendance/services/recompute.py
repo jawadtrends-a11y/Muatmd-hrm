@@ -29,6 +29,37 @@ def recompute_employment(*, employment, start_date, end_date):
     process_employment_days(employment=employment, start_date=start_date,
                             end_date=end_date, force=True)
     _drop_stale_deductions(employment, start_date, end_date)
+    _rebuild_summaries(employment, start_date, end_date)
+
+
+def _rebuild_summaries(employment, start_date, end_date):
+    """
+    ⚠️⚠️ **الملخّص الشهريّ يُقرأ مرّةً ولا يُعاد.** يُبنى عند احتساب المسير،
+    ثم تُصحَّح الأيّام بعده (عطلةٌ تُضاف، إجازةٌ تُعتمد) **فيبقى حاملًا الأرقام
+    القديمة**: ٢٢٥ يوم غياب في الملخّص مقابل ١٧١ فعليًّا — فجوةُ **٥٤ يومًا**.
+
+    ⚠️ **والمحرّك محصَّن** (ق-٢٣٤: يُعيد بناءه قبل الحساب)، لكنّ **التقارير
+    والشاشات تقرأ المخزَّن** — فتعرض غيابًا زال.
+    """
+    from apps.attendance.services.processing import build_monthly_summary
+
+    seen = set()
+    cur = start_date
+    while cur <= end_date:
+        key = (cur.year, cur.month)
+        if key not in seen:
+            seen.add(key)
+            try:
+                build_monthly_summary(employment=employment,
+                                      year=cur.year, month=cur.month)
+            except Exception:
+                # ⚠️ فشلُ شهرٍ لا يُوقف البقيّة
+                logger.exception("summary_rebuild_failed",
+                                 extra={"employment_id": employment.id,
+                                        "period": f"{cur.year}-{cur.month}"})
+        cur = cur.replace(day=1)
+        cur = (cur.replace(year=cur.year + 1, month=1) if cur.month == 12
+               else cur.replace(month=cur.month + 1))
 
 
 def _drop_stale_deductions(employment, start_date, end_date):
