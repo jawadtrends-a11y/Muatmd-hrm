@@ -906,6 +906,19 @@ def approve_run(run, approved_by_person):
             f"بانتظار اعتماد «{pending.title or pending.role.name_ar}» "
             f"(الخطوة {pending.step_order}) — لا يُعتمد قبلها")
 
+    # ⭐ ق-٢٦٦: الخصوم المتأخّرة تُوسَم بهذا المسير عند اعتماده — فلا تُصرف
+    # مرّتين. (والاحتساب يضمّها للحساب ولا يَسِمها: قد يُعاد الاحتساب مرارًا.)
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus)
+    from apps.payroll.services.period import run_range as _rr
+
+    _s, _e = _rr(run)
+    AttendanceDeduction.objects.filter(
+        company_id=run.company_id,
+        status=AttendanceDeductionStatus.APPLIED,
+        settled_in_run__isnull=True,
+        work_date__lte=_e).update(settled_in_run=run)
+
     run.status = PayrollRunStatus.APPROVED
     run.approved_at = timezone.now()
     run.approved_by_person = approved_by_person
@@ -1140,7 +1153,35 @@ def sync_attendance_deductions(*, run, employment, settings_obj,
                 applied_total[kind] += dec.amount
                 applied_qty[kind] += dec.quantity
 
+    _settle_backlog(run, employment, start, applied_total, applied_qty)
     return applied_total, applied_qty
+
+
+def _settle_backlog(run, employment, start, applied_total, applied_qty):
+    """
+    ⚠️⚠️ **تسوية الخصوم المتأخّرة** (قرار جواد).
+
+    الخصم يتبع تاريخه، والمسير يقرأ شهره وحده — فتصحيحٌ لشهرٍ **مغلق**
+    (عطلةٌ تُدخَل متأخّرة، **إجازةٌ معتمدةٌ تُلغى**) يُنشئ خصمًا بتاريخٍ مضى
+    **لا يصل أيّ مسيرٍ أبدًا، فيضيع المال**.
+
+    ⭐ فيُضمّ هنا كلُّ خصمٍ **معتمَدٍ** سابقٍ لم يُسوَّ بعد، ويُوسَم بهذا
+    المسير فلا يتكرّر. ⚠️ **والمعلّق لا يُضمّ** — قرارُه لم يُتّخذ.
+    """
+    from apps.payroll.models import (AttendanceDeduction,
+                                     AttendanceDeductionStatus)
+
+    back = AttendanceDeduction.objects.filter(
+        employment=employment,
+        status=AttendanceDeductionStatus.APPLIED,
+        settled_in_run__isnull=True,
+        work_date__lt=start)
+    # ⚠️⚠️ **الوسم عند الاعتماد لا الاحتساب**: المسير يُحتسب مرارًا قبل أن
+    # يُعتمد، فوسمُه هنا يُخرج الخصم من المتأخّرات **وهو لم يُصرف بعد** —
+    # فيضيع. والوسم في `approve_run` حيث يصير الصرف نهائيًّا.
+    for d in back:
+        applied_total[d.kind] = applied_total.get(d.kind, ZERO) + d.amount
+        applied_qty[d.kind] = applied_qty.get(d.kind, ZERO) + d.quantity
 
 
 def _attendance_decision(*, run, employment, kind, quantity, amount,
