@@ -732,6 +732,7 @@ function DeductionsTab({ L, canEdit }: {
   const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(25);
+  const [qDebounced, setQDebounced] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ count: 0, pages: 1 });
   const [rows, setRows] = useState<DedRow[]>([]);
@@ -747,7 +748,7 @@ function DeductionsTab({ L, canEdit }: {
     // العاشرة كان لا يجده أبدًا، ويظنّ أنه غير موجود.
     const p = new URLSearchParams({ year: String(year), month: String(month),
                                     limit: String(limit), page: String(page) });
-    if (q.trim()) p.set("q", q.trim());
+    if (qDebounced.trim()) p.set("q", qDebounced.trim());
     if (status) p.set("status", status);
     if (kind) p.set("kind", kind);
     apiGet<{ rows: DedRow[]; totals: Record<string, number>;
@@ -760,10 +761,18 @@ function DeductionsTab({ L, canEdit }: {
       })
       .catch(() => { setRows([]); setTotals({}); setMeta({ count: 0, pages: 1 }); })
       .finally(() => setBusy(false));
-  }, [year, month, status, kind, limit, page, q]);
+  }, [year, month, status, kind, limit, page, qDebounced]);
 
   // ⚠️ تغييرُ فلترٍ يعيد للصفحة الأولى — وإلا وقف المستخدم على صفحةٍ لا وجود لها
-  useEffect(() => { setPage(1); }, [year, month, status, kind, limit, q]);
+  useEffect(() => { setPage(1); }, [year, month, status, kind, limit, qDebounced]);
+
+  // ⚠️ **البحث كان يُطلق طلبًا مع كل حرف**: كتابة «نديم» أربعة طلبات، وكلٌّ
+  // يمسح الجدول ويُعيد رسمه. فيُؤخَّر ٤٠٠ مللي بعد آخر حرف — طلبٌ واحد.
+  // ⚠️ **والمؤقّت يُلغى عند كل تغيير**، وإلا تراكمت الطلبات.
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 400);
+    return () => clearTimeout(t);
+  }, [q]);
 
   useEffect(() => { load(); }, [load]);
 
