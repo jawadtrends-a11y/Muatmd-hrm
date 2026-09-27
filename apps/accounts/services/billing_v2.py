@@ -322,7 +322,8 @@ def mark_paid(invoice, actor=None, note=""):
 @transaction.atomic
 def activate_manually(*, subscription, plan, cycle, period_start,
                       activated_by, payment_method=None, note="",
-                      custom_price=None, setup_fee=None, employees=None):
+                      custom_price=None, setup_fee=None, employees=None,
+                      period_end=None):
     """
     يسند باقة بلا مرور بالبوابة (ق-48).
 
@@ -335,7 +336,12 @@ def activate_manually(*, subscription, plan, cycle, period_start,
     subscription.payment_method = (
         payment_method or SubscriptionPaymentMethod.BANK_TRANSFER)
     subscription.current_period_start = period_start
-    subscription.current_period_end = period_end_for(period_start, cycle)
+    # ⚠️⚠️ ق-٢٧١: **مدّةٌ مخصّصة** (قرار جواد) — فالشركات المتوسطة والكبيرة
+    # **تدفع بتحويلٍ بنكيّ** لا ببوابة، **وتتّفق على مدّةٍ لا تطابق شهرًا ولا
+    # سنة**. والدورتان (شهري/سنوي) تحسبان النهاية حسابًا، فلا تُمثّل اتفاقًا.
+    # فتُقبل نهايةٌ صريحةٌ حين تُرسَل، وتُحسب حين لا تُرسَل.
+    subscription.current_period_end = (
+        period_end or period_end_for(period_start, cycle))
     subscription.next_billing_date = (
         subscription.current_period_end + timedelta(days=1))
     subscription.activated_by_person = activated_by

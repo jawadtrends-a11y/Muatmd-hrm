@@ -90,9 +90,9 @@ PERMISSIONS = [
     _p("attendance.shifts",   "attendance", "إدارة فترات العمل", feature="shifts"),
     # مواقع العمل: ثلاث صلاحيات منفصلة — فمن يُسنِد ليس بالضرورة
     # من يُنشئ، ومن يطّلع ليس بالضرورة من يُسنِد (ق-78)
-    _p("sites.view",          "attendance", "عرض مواقع العمل", feature="employee_tracking"),
-    _p("sites.assign",        "attendance", "إسناد موظفيه لمواقع العمل", feature="employee_tracking"),
-    _p("sites.manage",        "attendance", "إضافة وتعديل مواقع العمل", feature="employee_tracking"),
+    _p("sites.view",          "attendance", "عرض مواقع العمل", feature="work_sites"),
+    _p("sites.assign",        "attendance", "إسناد موظفيه لمواقع العمل", feature="work_sites"),
+    _p("sites.manage",        "attendance", "إضافة وتعديل مواقع العمل", feature="work_sites"),
 
     # الإجازات
     _p("leaves.view",         "leaves", "عرض إجازات موظفيه", feature="leaves"),

@@ -54,6 +54,9 @@ const T: Dict = {
   fAnnual: { ar: "سنوي", en: "Annual" },
   fEmployees: { ar: "عدد الموظفين المتفق عليه", en: "Agreed employees" },
   fStart: { ar: "بداية الفترة", en: "Period start" },
+  fEnd: { ar: "نهاية الفترة (اختياري)", en: "Period end (optional)" },
+  fEndHint: { ar: "اتركه فارغًا ليُحسب من الدورة",
+              en: "Leave empty to compute from the cycle" },
   fUntil: { ar: "حتى تاريخ", en: "Until" },
   fNote: { ar: "ملاحظة", en: "Note" },
   fCustomPrice: { ar: "سعر خاص (اختياري)", en: "Custom price (optional)" },
@@ -470,6 +473,9 @@ function ActivateDialog({
   const [cycle, setCycle] = useState("monthly");
   const [employees, setEmployees] = useState(String(account.employees || 1));
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  // ق-٢٧١: **نهايةٌ صريحةٌ للاتفاق اليدويّ** — فالشركات المتوسطة
+  // والكبيرة تدفع بتحويلٍ بنكيّ وتتّفق على مدّةٍ لا تطابق شهرًا ولا سنة.
+  const [end, setEnd] = useState("");
   const [price, setPrice] = useState("");
   const [note, setNote] = useState("");
 
@@ -520,6 +526,34 @@ function ActivateDialog({
                  onChange={(e) => setStart(e.target.value)} />
         </label>
 
+        {/* ق-٢٧١: **نهايةٌ صريحة** — الشركات المتوسطة والكبيرة تدفع
+            بتحويلٍ بنكيّ وتتّفق على مدّةٍ لا تطابق شهرًا ولا سنة. */}
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fEnd")}
+          </span>
+          <input className="input" type="date" value={end} dir="ltr"
+                 min={start}
+                 onChange={(e) => setEnd(e.target.value)} />
+          <span className="muted" style={{ fontSize: ".75rem" }}>
+            {L("fEndHint")}
+          </span>
+        </label>
+
+        {/* ق-٢٧١: **نهايةٌ صريحة** — فالشركات المتوسطة والكبيرة تدفع
+            بتحويلٍ بنكيّ وتتّفق على مدّةٍ لا تطابق شهرًا ولا سنة. */}
+        <label className="field">
+          <span className="muted" style={{ fontSize: ".85rem" }}>
+            {L("fEnd")}
+          </span>
+          <input className="input" type="date" value={end} dir="ltr"
+                 min={start}
+                 onChange={(e) => setEnd(e.target.value)} />
+          <span className="muted" style={{ fontSize: ".75rem" }}>
+            {L("fEndHint")}
+          </span>
+        </label>
+
         <label className="field">
           <span className="muted" style={{ fontSize: ".85rem" }}>
             {L("fCustomPrice")}
@@ -543,6 +577,7 @@ function ActivateDialog({
                   plan_code: planCode, cycle,
                   employees: Number(employees) || 1,
                   period_start: start,
+                  period_end: end || undefined,
                   custom_price: price || undefined,
                   note,
                 })}>

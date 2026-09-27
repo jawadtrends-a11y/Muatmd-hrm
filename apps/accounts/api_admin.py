@@ -324,7 +324,9 @@ def admin_activate(request, account_id):
                           if request.data.get("custom_price") else None),
             setup_fee=(Decimal(str(request.data["setup_fee"]))
                        if request.data.get("setup_fee") else None),
-            employees=request.data.get("employees"))
+            employees=request.data.get("employees"),
+            # ق-٢٧١: نهايةٌ صريحةٌ للاتفاق اليدويّ — تُهمَل إن لم تُرسَل
+            period_end=_opt_date(request.data.get("period_end")))
 
     _log(request, "subscription.activate", account=acc,
          detail={"plan": plan.code, "cycle": cycle,
@@ -695,3 +697,12 @@ def admin_record_zatca_invoice(request, invoice_id):
         "zatca_invoice_no": inv.zatca_invoice_no,
         "zatca_issued_at": inv.zatca_issued_at,
     })
+
+
+def _opt_date(v):
+    """تاريخٌ اختياريّ — وغيرُ الصالح يُهمَل ولا يُسقط الطلب."""
+    from datetime import date as _d
+    try:
+        return _d.fromisoformat(str(v)) if v else None
+    except (TypeError, ValueError):
+        return None

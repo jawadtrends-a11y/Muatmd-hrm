@@ -65,6 +65,14 @@ FEATURES = [
        implemented=True, guarded_at="/api/attendance/days/"),
     _f("employee_tracking", "attendance", "تتبع الموظفين",
        implemented=True, guarded_at="/api/presence/"),
+    # ⚠️⚠️ ق-٢٧٢: **مواقع العمل أساسٌ للبصمة لا ميزةَ تتبّع.** كانت
+    # `sites.*` مربوطةً بـ`employee_tracking` (باقتان عُليا) — **والبصمة
+    # بالجوال في الباقات الأربع**. فمن اشترى الأساسية اشترى بصمةً **لا
+    # تعمل**: `verify_location` يرفض بلا إسناد («لا موقع عمل مُسند إليك»)،
+    # ولا شاشةَ تُسند لأن صلاحيتها مقفلة. **فالمواقع للجميع، والتتبّع الحيّ
+    # (`/api/presence/`) يبقى ميزةً مدفوعة** (قرار جواد).
+    _f("work_sites", "attendance", "مواقع العمل",
+       implemented=True, guarded_at="/api/sites/"),
     _f("work_activities", "attendance", "أنشطة العمل",
        implemented=True, guarded_at="/api/activities/"),
 
