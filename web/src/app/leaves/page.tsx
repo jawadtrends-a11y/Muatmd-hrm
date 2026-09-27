@@ -282,11 +282,13 @@ function ApprovalCard({
 /* ══ جدول الطلبات ══ */
 
 function RequestsTable({
-  rows, L, showEmployee,
+  rows, L, showEmployee, onChanged,
 }: {
   rows: Req[];
   L: (k: string, f?: string) => string;
   showEmployee: boolean;
+  /** يُعيد تحميل الجدول بعد إلغاء طلب — فترى الحالة الجديدة فورًا */
+  onChanged?: () => void;
 }) {
   const { lang } = usePrefs();
   /**
@@ -298,6 +300,34 @@ function RequestsTable({
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Req | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  // ق-٢٦٨: إلغاء طلبٍ معتمد — للموارد وحدها، وعند التوسيع لا من القائمة:
+  // ⚠️ **قرارٌ يعكس أثرًا وقع**، فيُتّخذ والسياق كامل أمام عينه.
+  const [canRevoke, setCanRevoke] = useState(false);
+  const [revokeFor, setRevokeFor] = useState<Req | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revoking, setRevoking] = useState(false);
+  const [revokeErr, setRevokeErr] = useState("");
+
+  useEffect(() => {
+    apiGet<{ permissions?: string[] }>("/me/workspace/")
+      .then((w) => setCanRevoke(
+        (w.permissions ?? []).includes("leaves.approve_all")))
+      .catch(() => setCanRevoke(false));
+  }, []);
+
+  async function doRevoke() {
+    if (!revokeFor || !revokeReason.trim()) return;
+    setRevoking(true); setRevokeErr("");
+    try {
+      await apiPost(`/requests/${revokeFor.id}/revoke/`,
+                    { reason: revokeReason.trim() });
+      setRevokeFor(null); setRevokeReason(""); setOpenId(null);
+      onChanged?.();
+    } catch (e: unknown) {
+      setRevokeErr((e as { message?: string })?.message
+                   || "تعذّر الإلغاء");
+    } finally { setRevoking(false); }
+  }
 
   function toggle(id: number) {
     if (openId === id) { setOpenId(null); setDetail(null); return; }
@@ -414,6 +444,23 @@ function RequestsTable({
                         </div>
                       )}
                       <ApprovalChain rows={detail.approvals ?? []} />
+                      {canRevoke && detail.status === "approved" && (
+                        <div style={{ marginTop: 12, paddingTop: 12,
+                                      borderTop: "1px solid var(--line)" }}>
+                          <button className="btn"
+                            style={{ color: "var(--danger, #b42318)",
+                                     borderColor: "var(--danger, #b42318)" }}
+                            onClick={() => { setRevokeFor(detail);
+                                             setRevokeReason("");
+                                             setRevokeErr(""); }}>
+                            إلغاء الطلب
+                          </button>
+                          <span className="muted"
+                                style={{ fontSize: ".8rem", marginInlineStart: 10 }}>
+                            يُعكَس أثره ويعود ما خُصم
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <span className="muted">{L("failed")}</span>
@@ -425,6 +472,58 @@ function RequestsTable({
           ))}
         </tbody>
       </table>
+
+      {/* ق-٢٦٨: حوار الإلغاء — ⚠️ **السبب إلزاميّ** فالخادم يرفض بدونه،
+          ولأنّ قرارًا يعكس أثرًا وقع يُراجَع بعد شهر فيُعرف لماذا اتُّخذ. */}
+      {revokeFor && (
+        <div
+          onClick={() => !revoking && setRevokeFor(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 60,
+                   background: "rgba(0,0,0,.45)", display: "flex",
+                   alignItems: "center", justifyContent: "center",
+                   padding: 16 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()}
+               style={{ maxWidth: 460, width: "100%", padding: 20 }}>
+            <h3 style={{ margin: "0 0 8px" }}>
+              إلغاء طلب {revokeFor.request_no}
+            </h3>
+            <p className="muted" style={{ fontSize: ".875rem",
+                                          margin: "0 0 14px" }}>
+              ⚠️ سيُعكَس أثر الطلب: ما خُصم يعود وما اعتُمد يزول.
+              والفرق يُسوّى في المسير التالي.
+            </p>
+            <textarea
+              autoFocus rows={3} value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="سبب الإلغاء (إلزاميّ)"
+              style={{ width: "100%", padding: 10, borderRadius: 8,
+                       border: "1px solid var(--line)", resize: "vertical",
+                       fontFamily: "inherit", fontSize: ".9rem" }} />
+            {revokeErr && (
+              <div style={{ color: "var(--danger, #b42318)",
+                            fontSize: ".85rem", marginTop: 8 }}>
+                {revokeErr}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 14,
+                          justifyContent: "flex-end" }}>
+              <button className="btn" disabled={revoking}
+                      onClick={() => setRevokeFor(null)}>
+                تراجع
+              </button>
+              <button className="btn"
+                disabled={revoking || !revokeReason.trim()}
+                onClick={doRevoke}
+                style={{ background: "var(--danger, #b42318)",
+                         color: "#fff", borderColor: "transparent",
+                         opacity: (revoking || !revokeReason.trim())
+                                  ? .55 : 1 }}>
+                {revoking ? "جارٍ…" : "إلغاء الطلب"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -692,7 +791,7 @@ export default function LeavesPage({ teamOnly = false }:
                 </div>
               </div>
               <div className="card" style={{ overflow: "hidden" }}>
-                <RequestsTable rows={all} L={L} showEmployee />
+                <RequestsTable rows={all} L={L} showEmployee onChanged={load} />
               </div>
             </section>
           )}

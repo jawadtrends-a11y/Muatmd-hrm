@@ -1171,6 +1171,7 @@ def update_employee_profile(request, employment_id):
     try:
         p.save()
         emp.save()
+        _sync_site_assignment(emp, changed)
     except Exception as e:      # noqa: BLE001
         return Response({"detail": f"قيمة غير صالحة: {e}"}, status=400)
 
@@ -1784,3 +1785,34 @@ def my_team(request):
     } for e in qs[:300]]
 
     return Response({"rows": rows, "total": len(rows)})
+
+
+def _sync_site_assignment(emp, changed):
+    """
+    ⚠️⚠️ ق-٢٦٩: **حقلان لغرضٍ واحد، والبصمة تقرأ الفارغ منهما.**
+
+    الموارد تُسنِد `primary_site` من ملفّ الموظف فيظهر «موقع العمل» —
+    **والبصمة تقرأ `SiteAssignment`**، جدولًا آخر. فظنّ المالك أن موظفيه
+    مُسنَدون، **ولا أحد منهم يستطيع البصم**: «لا موقع عمل مُسند إليك».
+    (سدرة: ٤ مواقع · ٥ موظفين بموقعٍ في الملفّ · **صفر إسناد**.)
+
+    ⚠️ **ولا يُحذف إسنادٌ قائم**: الفنيّ يزور ثلاثة مواقع (ق-٦٢) — فهذا
+    يُضيف الأساسيّ، وشاشة المواقع تُدير البقيّة.
+
+    (نمط ق-٢٥٨ — السادسة: اسمان لشيءٍ واحد، أو حقلٌ يُملأ ولا يُقرأ.)
+    """
+    import logging
+
+    if "primary_site_id" not in changed or not emp.primary_site_id:
+        return
+    try:
+        from apps.attendance.models_sites import SiteAssignment
+        SiteAssignment.objects.get_or_create(
+            employment=emp, site_id=emp.primary_site_id,
+            defaults={"account_id": emp.account_id,
+                      "company_id": emp.company_id,
+                      "is_primary": True})
+    except Exception:
+        # ⚠️ فشلُ المزامنة لا يُسقط حفظ الملفّ — لكنّه يُسجَّل
+        logging.getLogger("muatmd.employees").exception(
+            "site_assignment_sync_failed", extra={"employment_id": emp.id})
