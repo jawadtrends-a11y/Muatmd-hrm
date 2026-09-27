@@ -1043,6 +1043,11 @@ def _effect_advance(req):
         settings_obj=st,
         start_year=next_year, start_month=next_month,
         installments_count=int(float(p["installments"])),
+        # ⚠️⚠️ ق-٢٦٨: **`request` كان يسقط** — والحقل موجودٌ في `Advance`
+        # و`create_advance` يحفظه، **لكنّ الأثر لم يمرّره**. فكل سلفةٍ نشأت
+        # بطلبٍ لا تعرف طلبها (`request = NULL`): لا يُتتبَّع أصلها، ولا
+        # يجدها إلغاء الطلب. (نمط ق-٢٥٨: حقلٌ موجودٌ ولا يُملأ.)
+        request=req,
         reason=p.get("reason", f"بطلب {req.request_no}"))
 
     return {"advance_no": advance.advance_no,

@@ -1175,8 +1175,10 @@ def revoke_leave_view(request, request_id):
     ميزةٌ تُباع**. ومن يعتمد لكل المنشأة يملك إلغاء ما اعتُمد.
     (والموظف يُلغي المعلَّق وحده عبر `cancel_request_view`.)
     """
+    from apps.leaves.models import RequestType
     from apps.leaves.services.balances import LeaveError
     from apps.leaves.services.leave_requests import revoke_approved_leave
+    from apps.leaves.services.reversals import revoke_any_request
 
     Gate.require(request.user, "leaves.approve_all")
     r = Gate.filter_queryset(
@@ -1186,9 +1188,16 @@ def revoke_leave_view(request, request_id):
         return Response({"detail": "الطلب غير موجود"}, status=404)
     person = getattr(request.user, "person", None)
     try:
-        out = revoke_approved_leave(
-            request_obj=r, by_person=person,
-            reason=request.data.get("reason", ""))
+        if r.request_type == RequestType.LEAVE:
+            out = revoke_approved_leave(
+                request_obj=r, by_person=person,
+                reason=request.data.get("reason", ""))
+        else:
+            # ⭐ ق-٢٦٨: **كل الطلبات تُلغى بعد اعتمادها** (قرار جواد) —
+            # ولكلّ نوعٍ عكسُه، وما لا أثر له يُلغى بتغيير الحالة وحدها.
+            out = revoke_any_request(
+                request_obj=r, by_person=person,
+                reason=request.data.get("reason", ""))
     except LeaveError as e:
         return Response({"detail": str(e), "code": "cannot_revoke"},
                         status=400)
