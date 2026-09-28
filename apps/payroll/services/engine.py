@@ -1013,6 +1013,18 @@ def approve_run(run, approved_by_person):
                                            "display_name", ""),
                   "link_url": "/payroll"},
          recipients=[])
+
+    # ⚠️⚠️⚠️ ق-٢٨٨: **اعتماد المخالصة يُنهي الخدمة** (قرار جواد).
+    #
+    # كانت `TERMINATED` تُقرأ في خمسة مواضع — المسير والاحتساب
+    # والتقارير — **ولا أحد يكتبها**. فالمفصول يبقى «على رأس العمل»:
+    # **راتبه يُصرف في المسير التالي، ورصيد إجازاته ينمو**. وهو نمطٌ
+    # تكرّر: حقلٌ يُقرأ ولا يُكتب.
+    #
+    # ⚠️ **والإنهاء بالاعتماد لا بالإنشاء**: فالمخالصة تُعدَّل قبله،
+    # والاعتماد قرارٌ نهائيّ. (والصرف وإخلاء الطرف إجراءان بعده.)
+    _terminate_on_settlement(run)
+
     return run
 
 
@@ -1214,3 +1226,32 @@ def _attendance_decision(*, run, employment, kind, quantity, amount,
         dec.save(update_fields=["quantity", "amount", "explanation"])
 
     return dec.status == AttendanceDeductionStatus.APPLIED, dec
+
+
+def _terminate_on_settlement(run):
+    """
+    ينهي خدمة صاحب المخالصة عند اعتمادها (ق-٢٨٨).
+
+    ⚠️ **وفشلُه لا يُسقط الاعتماد**: المسير سجلٌّ ماليٌّ نهائيّ، ولا يصحّ
+    أن يُردّ لأجل حقل حالة. يُسجَّل الخطأ ويُصحَّح يدويًّا.
+    """
+    from apps.employees.models import EmploymentStatus
+    from apps.payroll.models import PayrollRunType
+
+    if run.run_type != PayrollRunType.SETTLEMENT:
+        return
+    try:
+        for ps in run.payslips.select_related("employment").all():
+            emp = ps.employment
+            if emp is None or emp.status == EmploymentStatus.TERMINATED:
+                continue
+            emp.status = EmploymentStatus.TERMINATED
+            emp.termination_date = (
+                emp.termination_date or emp.termination_pending_from
+                or run.accrual_date)
+            emp.save(update_fields=["status", "termination_date",
+                                    "updated_at"])
+    except Exception:  # noqa: BLE001
+        import logging
+        logging.getLogger("muatmd.payroll").exception(
+            "terminate_on_settlement_failed")

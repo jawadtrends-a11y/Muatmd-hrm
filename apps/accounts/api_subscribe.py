@@ -316,3 +316,74 @@ def public_quote(request):
             with_setup=request.GET.get("with_setup") == "1"))
     except billing.BillingError as e:
         return Response({"detail": str(e)}, status=400)
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def public_promo(request):
+    """
+    شريط العرض — لشاشتي الأسعار: العامّة (قبل التسجيل) والاشتراك.
+
+    ⚠️⚠️ ق-٢٨١: **كودٌ لا يعرفه أحدٌ لا يُستعمل** (تنبيه جواد): تُنشئه
+    اللوحة ويقبله الخادم، **ولا مكانَ يُعلن عنه** — فيبقى حبرًا.
+
+    ⚠️ **وبلا مصادقة**: فالشاشة العامّة تسبق التسجيل. ولا يحمل إلا نصًّا
+    وكودًا **يُعلَن عنهما أصلًا** — فلا شيء يُسرَّب.
+
+    ⚠️ **والعرض المعطَّل يردّ فارغًا** لا نصًّا قديمًا.
+    """
+    from apps.accounts.models_platform import get_settings
+
+    try:
+        st = get_settings()
+        if not st or not getattr(st, "promo_enabled", False):
+            return Response({"enabled": False})
+        return Response({
+            "enabled": True,
+            "text": st.promo_text or "",
+            "code": st.promo_code or "",
+        })
+    except Exception:  # noqa: BLE001
+        return Response({"enabled": False})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def check_coupon(request):
+    """
+    تحقّقٌ فوريّ من كود الخصم — قبل الاشتراك لا عنده.
+
+    ⚠️⚠️ ق-٢٨٢: **كودٌ يُكتب ولا يُتحقَّق منه** (تنبيه جواد): يكتبه العميل
+    ولا يعرف أصحيحٌ هو، **فيكتشف خطأه عند الدفع**. و`resolve_discount`
+    يردّ سببًا مفهومًا لكل رفض — فيُعرض له.
+    """
+    from decimal import Decimal
+
+    from apps.accounts.models_billing_v2 import BillingCycle
+    from apps.accounts.services import billing_v2 as billing
+
+    code = str(request.data.get("code") or "").strip()
+    if not code:
+        return Response({"valid": False, "reason": "أدخل الكود"})
+
+    cycle = request.data.get("cycle") or BillingCycle.MONTHLY
+    try:
+        subtotal = Decimal(str(request.data.get("subtotal") or "100"))
+    except Exception:  # noqa: BLE001
+        subtotal = Decimal("100")
+
+    acc = getattr(getattr(request, "account_ctx", None), "account", None)
+    res = billing.resolve_discount(
+        account=acc, cycle=cycle, subtotal=subtotal, coupon_code=code)
+
+    if res.discount is None:
+        # ⚠️ **والسبب يُعرض كما هو**: «منتهٍ» و«لحسابٍ آخر» و«لا يسري على
+        # هذه الدورة» — فالعميل يفهم ولا يُعيد المحاولة عبثًا.
+        return Response({"valid": False,
+                         "reason": res.reason or "كود غير صالح"})
+    return Response({
+        "valid": True,
+        "name": res.discount.name_ar,
+        "amount": str(res.amount),
+    })

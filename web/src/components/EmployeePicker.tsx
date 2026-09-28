@@ -36,12 +36,16 @@ export type PickedEmployee = {
 
 export default function EmployeePicker({
   value, onChange, endpoint = "/employees/", extraQuery, disabled,
+  emptyText,
 }: {
   value?: PickedEmployee | null;
   onChange: (e: PickedEmployee | null) => void;
   /** ق-159: «/me/team/» لشاشات الفريق — فالإسناد لمرؤوسيه */
   endpoint?: string;
   extraQuery?: Record<string, unknown>;
+  /** ⚠️ ق-٢٩١: **نصٌّ يشرح لماذا لا نتائج** — فقائمةٌ مقيَّدة
+   *  (كالمخالصة: المنتهون وحدهم) تبدو معطَّلةً بلا بيان. */
+  emptyText?: string;
   disabled?: boolean;
 }) {
   const { L } = useT(T);
@@ -152,7 +156,7 @@ export default function EmployeePicker({
           ) : rows.length === 0 ? (
             <div className="muted" style={{ padding: "12px 14px",
                                             fontSize: ".85rem" }}>
-              {L("none")}
+              {(emptyText || L("none"))}
             </div>
           ) : (
             rows.map((r) => (

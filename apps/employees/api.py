@@ -101,6 +101,16 @@ def employees(request):
             "person", "job_title", "department")
         if request.GET.get("status"):
             qs = qs.filter(status=request.GET["status"])
+        else:
+            from apps.employees.models import EmploymentStatus
+
+            # ⚠️⚠️ ق-٢٨٩: **المنتهية خدمته يختفي من القائمة** (قرار
+            # جواد) — ويبقى في التقارير وسجلّاته كاملةً لا تُمسّ.
+            #
+            # فقائمةٌ تخلط العامل بالمنتهي **تُربك كل عملية**: إسناد
+            # موقع، إضافة لطلب، اختيار في مسير. ومن أراده أرسل
+            # `?status=terminated` صراحةً.
+            qs = qs.exclude(status=EmploymentStatus.TERMINATED)
         # ق-167: ⚠️⚠️ **والبحث في كل ما يُعرف به الموظف** (بلاغ
         # جواد): فكان في **اسم العائلة وحده** — ومن يبحث برقمه
         # الوظيفيّ أو هويّته **لا يجده**.

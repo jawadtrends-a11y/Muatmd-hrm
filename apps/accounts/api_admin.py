@@ -17,7 +17,8 @@ from rest_framework.response import Response
 
 from apps.accounts.models import Account, Company, Plan
 from apps.accounts.models_billing_v2 import (
-    AccountSubscription, BillingCycle, Discount, DiscountKind, DiscountScope,
+    AccountSubscription, BillingCycle, Discount, DiscountAudience,
+    DiscountKind, DiscountScope,
     Invoice, InvoiceStatus, Payment, SubscriptionState,
 )
 from apps.accounts.models_platform import get_settings
@@ -421,6 +422,10 @@ def admin_discounts(request):
              "covers_setup_fee": d.covers_setup_fee,
              "valid_from": d.valid_from, "valid_until": d.valid_until,
              "max_uses": d.max_uses, "used_count": d.used_count,
+             # ق-٢٨٦: الحملة العامّة — فئتها وهل تُجمع مع كود
+             "audience": d.audience,
+             "audience_label": d.get_audience_display(),
+             "stackable": d.stackable,
              "is_active": d.is_active}
             for d in Discount.objects.all().order_by("-created_at")
         ])
@@ -440,6 +445,10 @@ def admin_discounts(request):
             account_id=request.data.get("account_id") or None,
             applies_to_cycle=request.data.get("applies_to_cycle", ""),
             covers_setup_fee=bool(request.data.get("covers_setup_fee")),
+            # ⭐ ق-٢٨٦: **الحملة تُطبَّق بلا كود** — والكود معرّفٌ داخليٌّ
+            # لك في التقارير (قرار جواد)، **لا يراه العميل**.
+            audience=request.data.get("audience", DiscountAudience.ALL),
+            stackable=bool(request.data.get("stackable")),
             valid_from=(date.fromisoformat(request.data["valid_from"])
                         if request.data.get("valid_from") else None),
             valid_until=(date.fromisoformat(request.data["valid_until"])
@@ -470,10 +479,24 @@ def admin_discount_detail(request, discount_id):
         _log(request, "discount.deactivate", detail={"code": d.code})
         return Response({"deactivated": True})
 
-    for f in ("name_ar", "value", "valid_until", "max_uses",
-              "is_active", "covers_setup_fee"):
-        if f in request.data:
-            setattr(d, f, request.data[f])
+    # ⚠️⚠️ ق-٢٩٢: **حملةٌ بقيمةٍ خاطئةٍ كانت تُعطَّل وتُعاد** (تنبيه
+    # جواد) — فكل حقولها تُعدَّل عدا **الكود**: فهو مرجعُ ما صدر من
+    # إيصالات، وتغييرُه يقطع أثرها.
+    for f in ("name_ar", "value", "valid_from", "valid_until",
+              "max_uses", "applies_to_cycle", "covers_setup_fee",
+              "audience", "stackable", "is_active"):
+        if f not in request.data:
+            continue
+        v = request.data[f]
+        # ⚠️ **الفارغ يعني «بلا حدّ» لا صفرًا**: تاريخٌ فارغٌ يُمسح،
+        # و`max_uses` فارغٌ يعني استعمالًا بلا سقف.
+        if f in ("valid_from", "valid_until"):
+            v = date.fromisoformat(v) if v else None
+        elif f == "max_uses":
+            v = int(v) if v not in (None, "") else None
+        elif f == "value":
+            v = Decimal(str(v))
+        setattr(d, f, v)
     d.save()
     _log(request, "discount.update", detail={"code": d.code})
     return Response({"id": d.id, "is_active": d.is_active})
@@ -497,16 +520,71 @@ def platform_settings(request):
                   "invoice_due_days", "manual_retry_limit",
                   "manual_retry_cooldown_hours", "auto_retry_hours",
                   "accounting_api_url", "accounting_enabled",
-                  "support_email", "support_mobile"):
+                  "support_email", "support_mobile",
+                  # ق-٢٧٦: الإشعارات وطرق الدفع — تُدار من هنا لا من الكود
+                  "notify_email", "gateway_enabled",
+                  "bank_transfer_enabled", "bank_name",
+                  "bank_iban", "bank_beneficiary",
+                  # ق-٢٨١: شريط العرض — يُدار من هنا لا من الكود
+                  "promo_enabled", "promo_text", "promo_code"):
             if f in request.data:
                 changed[f] = {"from": str(getattr(ps, f)),
                               "to": str(request.data[f])}
                 setattr(ps, f, request.data[f])
+        # ⚠️⚠️ **لا يجوز إطفاء طريقتي الدفع معًا**: فلا يشترك أحدٌ أبدًا،
+        # ويرى العميل حوارًا فارغًا لا يفهم سببه.
+        if not ps.gateway_enabled and not ps.bank_transfer_enabled:
+            return Response(
+                {"detail": "لا يُطفأ الدفع بالبطاقة والتحويل معًا — "
+                           "فلن يستطيع أحدٌ الاشتراك"}, status=400)
+
+        # ⚠️⚠️ ق-٢٨٣: **الشريط يُعلن عن كودٍ لا يعرفه.** `promo_code` نصٌّ
+        # مستقلٌّ عن جدول الخصومات — **فمن عطّل الكود بقي إعلانُه** (وقع
+        # فعلًا: أُعلن عن `HR26` بعد تعطيله). فيُتحقَّق عند الحفظ.
+        if ps.promo_enabled and (ps.promo_code or "").strip():
+            from apps.accounts.models_billing_v2 import (
+                Discount, DiscountScope)
+            ok = Discount.objects.filter(
+                code__iexact=ps.promo_code.strip(),
+                scope=DiscountScope.COUPON, is_active=True).exists()
+            if not ok:
+                return Response(
+                    {"detail": f"الكود «{ps.promo_code}» غير موجودٍ أو معطَّل "
+                               f"أو ليس «كود خصم يُدخله العميل»"}, status=400)
+
+        # ⚠️⚠️ ق-٢٨٣: **الشريط يُعلن عن كودٍ لا يعرفه.** `promo_code` نصٌّ
+        # مستقلٌّ عن جدول الخصومات — **فمن عطّل الكود بقي إعلانُه** (وقع
+        # فعلًا: أُعلن عن `HR26` بعد تعطيله). فيُتحقَّق عند الحفظ.
+        if ps.promo_enabled and (ps.promo_code or "").strip():
+            from apps.accounts.models_billing_v2 import (
+                Discount, DiscountScope)
+            ok = Discount.objects.filter(
+                code__iexact=ps.promo_code.strip(),
+                scope=DiscountScope.COUPON, is_active=True).exists()
+            if not ok:
+                return Response(
+                    {"detail": f"الكود «{ps.promo_code}» غير موجودٍ أو معطَّل "
+                               f"أو ليس «كود خصم يُدخله العميل»"}, status=400)
+
+        # ⚠️ **وتحويلٌ بلا آيبان خيارٌ لا يعمل**: يختاره العميل فلا يجد
+        # إلى أين يحوّل.
+        if ps.bank_transfer_enabled and not (ps.bank_iban or "").strip():
+            return Response(
+                {"detail": "أدخل الآيبان قبل إتاحة التحويل البنكي"},
+                status=400)
+
         ps.save()
         if changed:
             _log(request, "platform.settings", detail=changed)
 
     return Response({
+        "notify_email": ps.notify_email,
+        "promo_enabled": ps.promo_enabled, "promo_text": ps.promo_text,
+        "promo_code": ps.promo_code,
+        "gateway_enabled": ps.gateway_enabled,
+        "bank_transfer_enabled": ps.bank_transfer_enabled,
+        "bank_name": ps.bank_name, "bank_iban": ps.bank_iban,
+        "bank_beneficiary": ps.bank_beneficiary,
         "vat_rate": str(ps.vat_rate), "vat_number": ps.vat_number,
         "trial_days": ps.trial_days,
         "trial_max_employees": ps.trial_max_employees,

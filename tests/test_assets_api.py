@@ -258,6 +258,13 @@ def test_settlement_blocked_without_basis(env):
 
 @pytest.mark.django_db(transaction=True)
 def test_settlement_create_then_duplicate_blocked(env):
+    # ⚠️ ق-٢٩١: **المخالصة لمن انتهت خدمته وحده** (قرار جواد) —
+    # فالحالة تُهيّأ كما تكون في الواقع: الفصل يُعتمد أولًا.
+    from apps.employees.models import EmploymentStatus
+
+    env["emp"].status = EmploymentStatus.TERMINATED
+    env["emp"].save(update_fields=["status"])
+
     c = _client(env, "hr_manager")
     payload = {"termination_date": "2026-06-15",
                "reason_code": "employer_death"}

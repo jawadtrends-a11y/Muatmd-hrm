@@ -22,6 +22,15 @@ from apps.payroll.services.settlement import (
 IBAN = "SA6080000247608010330101"
 
 
+def _terminate(emp):
+    """ينهي خدمة الموظف — كما يفعل اعتماد الفصل (ق-٢٩٠)."""
+    from apps.employees.models import EmploymentStatus
+
+    emp.status = EmploymentStatus.TERMINATED
+    emp.save(update_fields=["status"])
+
+
+
 @pytest.fixture
 def env(db):
     sync_gosi_rates()
@@ -230,6 +239,9 @@ def test_net_never_negative(env):
 @pytest.mark.django_db(transaction=True)
 def test_settlement_run_created(env):
     with account_scope(env["account_id"]):
+        # ⚠️ ق-٢٩١: **المخالصة لمن انتهت خدمته وحده** (قرار جواد) —
+        # فالحالة تُهيّأ كما تكون في الواقع: الفصل يُعتمد أولًا.
+        _terminate(env["emp"])
         run, slip, result = create_settlement_run(
             employment=env["emp"], termination_date=date(2026, 6, 15),
             reason_code="employer_death", settings_obj=env["settings"])
@@ -243,6 +255,7 @@ def test_settlement_run_created(env):
 def test_settlement_excluded_from_wps(env):
     """مسير المستحقات لا يدخل حماية الأجور تلقائيًا."""
     with account_scope(env["account_id"]):
+        _terminate(env["emp"])          # ق-٢٩١: لا مخالصةَ لعاملٍ قائم
         _, slip, _ = create_settlement_run(
             employment=env["emp"], termination_date=date(2026, 6, 15),
             reason_code="employer_death", settings_obj=env["settings"])
@@ -252,6 +265,7 @@ def test_settlement_excluded_from_wps(env):
 @pytest.mark.django_db(transaction=True)
 def test_duplicate_settlement_blocked(env):
     with account_scope(env["account_id"]):
+        _terminate(env["emp"])          # ق-٢٩١: لا مخالصةَ لعاملٍ قائم
         create_settlement_run(
             employment=env["emp"], termination_date=date(2026, 6, 15),
             reason_code="employer_death", settings_obj=env["settings"])

@@ -3,12 +3,21 @@
 /**
  * عميل الـAPI — يطابق نمط المحاسبي.
  *
- * التوكن بـsessionStorage: يُمسح بإغلاق التبويب، وهو ما يناسب
- * نظامًا يعرض رواتب. وApiError تفرّق 401 عن الشبكة عن الخادم
- * فتعرض الواجهة رسالة مفيدة لا "حدث خطأ".
+ * ⚠️⚠️ ق-٢٨٧: **التبويبات تتشارك الجلسة** (تنبيه جواد): كان التوكن في
+ * `sessionStorage` — **خاصٌّ بكل تبويب**، فمن فتح تبويبًا ثانيًا وجد
+ * نفسه خارجًا وأعاد التسجيل. وهو إرباكٌ لا أمان.
+ *
+ * ⚠️ **والبديل ليس بقاءً أبديًّا**: `localStorage` **بمدّة أربع وعشرين
+ * ساعة** (قرار جواد) — فنظامٌ يعرض رواتب لا يبقى مفتوحًا أسبوعًا على
+ * جهازٍ مشترك. والانتهاء يُفحص عند كل قراءة، فلا يُرسَل رمزٌ ميّت.
+ *
+ * وApiError تفرّق 401 عن الشبكة عن الخادم فتعرض الواجهة رسالة مفيدة
+ * لا "حدث خطأ".
  */
 
 const TOKEN_KEY = "muatmd_hr_token";
+const TOKEN_EXP_KEY = "muatmd_hr_token_exp";
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
 export class ApiError extends Error {
@@ -46,7 +55,14 @@ export class ApiError extends Error {
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return sessionStorage.getItem(TOKEN_KEY);
+    const exp = Number(localStorage.getItem(TOKEN_EXP_KEY) || 0);
+    // ⚠️ **المنتهي يُمسح لا يُرسَل** — فلا 401 متكرّرة ولا رمزٌ ميّت
+    if (exp && Date.now() > exp) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_EXP_KEY);
+      return null;
+    }
+    return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
@@ -55,8 +71,13 @@ export function getToken(): string | null {
 export function setToken(token: string | null) {
   if (typeof window === "undefined") return;
   try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(TOKEN_EXP_KEY, String(Date.now() + TOKEN_TTL_MS));
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_EXP_KEY);
+    }
   } catch {
     /* الوضع الخاص */
   }

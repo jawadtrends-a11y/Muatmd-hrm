@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError, openForView } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck } from "@/components/Icons";
+import PromoBanner from "@/components/PromoBanner";
 
 const T: Dict = {
   title: { ar: "الباقات", en: "Plans" },
@@ -29,7 +30,7 @@ const T: Dict = {
   plus: { ar: "بالإضافة إلى:", en: "plus:" },
   setup: { ar: "إعداد أوّليّ للنظام", en: "One-time setup" },
   setupHint: {
-    ar: "يُدفع مرّة واحدة فقط — ولا يدخل فاتورة التجديد",
+    ar: "يُدفع مرّة واحدة فقط — ولا يدخل إيصال التجديد",
     en: "Charged once — never in renewals",
   },
   subscription: { ar: "الاشتراك", en: "Subscription" },
@@ -48,11 +49,36 @@ const T: Dict = {
   payTitle: { ar: "إتمام الاشتراك", en: "Complete subscription" },
   payFor: { ar: "مرجع العملية", en: "Reference" },
   payAmount: { ar: "المبلغ المستحقّ", en: "Amount due" },
+  payMethod: { ar: "طريقة الدفع", en: "Payment method" },
+  payCard: { ar: "بطاقة", en: "Card" },
+  payBank: { ar: "تحويل بنكي", en: "Bank transfer" },
+  bankName: { ar: "البنك", en: "Bank" },
+  bankIban: { ar: "الآيبان", en: "IBAN" },
+  bankBenef: { ar: "المستفيد", en: "Beneficiary" },
+  bankNote: {
+    ar: "حوّل المبلغ ثم أرسل الإيصال على info@muatmd.cloud — ويُفعَّل اشتراكك بعد التحقّق",
+    en: "Transfer the amount then send the receipt to info@muatmd.cloud",
+  },
+  copied: { ar: "نُسخ", en: "Copied" },
+  couponApply: { ar: "تطبيق", en: "Apply" },
+  couponChecking: { ar: "جارٍ…", en: "Checking…" },
+  couponOk: { ar: "الكود صالح", en: "Code applied" },
+  couponLabel: { ar: "كود خصم (اختياري)", en: "Discount code (optional)" },
+  couponPlaceholder: { ar: "أدخل الكود إن كان لديك", en: "Enter your code" },
+  invTitle: { ar: "تفاصيل الإيصال", en: "Receipt details" },
+  invPeriod: { ar: "الفترة", en: "Period" },
+  invLines: { ar: "البنود", en: "Line items" },
+  invBefore: { ar: "قبل الضريبة", en: "Before VAT" },
+  invVat: { ar: "ضريبة القيمة المضافة", en: "VAT" },
+  invTotal: { ar: "الإجمالي", en: "Total" },
+  invZatca: { ar: "الفاتورة الضريبية", en: "Tax invoice" },
+  invPrint: { ar: "طباعة", en: "Print" },
+  invLoading: { ar: "جارٍ…", en: "Loading…" },
   payHint: {
     ar: "بيانات بطاقتك تُرسل لبوابة الدفع مباشرةً — ولا تمرّ بخوادمنا",
     en: "Card details go straight to the payment gateway",
   },
-  invoices: { ar: "الفواتير", en: "Invoices" },
+  invoices: { ar: "الإيصالات", en: "Receipts" },
   estimateTitle: { ar: "تقدير مستحقّ الفترة", en: "Period estimate" },
   estEmployees: { ar: "الموظفون", en: "Employees" },
   estUnit: { ar: "سعر الموظف", en: "Per employee" },
@@ -67,7 +93,7 @@ const T: Dict = {
     ar: "⚠️ يُجدَّد الاشتراك تلقائيًّا في نهاية الفترة — وإيقافه خيارك",
     en: "Renews automatically at period end",
   },
-  invoiceNo: { ar: "رقم الفاتورة", en: "Invoice no." },
+  invoiceNo: { ar: "رقم الإيصال", en: "Receipt no." },
   period: { ar: "الفترة", en: "Period" },
   status: { ar: "الحالة", en: "Status" },
   view: { ar: "عرض", en: "View" },
@@ -94,12 +120,20 @@ type Checkout = {
   invoice_id: number; invoice_no: string; total: string;
   publishable_key: string; callback_url: string;
   amount_halalas: number; employees: number;
+  // ق-٢٧٦: التحويل البنكيّ — يُدار من لوحة المنصّة، وقد يكون معطَّلًا
+  bank_transfer?: {
+    enabled: boolean; bank_name?: string;
+    iban?: string; beneficiary?: string;
+  };
+  gateway_enabled?: boolean;
 };
 type Sub = {
   has_subscription: boolean; active_employees: number;
   plan?: string; state_label?: string; days_remaining?: number;
   subscribed_employees?: number;
 };
+
+type CouponRes = { valid: boolean; reason?: string; name?: string };
 
 export default function SubscribePage() {
   const { L, lang } = useT(T);
@@ -113,6 +147,45 @@ export default function SubscribePage() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [checkout, setCheckout] = useState<Checkout | null>(null);
+  // ق-٢٧٦: البطاقة هي الافتراض — والتحويل خيارٌ لمن يفضّله
+  const [payBy, setPayBy] = useState<"card" | "bank">("card");
+  // ⚠️⚠️ ق-٢٨١: **كود الخصم كان بلا حقل** — يقبله الخادم
+  // (`resolve_discount`) واللوحة تُنشئه، **ولا سبيل للعميل
+  // ليُدخله**. فكودٌ يُعلَن عنه ولا يُستعمل.
+  const [coupon, setCoupon] = useState("");
+  // ⚠️⚠️ ق-٢٨٢: **كودٌ يُكتب ولا يُتحقَّق منه** — فيكتشف خطأه عند الدفع
+  const [couponRes, setCouponRes] = useState<CouponRes | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  // ⚠️ **الكود قد يكون مقيَّدًا بدورة** — فتبديلها يُبطل نتيجةً سابقة
+  useEffect(() => { setCouponRes(null); }, [cycle]);
+
+  async function checkCoupon() {
+    const code = coupon.trim();
+    if (!code) { setCouponRes(null); return; }
+    setCouponBusy(true);
+    try {
+      setCouponRes(await apiPost<CouponRes>(
+        "/coupon/check/", { code, cycle }));
+    } catch {
+      setCouponRes({ valid: false, reason: "تعذّر التحقّق" });
+    } finally { setCouponBusy(false); }
+  }
+  // ⚠️⚠️ ق-٢٧٧: **زرّ «عرض» كان يفتح مسار JSON** — فيرى العميل نصًّا
+  // خامًّا. و`openForView` للمرفقات (PDF وصور) لا للمسارات.
+  const [invView, setInvView] = useState<InvoiceDetail | null>(null);
+  const [invBusy, setInvBusy] = useState(false);
+
+  async function showInvoice(id: number) {
+    setInvBusy(true);
+    try {
+      setInvView(await apiGet<InvoiceDetail>(`/account/invoices/${id}/`));
+    } catch { setInvView(null); } finally { setInvBusy(false); }
+  }
+  // ⚠️ **البطاقة مطفأة → يُفتح على التحويل**: فلا شاشةَ فارغة
+  useEffect(() => {
+    if (checkout && checkout.gateway_enabled === false) setPayBy("bank");
+  }, [checkout]);
   // ق-225: واختيار الزائر من صفحة الأسعار يُستأنف هنا — فالعدد
   // والدورة يُملآن، ولا يُعيد ما اختاره قبل التسجيل.
   const [picked, setPicked] = useState<string>("");
@@ -141,6 +214,13 @@ export default function SubscribePage() {
     issued_at?: string; paid_at?: string | null;
     // ق-182: **الفاتورة الزكاتية** من «معتمد المحاسبيّ»
     zatca_invoice_no?: string; zatca_issued_at?: string | null;
+  };
+  // ق-٢٧٧: تفاصيل الفاتورة — بنودٌ وضريبة، تُجلب عند العرض لا مع القائمة
+  type InvoiceDetail = Invoice & {
+    lines?: { description: string; amount: string;
+              note?: string; is_setup_fee?: boolean }[];
+    before_vat?: string; vat_rate?: string; vat_amount?: string;
+    note?: string;
   };
   type Card = {
     id: number; brand?: string; last4?: string;
@@ -253,6 +333,8 @@ export default function SubscribePage() {
       const d = await apiPost<Checkout>("/account/checkout/", {
         plan_code: p.code, cycle, employees: count,
         with_setup: !!setup[p.id],
+        // ق-٢٨١: كود الخصم — يُرسَل فارغًا كـundefined فلا يُفسّر كودًا خاطئًا
+        coupon_code: coupon.trim() || undefined,
       });
       setCheckout(d);
     } catch (e) {
@@ -309,10 +391,45 @@ export default function SubscribePage() {
 
   return (
     <div className="stack">
+      {/* ق-٢٨١: شريط العرض — يُدار من لوحة المنصّة، ولا يظهر إن عُطّل */}
+      <PromoBanner />
       <div>
         <h1 style={{ margin: 0 }}>{L("title")}</h1>
         <div className="muted" style={{ fontSize: ".88rem", marginTop: 2 }}>
           {L("subtitle")}
+        </div>
+        
+        {/* ⚠️⚠️ ق-٢٨١: **كود الخصم كان بلا حقل** — يقبله الخادم وتُنشئه
+            اللوحة، **ولا سبيل للعميل ليُدخله**. */}
+        <div style={{ marginTop: 12, maxWidth: 320 }}>
+          <label className="muted" style={{ fontSize: ".82rem" }}>
+            {L("couponLabel")}
+          </label>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <input className="input grow" value={coupon} dir="ltr"
+                   placeholder={L("couponPlaceholder")}
+                   style={{ textTransform: "uppercase" }}
+                   onChange={(e) => {
+                     setCoupon(e.target.value.toUpperCase());
+                     setCouponRes(null);
+                   }}
+                   onKeyDown={(e) => e.key === "Enter" && checkCoupon()} />
+            <button className="btn btn-sm" type="button"
+                    disabled={couponBusy || !coupon.trim()}
+                    onClick={checkCoupon}>
+              {couponBusy ? L("couponChecking") : L("couponApply")}
+            </button>
+          </div>
+          {couponRes && (
+            <div style={{ fontSize: ".82rem", marginTop: 6,
+                          color: couponRes.valid
+                                 ? "var(--ok, #0a7a3f)"
+                                 : "var(--danger, #b42318)" }}>
+              {couponRes.valid
+                ? `${L("couponOk")} — ${couponRes.name || ""}`
+                : couponRes.reason}
+            </div>
+          )}
         </div>
       </div>
 
@@ -476,6 +593,107 @@ export default function SubscribePage() {
         })}
       </div>
 
+      {/* ق-٢٧٧: عرض الفاتورة في الشاشة — لا مسارًا خامًّا في تبويب */}
+      {invView && (
+        <div onClick={() => setInvView(null)}
+             style={{ position: "fixed", inset: 0, zIndex: 90,
+                      background: "rgba(16,28,38,.5)", display: "grid",
+                      placeItems: "center", padding: 20, overflowY: "auto" }}>
+          <div className="card" onClick={(e) => e.stopPropagation()}
+               style={{ padding: 24, maxWidth: 520, width: "100%" }}>
+            <div className="spread">
+              <h3 style={{ margin: 0 }}>{L("invTitle")}</h3>
+              <span className="num muted">{invView.invoice_no}</span>
+            </div>
+
+            <div style={{ marginTop: 14, display: "grid", gap: 6,
+                          fontSize: ".9rem" }}>
+              <div className="spread">
+                <span className="muted">{L("invPeriod")}</span>
+                <span>{invView.period}</span>
+              </div>
+              {invView.status_label && (
+                <div className="spread">
+                  <span className="muted">{L("status")}</span>
+                  <span>{invView.status_label}</span>
+                </div>
+              )}
+            </div>
+
+            {!!invView.lines?.length && (
+              <div style={{ marginTop: 16 }}>
+                <div className="muted" style={{ fontSize: ".82rem",
+                                                marginBottom: 6 }}>
+                  {L("invLines")}
+                </div>
+                {invView.lines.map((ln, i) => (
+                  <div key={i} className="spread"
+                       style={{ padding: "8px 0", fontSize: ".9rem",
+                                borderBottom: "1px solid var(--line)" }}>
+                    <div>
+                      <div>{ln.description}</div>
+                      {ln.note && (
+                        <div className="muted" style={{ fontSize: ".78rem" }}>
+                          {ln.note}
+                        </div>
+                      )}
+                    </div>
+                    <span className="num">{money(ln.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: 14, display: "grid", gap: 6,
+                          fontSize: ".9rem" }}>
+              {invView.before_vat && (
+                <div className="spread">
+                  <span className="muted">{L("invBefore")}</span>
+                  <span className="num">{money(invView.before_vat)}</span>
+                </div>
+              )}
+              {invView.vat_amount && (
+                <div className="spread">
+                  <span className="muted">
+                    {L("invVat")} {invView.vat_rate
+                      ? `(${invView.vat_rate}%)` : ""}
+                  </span>
+                  <span className="num">{money(invView.vat_amount)}</span>
+                </div>
+              )}
+              <div className="spread" style={{ fontWeight: 700,
+                                               fontSize: "1rem" }}>
+                <span>{L("invTotal")}</span>
+                <span className="num">
+                  {money(invView.total)} {L("sar")}
+                </span>
+              </div>
+            </div>
+
+            {/* ⚠️ **الفاتورة الضريبية من «معتمد المحاسبيّ»** (ق-١٨٢) —
+                وهذا عرضٌ للاشتراك لا مستندٌ ضريبيّ. */}
+            {invView.note && (
+              <div className="muted" style={{ fontSize: ".78rem",
+                                              marginTop: 14 }}>
+                {invView.note}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 18,
+                          justifyContent: "flex-end" }}>
+              <button className="btn btn-sm"
+                      onClick={() => window.print()}>
+                {L("invPrint")}
+              </button>
+              <button className="btn btn-sm btn-ghost"
+                      onClick={() => setInvView(null)}>
+                {L("close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {checkout && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(16,28,38,.5)",
@@ -506,12 +724,66 @@ export default function SubscribePage() {
               </div>
             </div>
 
-            <div className="mysr-form" style={{ marginTop: 18 }} />
+            {/* ⚠️ ق-٢٧٦: **لا يُعرض خيارٌ لا يعمل** — فتظهر المتاحة
+                وحدها، ولا أزرارَ أصلًا إن كانت واحدة. */}
+            {checkout.bank_transfer?.enabled
+             && checkout.gateway_enabled !== false && (
+              <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+                {(["card", "bank"] as const).map((m) => (
+                  <button key={m} type="button"
+                    className={`btn btn-sm ${payBy === m ? "btn-primary" : ""}`}
+                    style={{ flex: 1 }}
+                    onClick={() => setPayBy(m)}>
+                    {L(m === "card" ? "payCard" : "payBank")}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="mysr-form"
+                 style={{ marginTop: 18,
+                          display: (payBy === "card"
+                                    && checkout.gateway_enabled !== false)
+                                   ? undefined : "none" }} />
+
+            {/* ⚠️ ق-٢٧٦: **التحويل يتمّ خارج معتمد** (قرار جواد): تُعرض
+                البيانات وملخّص الدفع، **ولا تُنشأ فاتورة هنا**، والتفعيل
+                بيد المشرف بعد التحقّق من التحويل. */}
+            {payBy === "bank" && checkout.bank_transfer?.enabled && (
+              <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
+                {([["bankName", checkout.bank_transfer.bank_name],
+                   ["bankIban", checkout.bank_transfer.iban],
+                   ["bankBenef", checkout.bank_transfer.beneficiary]] as const)
+                  .filter(([, v]) => !!v)
+                  .map(([k, v]) => (
+                    <div key={k} className="spread"
+                         style={{ fontSize: ".9rem", gap: 8 }}>
+                      <span className="muted">{L(k)}</span>
+                      <span className="num" dir="ltr"
+                            style={{ fontWeight: 600, wordBreak: "break-all",
+                                     cursor: "pointer" }}
+                            title={L("copied")}
+                            onClick={() => navigator.clipboard
+                              ?.writeText(String(v))}>
+                        {v}
+                      </span>
+                    </div>
+                  ))}
+                <div className="muted"
+                     style={{ fontSize: ".8rem", marginTop: 6,
+                              lineHeight: 1.7 }}>
+                  {L("bankNote")}
+                </div>
+              </div>
+            )}
 
             <div className="muted" style={{ fontSize: ".78rem",
                                             marginTop: 12,
                                             textAlign: "center" }}>
-              {L("payHint")}
+              {/* ⚠️ ق-٢٨٥: **لا تُوعَد ببوابةٍ لا تعمل** — كانت الجملة
+                  تظهر مع التحويل البنكيّ أيضًا، وحتى مع إيقاف البطاقة. */}
+              {payBy === "card" && checkout.gateway_enabled !== false
+                ? L("payHint") : null}
             </div>
           </div>
         </div>
@@ -643,9 +915,9 @@ export default function SubscribePage() {
                         </button>
                       )}
                       <button className="btn btn-sm btn-ghost"
-                        onClick={() => openForView(
-                          `/account/invoices/${inv.id}/`)}>
-                        {L("view")}
+                        disabled={invBusy}
+                        onClick={() => showInvoice(inv.id)}>
+                        {invBusy ? L("invLoading") : L("view")}
                       </button>
                     </div>
                   </td>

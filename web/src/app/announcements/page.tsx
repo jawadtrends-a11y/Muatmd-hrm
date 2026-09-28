@@ -6,7 +6,7 @@
  * والنطاق في الصلاحية: من يملك الإدارية يرى إداراته وحدها.
  */
 import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPost, ApiError, getToken } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcCheck, IcDoc, IcPlus, IcX } from "@/components/Icons";
 
@@ -125,7 +125,9 @@ export default function AnnouncementsPage() {
     try {
       const r = await fetch("/api/files/", {
         method: "POST", body: form,
-        headers: { Authorization: `Bearer ${sessionStorage.getItem("muatmd_hr_token")}` },
+        // ⚠️ ق-٢٨٧: **التوكن يُقرأ من مصدرٍ واحد** — `getToken` وحدها
+        // تعرف أين يُحفظ ومتى ينتهي. وقراءةٌ مباشرة تتعطّل بأي تغيير.
+        headers: { Authorization: `Bearer ${getToken() || ""}` },
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.detail || "تعذّر الرفع");

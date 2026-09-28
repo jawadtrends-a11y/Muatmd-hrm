@@ -167,8 +167,18 @@ def _apply(change, actor=None):
         # الفصل لا يُنهي الخدمة هنا: المخالصة وإخلاء الطرف وإرجاع
         # العهد خطوات تالية (ق-54). والاعتماد يفتح الباب لها،
         # ويعلّم الملف فيُعرف من هو في طريقه للخروج.
+        # ⚠️⚠️⚠️ ق-٢٩٠: **اعتماد الفصل يُنهي الخدمة فورًا** (قرار جواد).
+        #
+        # كان يُعلّم الملف وحده (ق-٥٤) فيبقى «على رأس العمل»: **راتبه
+        # يُصرف في المسير التالي، ورصيد إجازاته ينمو، ويظهر في كل قائمة
+        # اختيار**. والقرار المعتمَد قرارٌ نافذ لا نيّة.
+        #
+        # ⚠️ **وبياناته تبقى كاملةً**: يظهر في التقارير وفي قائمة
+        # «المنتهية خدماتهم»، ومنها تُنشأ مخالصته وتُصرف مستحقّاته.
         emp.termination_pending_from = change.effective_from
-        fields.append("termination_pending_from")
+        emp.status = EmploymentStatus.TERMINATED
+        emp.termination_date = change.effective_from
+        fields += ["termination_pending_from", "status", "termination_date"]
         out["settlement_due"] = True
         out["termination_pending_from"] = str(change.effective_from)
 

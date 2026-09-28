@@ -24,6 +24,22 @@ class DiscountScope(models.TextChoices):
     ONE_TIME = "one_time", _("مرة واحدة على فاتورة")
     RECURRING = "recurring", _("سعر خاص يستمر مع التجديد")
     COUPON = "coupon", _("كود خصم يُدخله العميل")
+    #: ⭐ ق-٢٨٦: **حملة عامّة بلا كود** (قرار جواد) — كخصم اليوم الوطنيّ
+    #: ونهاية السنة: **تُطبَّق تلقائيًّا** على من تشمله في مدّتها.
+    CAMPAIGN = "campaign", _("حملة عامة (بلا كود)")
+
+
+class DiscountAudience(models.TextChoices):
+    """
+    من تشمله الحملة (ق-٢٨٦).
+
+    ⚠️ **والفرق ماليٌّ لا شكليّ**: حملةُ جذبٍ للجدد تُكلّف غير حملةِ
+    تثبيتٍ للمجدِّدين — **ولا يصحّ أن يأخذها الجميع** حين تُقصد فئة.
+    """
+
+    ALL = "all", _("جميع العملاء")
+    NEW = "new", _("العملاء الجدد")
+    RENEWAL = "renewal", _("عملاء التجديد")
 
 
 class Discount(TimeStampedModel):
@@ -62,6 +78,21 @@ class Discount(TimeStampedModel):
     max_uses = models.PositiveIntegerField(_("أقصى استخدام"), null=True,
                                            blank=True)
     used_count = models.PositiveIntegerField(_("عدد الاستخدام"), default=0)
+
+    #: ⭐ ق-٢٨٦: **من تشمله الحملة** — يعني `campaign` وحدها.
+    #: ⚠️ **والفرق ماليٌّ لا شكليّ**: حملةُ جذبٍ للجدد تُكلّف غير حملةِ
+    #: تثبيتٍ للمجدِّدين، **ولا يصحّ أن يأخذها الجميع** حين تُقصد فئة.
+    audience = models.CharField(
+        _("الفئة المستهدفة"), max_length=20,
+        choices=DiscountAudience.choices, default=DiscountAudience.ALL)
+
+    #: ⚠️⚠️ **الجمع قرارٌ يُتَّخذ عند الإنشاء** (قرار جواد): فحملةٌ تُجمع
+    #: مع كودٍ قد تُنزل السعر إلى ما دون الكلفة. **والافتراض ألّا يُجمع** —
+    #: فالأسلم أن يُقصد الجمع لا أن يقع.
+    stackable = models.BooleanField(
+        _("يُجمع مع كود الخصم"), default=False,
+        help_text=_("إن كان مطفأً فالأعلى قيمةً وحده يُطبَّق"))
+
     is_active = models.BooleanField(_("نشط"), default=True)
     note = models.TextField(_("ملاحظة"), blank=True)
 

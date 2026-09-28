@@ -292,6 +292,17 @@ def create_settlement_run(*, employment, termination_date, reason_code,
 
     مسير المستحقات يخرج عن الدورة الشهرية — يُنشأ عند الحاجة (ق-21).
     """
+
+    # ⚠️⚠️ ق-٢٩١: **لا مخالصةَ لعاملٍ على رأس العمل** (قرار جواد).
+    #
+    # فالمخالصة تصفيةُ حسابٍ **بعد** انتهاء الخدمة: إصدارها لعاملٍ
+    # يُنشئ مستحقّاتٍ وهميّة، ويُدخل مكافأةً لمن لم يخرج. والشاشة
+    # تُقيّد البحث بالمنتهين — وهذا يمنع ما يمرّ من غيرها.
+    from apps.employees.models import EmploymentStatus
+
+    if employment.status != EmploymentStatus.TERMINATED:
+        raise SettlementError(
+            "لا تُصدر المخالصة إلا بعد اعتماد إنهاء الخدمة")
     from apps.payroll.models import (
         PayrollRun, PayrollRunStatus, PayrollRunType, Payslip, PayslipLine,
         PayslipLineType,

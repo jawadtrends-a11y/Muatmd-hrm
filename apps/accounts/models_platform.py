@@ -57,6 +57,40 @@ class PlatformSettings(TimeStampedModel):
         _("مزامنة الفواتير مع المحاسبي"), default=False)
 
     support_email = models.EmailField(_("بريد الدعم"), blank=True)
+
+    # ── ق-٢٧٦: إشعارات المنصّة والتحويل البنكيّ (قرار جواد) ──
+    #: ⚠️⚠️ **تسجيلٌ جديد بلا إشعارٍ يضيع**: يسجّل العميل وينتظر، ولا أحد
+    #: يعلم. فيصل إشعارٌ بكل تسجيل — وبمن اختار التحويل البنكيّ خاصّةً،
+    #: **فتفعيلُه بيد المشرف لا بالبوابة**.
+    notify_email = models.EmailField(
+        _("بريد إشعارات المنصّة"), blank=True,
+        help_text=_("يصله كل تسجيلٍ جديد وكل طلب تحويلٍ بنكيّ"))
+
+    #: ⚠️ **التحويل البنكيّ يتمّ خارج معتمد** (قرار جواد): تُعرض البيانات
+    #: وملخّص الدفع، ولا تُنشأ فاتورة. والشركات المتوسطة والكبيرة تفضّله
+    #: على البطاقة.
+    #: ⚠️⚠️ **وإخفاء البوابة لازمٌ أيضًا** (قرار جواد): فقد تتعطّل ميسر،
+    #: أو يُراد التحويل وحده فترةً. **ولا يجوز أن يبقى خيارٌ لا يعمل.**
+    gateway_enabled = models.BooleanField(
+        _("إتاحة الدفع بالبطاقة"), default=True)
+    bank_transfer_enabled = models.BooleanField(
+        _("إتاحة التحويل البنكي"), default=False)
+    # ── ق-٢٨١: الإعلان عن العرض (قرار جواد) ──
+    #: ⚠️⚠️ **كودٌ لا يعرفه أحدٌ لا يُستعمل**: تُنشئه اللوحة ويقبله الخادم،
+    #: **ولا مكانَ يُعلن عنه** — فيبقى حبرًا. فيُعرض شريطًا في شاشتي
+    #: الأسعار: العامّة (قبل التسجيل) والاشتراك (للتجديد).
+    promo_enabled = models.BooleanField(_("إظهار شريط العرض"), default=False)
+    promo_text = models.CharField(
+        _("نصّ العرض"), max_length=160, blank=True,
+        help_text=_("مثال: خصم ٢٠٪ على الاشتراك السنوي"))
+    promo_code = models.CharField(
+        _("كود العرض"), max_length=40, blank=True,
+        help_text=_("يُعرض للنسخ — ويجب أن يكون كودًا قائمًا في الخصومات"))
+
+    bank_name = models.CharField(_("اسم البنك"), max_length=120, blank=True)
+    bank_iban = models.CharField(_("الآيبان"), max_length=34, blank=True)
+    bank_beneficiary = models.CharField(
+        _("اسم المستفيد"), max_length=150, blank=True)
     support_mobile = models.CharField(_("جوال الدعم"), max_length=20,
                                       blank=True)
 

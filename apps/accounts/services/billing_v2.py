@@ -13,7 +13,8 @@ from django.db.models import F
 from django.utils import timezone
 
 from apps.accounts.models_billing_v2 import (
-    AccountSubscription, BillingCycle, Discount, DiscountKind, DiscountScope,
+    AccountSubscription, BillingCycle, Discount, DiscountAudience,
+    DiscountKind, DiscountScope,
     Invoice, InvoiceLine, InvoiceStatus, SubscriptionPaymentMethod,
     SubscriptionState,
 )
@@ -89,7 +90,27 @@ def resolve_discount(*, account, cycle, subtotal, coupon_code=None,
             return DiscountResult(reason="الكود مخصص لحساب آخر")
         if d.applies_to_cycle and d.applies_to_cycle != cycle:
             return DiscountResult(reason="الكود لا يسري على هذه الدورة")
-        return DiscountResult(amount=_apply(d, subtotal), discount=d)
+        # ⭐ ق-٢٨٦: **والحملة قد تُجمع مع الكود** — إن أُنشئت كذلك.
+        coupon_res = DiscountResult(amount=_apply(d, subtotal), discount=d)
+        camp = _active_campaign(account, cycle, day, subscription)
+        if camp is not None and camp.stackable:
+            # ⚠️ **الحملة تُحسب على المتبقّي بعد الكود** لا على الأصل —
+            # وإلا تجاوز مجموع الخصمين قيمة الفاتورة.
+            rest = subtotal - coupon_res.amount
+            return DiscountResult(
+                amount=coupon_res.amount + _apply(camp, rest),
+                discount=d, reason=f"مع حملة: {camp.name_ar}")
+        if camp is not None:
+            # ⚠️⚠️ **الأعلى قيمةً وحده** — فلا يجتمع خصمان بلا قصد.
+            camp_amt = _apply(camp, subtotal)
+            if camp_amt > coupon_res.amount:
+                return DiscountResult(amount=camp_amt, discount=camp)
+        return coupon_res
+
+    # ⭐ **حملةٌ عامّةٌ بلا كود** — تُطبَّق تلقائيًّا على من تشمله
+    camp = _active_campaign(account, cycle, day, subscription)
+    if camp is not None:
+        return DiscountResult(amount=_apply(camp, subtotal), discount=camp)
 
     if subscription and subscription.recurring_discount_id:
         d = subscription.recurring_discount
@@ -291,6 +312,13 @@ def mark_paid(invoice, actor=None, note=""):
     if invoice.status == InvoiceStatus.PAID:
         return invoice
 
+    # ⚠️⚠️ ق-٢٨٤: **المسودّة تُصدَر عند الدفع** (قرار جواد): لا إيصالَ
+    # يراه العميل قبل دفعٍ حقيقيّ — فتُصدر هنا، **وعدّاد كود الخصم يزيد
+    # بدفعٍ لا بضغطة**.
+    if invoice.status == InvoiceStatus.DRAFT:
+        issue_invoice(invoice)
+        invoice.refresh_from_db()
+
     invoice.status = InvoiceStatus.PAID
     invoice.paid_at = timezone.now()
     if note:
@@ -347,8 +375,14 @@ def activate_manually(*, subscription, plan, cycle, period_start,
     subscription.activated_by_person = activated_by
     subscription.activation_note = note
     subscription.grace_until = None
-    if custom_price is not None:
+    # ⚠️⚠️ ق-٢٧٨: **سعرٌ خاصٌّ بصفرٍ يُلغي الاشتراك ماليًّا.** حقلٌ فارغٌ
+    # في الشاشة يصل `"0"`، و`Decimal("0")` تمرّ من `is not None` **فتُحفظ
+    # سعرًا**: كل فواتير الحساب بصفر، ولا يُحصَّل ريال. (وقع لسدرة فعلًا.)
+    # **والمجّانيّ يُمنح بباقةٍ أو بخصمٍ صريح، لا بسعرٍ خاصٍّ صفريّ.**
+    if custom_price is not None and custom_price > 0:
         subscription.custom_price = custom_price
+    elif custom_price is not None:
+        subscription.custom_price = None
     if setup_fee is not None:
         subscription.setup_fee_amount = setup_fee
     # ق-108: العدد المتفق عليه يُثبَّت هنا كما يُثبَّت عند الدفع
@@ -363,6 +397,22 @@ def activate_manually(*, subscription, plan, cycle, period_start,
                summary=(f"تفعيل إداري — {plan.name_ar if plan else ''} "
                         f"حتى {subscription.current_period_end}"
                         + (f" — {note}" if note else "")))
+
+    # ⚠️⚠️ ق-٢٨٤: **التفعيل يُصدر الإيصال في وقتٍ واحد** (قرار جواد):
+    # فالمشترك بتحويلٍ بنكيّ **يحتاج إيصالًا يُثبت ما دفع**، ومسودّته
+    # تنتظر. ⚠️ **وفشلُ الإصدار لا يُسقط التفعيل**: العميل دفع وحقّه أن
+    # يعمل النظام، والإيصال يُصدَر يدويًّا إن تعثّر.
+    try:
+        inv = Invoice.objects.filter(
+            account_id=subscription.account_id,
+            status=InvoiceStatus.DRAFT).order_by("-id").first()
+        if inv is not None:
+            issue_invoice(inv)
+    except Exception:  # noqa: BLE001
+        import logging
+        logging.getLogger("muatmd.billing").exception(
+            "issue_on_activate_failed")
+
     return subscription
 
 
@@ -574,3 +624,39 @@ def quote(*, plan, employees, cycle, with_setup=False, vat_rate=None):
         "renewal_subtotal": str(subscription),
         "renewal_total": str(r2(subscription + r2(subscription * rate))),
     }
+
+
+def _active_campaign(account, cycle, day, subscription=None):
+    """
+    حملةٌ عامّةٌ سارية تشمل هذا العميل — أو None (ق-٢٨٦).
+
+    ⭐ **بلا كود**: كخصم اليوم الوطنيّ ونهاية السنة — تُطبَّق تلقائيًّا.
+
+    ⚠️ **والفئة تُفحص بالاشتراك لا بالحساب**: «جديد» من لا اشتراك مدفوعًا
+    له، و«تجديد» من له فترةٌ سارية. فحملةُ جذبٍ لا يأخذها المجدِّد،
+    وحملةُ تثبيتٍ لا يأخذها الوافد.
+
+    ⚠️⚠️ **والأعلى قيمةً يفوز** حين تتزاحم الحملات — فالعميل لا يُحاسَب
+    على تعدّد حملاتنا، ولا يُعطى أدناها.
+    """
+    qs = Discount.objects.filter(
+        scope=DiscountScope.CAMPAIGN, is_active=True)
+    out, best = None, None
+    for d in qs:
+        ok, _why = d.is_valid_on(day)
+        if not ok:
+            continue
+        if d.applies_to_cycle and d.applies_to_cycle != cycle:
+            continue
+        if d.audience != DiscountAudience.ALL:
+            is_renewal = bool(
+                subscription and subscription.current_period_end
+                and subscription.current_period_end >= day)
+            if d.audience == DiscountAudience.NEW and is_renewal:
+                continue
+            if d.audience == DiscountAudience.RENEWAL and not is_renewal:
+                continue
+        val = _apply(d, Decimal("10000"))  # للمفاضلة فقط
+        if best is None or val > best:
+            out, best = d, val
+    return out

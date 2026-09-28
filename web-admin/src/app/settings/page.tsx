@@ -41,6 +41,30 @@ const T: Dict = {
     ar: "ساعات بين المحاولات — 12,24 يعني بعد 12 ثم بعد 24",
     en: "Hours between retries",
   },
+  notifTitle: { ar: "إشعارات المنصّة", en: "Platform notifications" },
+  notifEmail: { ar: "بريد الإشعارات", en: "Notification email" },
+  notifHint: {
+    ar: "يصله كل تسجيلٍ جديد — واتركه فارغًا لإيقاف الإشعارات",
+    en: "Receives every new signup — leave empty to disable",
+  },
+  promoTitle: { ar: "شريط العرض", en: "Promo banner" },
+  promoOn: { ar: "إظهار الشريط", en: "Show banner" },
+  promoText: { ar: "نصّ العرض", en: "Promo text" },
+  promoCode: { ar: "كود العرض", en: "Promo code" },
+  promoHint: {
+    ar: "يظهر في شاشتي الأسعار — والكود يُنسخ بنقرة، ويجب أن يكون قائمًا في الخصومات",
+    en: "Shown on both pricing screens — the code must exist in Discounts",
+  },
+  payTitle: { ar: "طرق الدفع", en: "Payment methods" },
+  payGateway: { ar: "الدفع بالبطاقة (ميسر)", en: "Card payment (Moyasar)" },
+  payBankOn: { ar: "التحويل البنكي", en: "Bank transfer" },
+  payBankHint: {
+    ar: "تُعرض بياناته للعميل — والتفعيل بيدك بعد التحقّق من التحويل",
+    en: "Details shown to the client — you activate after verifying",
+  },
+  bankName: { ar: "اسم البنك", en: "Bank name" },
+  bankIban: { ar: "الآيبان", en: "IBAN" },
+  bankBenef: { ar: "اسم المستفيد", en: "Beneficiary" },
   support: { ar: "الدعم", en: "Support" },
   supportEmail: { ar: "بريد الدعم", en: "Support email" },
   supportMobile: { ar: "جوال الدعم", en: "Support mobile" },
@@ -190,6 +214,48 @@ export default function PlatformSettingsPage() {
         <Row label={L("autoRetry")} hint={L("autoRetryHint")}>
           {text("auto_retry_hours")}
         </Row>
+      </div>
+
+      {/* ⚠️⚠️ ق-٢٧٦: **تسجيلٌ جديد بلا إشعارٍ يضيع** — يسجّل العميل
+          وينتظر ولا أحد يعلم. */}
+      <div className="card" style={{ padding: 20 }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: 4 }}>
+          {L("notifTitle")}
+        </h2>
+        <Row label={L("notifEmail")} hint={L("notifHint")}>
+          {text("notify_email")}
+        </Row>
+      </div>
+
+      {/* ⚠️ **ولا يُطفأ الدفع بالبطاقة والتحويل معًا** — فلن يشترك أحد.
+          والخادم يرفض ذلك، ويرفض تحويلًا بلا آيبان. */}
+      {/* ⚠️⚠️ ق-٢٨١: **كودٌ لا يعرفه أحدٌ لا يُستعمل** — فيُعلَن عنه هنا */}
+      <div className="card" style={{ padding: 20 }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: 4 }}>{L("promoTitle")}</h2>
+        <Row label={L("promoOn")} hint={L("promoHint")}>
+          {bool("promo_enabled")}
+        </Row>
+        {s.promo_enabled ? (
+          <>
+            <Row label={L("promoText")}>{text("promo_text")}</Row>
+            <Row label={L("promoCode")}>{text("promo_code")}</Row>
+          </>
+        ) : null}
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: 4 }}>{L("payTitle")}</h2>
+        <Row label={L("payGateway")}>{bool("gateway_enabled")}</Row>
+        <Row label={L("payBankOn")} hint={L("payBankHint")}>
+          {bool("bank_transfer_enabled")}
+        </Row>
+        {s.bank_transfer_enabled ? (
+          <>
+            <Row label={L("bankName")}>{text("bank_name")}</Row>
+            <Row label={L("bankIban")}>{text("bank_iban")}</Row>
+            <Row label={L("bankBenef")}>{text("bank_beneficiary")}</Row>
+          </>
+        ) : null}
       </div>
 
       <div className="card" style={{ padding: 20 }}>

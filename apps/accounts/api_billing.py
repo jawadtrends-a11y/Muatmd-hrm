@@ -129,7 +129,9 @@ def invoices(request):
     """فواتير الحساب."""
     Gate.require(request.user, "account.view")
     acc_id = _account_id(request)
-    qs = Invoice.objects.filter(account_id=acc_id)
+    # ⚠️ **والمسودّة لا يراها العميل**: إيصالٌ لم يُدفع ولم يُصدر بعد
+    qs = Invoice.objects.filter(account_id=acc_id).exclude(
+        status=InvoiceStatus.DRAFT)
     if request.GET.get("status"):
         qs = qs.filter(status=request.GET["status"])
 
@@ -196,7 +198,7 @@ def invoice_detail(request, invoice_id):
     inv = Invoice.objects.filter(
         id=invoice_id, account_id=_account_id(request)).first()
     if inv is None:
-        return Response({"detail": "الفاتورة غير موجودة"}, status=404)
+        return Response({"detail": "الإيصال غير موجود"}, status=404)
 
     return Response({
         "invoice_no": inv.invoice_no,
@@ -274,14 +276,25 @@ def start_checkout(request):
     if sub.trial_ends_at and sub.trial_ends_at >= _date.today():
         period_start = sub.trial_ends_at
 
-    try:
-        invoice, disc = billing.create_invoice(
-            subscription=sub, headcount=employees,
-            period_start=period_start,
-            coupon_code=request.data.get("coupon_code"))
-        billing.issue_invoice(invoice)
-    except billing.BillingError as e:
-        return Response({"detail": str(e)}, status=400)
+    # ⚠️⚠️ ق-٢٨٠: **كل ضغطةٍ كانت تُنشئ إيصالًا** — فمن ضغط ثلاثًا صار
+    # عليه ثلاثة لنفس الفترة (وقع لسدرة). ⭐ **والإيصال المعلَّق بنفس
+    # الباقة والعدد يُعاد لا يُكرَّر** (قرار جواد)؛ وتغيّرُ الباقة أو
+    # العدد **إيصالٌ منفصل**، والتجديد بآخر باقةٍ وآخر عدد.
+    existing = _pending_invoice(sub, plan, employees, period_start)
+    if existing is not None:
+        invoice, disc = existing, None
+    else:
+        try:
+            invoice, disc = billing.create_invoice(
+                subscription=sub, headcount=employees,
+                period_start=period_start,
+                coupon_code=request.data.get("coupon_code"))
+            # ⚠️⚠️ ق-٢٨٤: **لا إيصالَ قبل الدفع** (قرار جواد): كان كل
+            # ضغطٍ يُصدر إيصالًا يراه العميل، **فتتراكم إيصالاتٌ ميّتة**
+            # ويستهلك كودُ الخصم عدّاده بلا دفع. فتبقى **مسودّةً**
+            # حتى الدفع أو التفعيل من اللوحة.
+        except billing.BillingError as e:
+            return Response({"detail": str(e)}, status=400)
 
     return Response({
         "invoice_id": invoice.id,
@@ -291,12 +304,24 @@ def start_checkout(request):
         "vat_amount": str(invoice.vat_amount),
         "total": str(invoice.total),
         "setup_fee": str(invoice.setup_fee),
-        "discount": {"amount": str(disc.amount),
-                     "name": disc.discount.name_ar if disc.discount else None,
-                     "reason": disc.reason},
+        # ⚠️ **و`disc` يكون `None` حين يُعاد إيصالٌ قائم** (ق-٢٨٠) —
+        # فالخصم حُسب عند إصداره ولا يُعاد حسابه.
+        "discount": ({"amount": str(disc.amount),
+                      "name": (disc.discount.name_ar
+                               if disc.discount else None),
+                      "reason": disc.reason} if disc else
+                     {"amount": "0.00", "name": None, "reason": ""}),
         "publishable_key": settings.MOYASAR_PUBLISHABLE_KEY,
         "callback_url": settings.MOYASAR_CALLBACK_URL,
         "amount_halalas": int(invoice.total * 100),
+        # ⭐ ق-٢٧٦: **التحويل البنكيّ خيارًا ثانيًا** (قرار جواد) —
+        # فالشركات المتوسطة والكبيرة تفضّله على البطاقة. ⚠️ **ويتمّ خارج
+        # معتمد**: تُعرض البيانات وملخّص الدفع، والتفعيل بيد المشرف.
+        # وحقلٌ واحد (`bank_transfer_enabled`) يُظهر الخيار أو يُخفيه.
+        "bank_transfer": _bank_transfer_info(),
+        # ⚠️ **والبوابة تُخفى كذلك**: فقد تتعطّل ميسر أو يُراد التحويل
+        # وحده فترةً — **ولا يجوز أن يبقى خيارٌ لا يعمل**.
+        "gateway_enabled": _gateway_enabled(),
     }, status=201)
 
 
@@ -310,7 +335,7 @@ def pay_invoice(request, invoice_id):
     inv = Invoice.objects.filter(
         id=invoice_id, account_id=_account_id(request)).first()
     if inv is None:
-        return Response({"detail": "الفاتورة غير موجودة"}, status=404)
+        return Response({"detail": "الإيصال غير موجود"}, status=404)
 
     source = request.data.get("source")
     if not isinstance(source, dict) or "type" not in source:
@@ -410,3 +435,68 @@ def saved_cards(request):
          "is_default": c.is_default, "last_used_at": c.last_used_at}
         for c in SavedCard.objects.filter(account_id=acc_id, is_active=True)
     ])
+
+
+def _bank_transfer_info():
+    """
+    بيانات التحويل البنكيّ — تُدار من لوحة المنصّة لا من الكود.
+
+    ⚠️ **وتُرجَع فارغةً حين يُعطَّل الخيار**: فلا يُعرض بنكٌ لا تريد
+    التحويل إليه، ولا تُسرَّب بياناتٌ قديمة.
+    """
+    try:
+        from apps.accounts.models_platform import PlatformSettings
+
+        st = PlatformSettings.objects.first()
+        if not st or not getattr(st, "bank_transfer_enabled", False):
+            return {"enabled": False}
+        return {
+            "enabled": True,
+            "bank_name": st.bank_name or "",
+            "iban": st.bank_iban or "",
+            "beneficiary": st.bank_beneficiary or "",
+        }
+    except Exception:  # noqa: BLE001
+        return {"enabled": False}
+
+
+def _gateway_enabled():
+    """
+    هل الدفع بالبطاقة متاح — من إعدادات المنصّة.
+
+    ⚠️⚠️ **والافتراض `True` عند أيّ خطأ**: فإخفاء الطريقتين معًا يمنع
+    الاشتراك كلّه، **وتعطُّل قراءة إعدادٍ لا يجوز أن يُغلق باب البيع**.
+    """
+    try:
+        from apps.accounts.models_platform import PlatformSettings
+
+        st = PlatformSettings.objects.first()
+        return bool(getattr(st, "gateway_enabled", True)) if st else True
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _pending_invoice(sub, plan, employees, period_start):
+    """
+    إيصالٌ صادرٌ غير مدفوعٍ بنفس الباقة والعدد والفترة — أو None.
+
+    ⚠️ **والمدفوع والملغى لا يُعادان**: الأول انتهى أمره، والثاني قرارٌ
+    اتُّخذ. فيُبحث عن **المسودّة والصادرة** وحدهما.
+
+    ⚠️ ق-٢٨٤: **والمسودّة تُعاد قبل كل شيء** — فهي ما يُنشأ عند الضغط،
+    ولا تُصدر إلا بالدفع. فإعادتها تمنع تراكم المسودّات كما منعت
+    تراكم الإيصالات.
+    """
+    from apps.accounts.models_billing_v2 import Invoice, InvoiceStatus
+
+    # ⚠️⚠️ **والدورة جزءٌ من الهويّة**: من بدّل الشهريّ بالسنويّ كان
+    # يُعاد له **إيصالُه الشهريّ** — فيرى سعرًا لا يطابق اختياره.
+    qs = Invoice.objects.filter(
+        account_id=sub.account_id, headcount=employees,
+        cycle=sub.cycle,
+        status__in=[InvoiceStatus.DRAFT, InvoiceStatus.ISSUED])
+    if period_start:
+        qs = qs.filter(period_start=period_start)
+    # ⚠️ الباقة تُقارَن بما في الاشتراك وقت الإصدار — فالإيصال لا
+    # يحمل الباقة بنفسه، والاشتراك حُدّث للتوّ بها.
+    return qs.order_by("-id").first()

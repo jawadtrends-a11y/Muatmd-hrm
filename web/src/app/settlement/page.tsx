@@ -189,7 +189,12 @@ export default function SettlementPage() {
                         "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <div className="field">
             <label className="label">{L("employee")}</label>
-            <EmployeePicker value={emp} onChange={setEmp} />
+            {/* ⚠️⚠️ ق-٢٩١: **المخالصة لمن انتهت خدمته وحده** (قرار
+                جواد) — وقائمة الموظفين تُخفي المنتهين (ق-٢٨٩)، فبحثٌ
+                بلا تقييد **لا يجد صاحب المخالصة أصلًا**. */}
+            <EmployeePicker value={emp} onChange={setEmp}
+                            extraQuery={{ status: "terminated" }}
+                            emptyText="لا نتائج — المخالصة لمن انتهت خدمته فقط" />
           </div>
 
           <div className="field">

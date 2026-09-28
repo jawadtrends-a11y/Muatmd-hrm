@@ -61,6 +61,15 @@ def signup(request):
               f'<p><a href="{link}">تأكيد التسجيل</a></p>'
               f"<p>الرابط صالح ٤٨ ساعة.</p>"))
 
+    # ⚠️⚠️ ق-٢٧٦: **تسجيلٌ جديد بلا إشعارٍ يضيع** (قرار جواد): يسجّل
+    # العميل وينتظر، **ولا أحد يعلم** — فلا متابعةَ ولا اتّصال.
+    notify_platform(
+        subject=f"تسجيل جديد — {req.company_name}",
+        text=(f"الشركة: {req.company_name}\n"
+              f"المسؤول: {req.full_name}\n"
+              f"البريد: {req.email}\n"
+              f"الجوال: {req.mobile}\n"))
+
     return Response({
         "sent": True,
         "email": req.email,
@@ -119,3 +128,27 @@ def password_reset(request, token):
     except svc.SignupError as e:
         return Response({"detail": str(e)}, status=400)
     return Response({"done": True, "detail": "غُيّرت كلمة المرور — سجّل دخولك"})
+
+
+def notify_platform(*, subject, text):
+    """
+    إشعارٌ لمشرف المنصّة — يُقرأ بريدُه من إعدادات المنصّة.
+
+    ⚠️⚠️ **وفشلُه لا يُسقط ما يُشعِر عنه**: فلو تعطّل بريدنا لما جاز أن
+    يُمنع عميلٌ من التسجيل. يُسجَّل الخطأ ويمضي.
+    """
+    import logging
+
+    try:
+        from apps.accounts.models_platform import PlatformSettings
+        from apps.notifications.services.sender import send_email
+
+        st = PlatformSettings.objects.first()
+        to = (getattr(st, "notify_email", "") or "").strip()
+        if not to:
+            return False
+        return send_email(to=to, subject=subject, text=text)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("muatmd.platform").exception(
+            "platform_notify_failed")
+        return False

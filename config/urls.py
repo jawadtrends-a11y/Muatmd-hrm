@@ -113,6 +113,11 @@ urlpatterns = [
          name="password-reset"),
     # ق-116: صفحة الأسعار العامّة — تُفتح قبل التسجيل
     path("api/pricing/", subscribe_api.public_pricing, name="public-pricing"),
+    # ق-٢٨١: شريط العرض — لشاشتي الأسعار، وبلا مصادقة (العامّة تسبق التسجيل)
+    path("api/promo/", subscribe_api.public_promo, name="public-promo"),
+    # ق-٢٨٢: تحقّقٌ فوريّ من كود الخصم — قبل الاشتراك لا عنده
+    path("api/coupon/check/", subscribe_api.check_coupon,
+         name="coupon-check"),
     path("api/pricing/quote/", subscribe_api.public_quote,
          name="public-quote"),
     path("api/plans/", subscribe_api.public_plans, name="public-plans"),

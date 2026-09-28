@@ -11,6 +11,7 @@ import Link from "next/link";
 import { apiGet } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcCheck } from "@/components/Icons";
+import PromoBanner from "@/components/PromoBanner";
 
 const T: Dict = {
   title: { ar: "الأسعار", en: "Pricing" },
@@ -101,6 +102,8 @@ export default function PricingPage() {
   return (
     <div style={{ minHeight: "100vh", padding: "32px 20px 60px" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        {/* ق-٢٨١: شريط العرض — يُدار من لوحة المنصّة، ولا يظهر إن عُطّل */}
+        <PromoBanner />
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <img src="/logo.png" alt="معتمد"
                style={{ height: 78, margin: "0 auto 12px", display: "block" }} />

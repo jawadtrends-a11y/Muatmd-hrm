@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { pGet, pPost, pDelete, AdminError } from "@/lib/api";
+import { pGet, pPost, pPut, pDelete, AdminError } from "@/lib/api";
 import { useT, type Dict } from "@/lib/prefs";
 import { IcAlert, IcPlus, IcX } from "@/components/Icons";
 
@@ -22,6 +22,20 @@ const T: Dict = {
   code: { ar: "الكود", en: "Code" },
   name: { ar: "الاسم", en: "Name" },
   scope: { ar: "النوع", en: "Type" },
+  campaign: { ar: "حملة عامة (بلا كود)", en: "Campaign (no code)" },
+  audience: { ar: "الفئة المستهدفة", en: "Audience" },
+  audAll: { ar: "جميع العملاء", en: "All customers" },
+  audNew: { ar: "العملاء الجدد", en: "New customers" },
+  audRenewal: { ar: "عملاء التجديد", en: "Renewals" },
+  stackable: { ar: "يُجمع مع كود الخصم", en: "Stacks with coupon" },
+  stackHint: {
+    ar: "إن كان مطفأً فالأعلى قيمةً وحده يُطبَّق",
+    en: "If off, only the larger discount applies",
+  },
+  campHint: {
+    ar: "الكود معرّفٌ داخليٌّ لك — لا يراه العميل، والخصم يُطبَّق تلقائيًّا",
+    en: "The code is an internal label — applied automatically",
+  },
   value: { ar: "القيمة", en: "Value" },
   used: { ar: "الاستخدام", en: "Used" },
   validUntil: { ar: "صالح حتى", en: "Valid until" },
@@ -34,6 +48,10 @@ const T: Dict = {
   active: { ar: "نشط", en: "Active" },
   inactive: { ar: "معطّل", en: "Inactive" },
   deactivate: { ar: "تعطيل", en: "Deactivate" },
+  edit: { ar: "تعديل", en: "Edit" },
+  save: { ar: "حفظ", en: "Save" },
+  codeLocked: { ar: "الكود لا يُعدَّل — فهو مرجع الإيصالات الصادرة",
+                en: "Code cannot be changed" },
   create: { ar: "إنشاء", en: "Create" },
   cancel: { ar: "إلغاء", en: "Cancel" },
   kind: { ar: "طريقة الحساب", en: "Calculation" },
@@ -65,23 +83,36 @@ type Discount = {
   max_uses: number | null;
   used_count: number;
   is_active: boolean;
+  audience?: string;
+  audience_label?: string;
+  stackable?: boolean;
+  valid_from?: string | null;
 };
 
 function NewDialog({
-  L, onCreate, onClose, busy,
+  L, onCreate, onClose, busy, initial,
 }: {
   L: (k: string, f?: string) => string;
   onCreate: (data: Record<string, unknown>) => void;
   onClose: () => void;
   busy: boolean;
+  /** ⚠️⚠️ ق-٢٩٢: **حملةٌ بقيمةٍ خاطئةٍ كانت تُعطَّل وتُعاد** (تنبيه
+   *  جواد) — فالحوار نفسه يُعدّل. **والكود لا يُمسّ**: هو مرجع ما
+   *  صدر من إيصالات، وتغييرُه يقطع أثرها. */
+  initial?: Discount | null;
 }) {
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [scope, setScope] = useState("coupon");
-  const [kind, setKind] = useState("percent");
-  const [value, setValue] = useState("");
-  const [cycle, setCycle] = useState("");
-  const [maxUses, setMaxUses] = useState("");
+  const ed = !!initial;
+  const [code, setCode] = useState(initial?.code || "");
+  const [name, setName] = useState(initial?.name_ar || "");
+  const [scope, setScope] = useState(initial?.scope || "coupon");
+  const [audience, setAudience] = useState(initial?.audience || "all");
+  const [stackable, setStackable] = useState(!!initial?.stackable);
+  const [kind, setKind] = useState(initial?.kind || "percent");
+  const [value, setValue] = useState(initial?.value || "");
+  const [cycle, setCycle] = useState(initial?.applies_to_cycle || "");
+  const [active, setActive] = useState(initial?.is_active ?? true);
+  const [maxUses, setMaxUses] = useState(
+    initial?.max_uses != null ? String(initial.max_uses) : "");
   const [coversSetup, setCoversSetup] = useState(false);
 
   return (
@@ -100,9 +131,27 @@ function NewDialog({
         <div className="stack">
           <div className="field">
             <label className="label">{L("code")}</label>
-            <input className="input" dir="ltr" value={code} autoFocus
+            {/* ⚠️ ق-٢٩٢: **الكود لا يُعدَّل** — فهو مرجع ما صدر من
+                إيصالات، وتغييرُه يقطع أثرها. */}
+            <input className="input" dir="ltr" value={code}
+              autoFocus={!ed} disabled={ed}
               onChange={(e) => setCode(e.target.value.toUpperCase())} />
+            {ed && (
+              <div className="muted" style={{ fontSize: ".8rem" }}>
+                {L("codeLocked")}
+              </div>
+            )}
           </div>
+
+          {ed && (
+            <div className="field">
+              <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={active}
+                  onChange={(e) => setActive(e.target.checked)} />
+                <span>{L("active")}</span>
+              </label>
+            </div>
+          )}
 
           <div className="field">
             <label className="label">{L("name")}</label>
@@ -117,8 +166,39 @@ function NewDialog({
               <option value="coupon">{L("coupon")}</option>
               <option value="recurring">{L("recurring")}</option>
               <option value="one_time">{L("one_time")}</option>
+              <option value="campaign">{L("campaign")}</option>
             </select>
           </div>
+
+          {/* ⭐ ق-٢٨٦: **حملةٌ عامّةٌ بلا كود** — كاليوم الوطنيّ ونهاية
+              السنة. وحقولها تظهر معها وحدها. */}
+          {scope === "campaign" && (
+            <>
+              <div className="field">
+                <label className="label">{L("audience")}</label>
+                <select className="select" value={audience}
+                  onChange={(e) => setAudience(e.target.value)}>
+                  <option value="all">{L("audAll")}</option>
+                  <option value="new">{L("audNew")}</option>
+                  <option value="renewal">{L("audRenewal")}</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={stackable}
+                    onChange={(e) => setStackable(e.target.checked)} />
+                  <span>{L("stackable")}</span>
+                </label>
+                <div className="muted" style={{ fontSize: ".8rem" }}>
+                  {L("stackHint")}
+                </div>
+                <div className="muted" style={{ fontSize: ".8rem",
+                                                marginTop: 4 }}>
+                  {L("campHint")}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="row">
             <div className="field grow">
@@ -171,8 +251,9 @@ function NewDialog({
                 applies_to_cycle: cycle,
                 max_uses: maxUses ? Number(maxUses) : null,
                 covers_setup_fee: coversSetup,
+                audience, stackable, is_active: active,
               })}>
-              {L("create")}
+              {L(ed ? "save" : "create")}
             </button>
             <button className="btn btn-ghost" onClick={onClose}>
               {L("cancel")}
@@ -205,6 +286,25 @@ export default function DiscountsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ⚠️ ق-٢٩٢: الحوار نفسه يُنشئ ويُعدّل — والكود ثابتٌ في التعديل
+  const [editing, setEditing] = useState<Discount | null>(null);
+
+  async function update(data: Record<string, unknown>) {
+    if (!editing) return;
+    setActing(true);
+    setError("");
+    try {
+      const { code: _c, scope: _s, kind: _k, ...rest } = data;
+      await pPut(`/platform/discounts/${editing.id}/`, rest);
+      setEditing(null);
+      await load();
+    } catch (e) {
+      setError((e as AdminError).message);
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function create(data: Record<string, unknown>) {
     setActing(true);
@@ -324,6 +424,13 @@ export default function DiscountsPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: "end" }}>
+                      {/* ⚠️⚠️ ق-٢٩٢: **والتعديل متاحٌ للمعطَّل كذلك** —
+                          فمن عطّل حملةً بالخطأ **لا سبيل له لإعادتها**،
+                          و`is_active` من حقول التعديل. */}
+                      <button className="btn btn-sm btn-ghost"
+                        onClick={() => setEditing(d)}>
+                        {L("edit")}
+                      </button>
                       {d.is_active && (
                         <button className="btn btn-sm btn-ghost"
                           style={{ color: "var(--danger)" }}
@@ -341,9 +448,11 @@ export default function DiscountsPage() {
         )}
       </div>
 
-      {dialog && (
-        <NewDialog L={L} onCreate={create}
-          onClose={() => setDialog(false)} busy={acting} />
+      {(dialog || editing) && (
+        <NewDialog L={L} initial={editing}
+          onCreate={editing ? update : create}
+          onClose={() => { setDialog(false); setEditing(null); }}
+          busy={acting} />
       )}
     </div>
   );
